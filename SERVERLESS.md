@@ -235,8 +235,14 @@ cd ../../assessRow && export $(cat ~/next9-secrets/turso-assess.env | xargs)
 node scripts/import-vps-data.mjs --turso --reset --from /home/cmp/sdh-council/assessRow/data/assess.db
 ```
 
-Postgres (Next Breath): ใน Supabase SQL editor รัน `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`
-แล้ว `pg_dump` / `psql` ใหม่ตามข้อ 2.3 จากนั้น Redeploy ทุก project เพื่อล้าง cache ใน memory
+Postgres (Next Breath): dump ใหม่แบบ `--clean` ซึ่งจะลบตารางเดิมใน Supabase ก่อนสร้างใหม่
+
+```bash
+sudo docker exec nextbreath-db pg_dump -U nextbreath -d nextbreath --no-owner --no-acl --clean --if-exists > ~/nextbreath.sql
+psql "<Supabase Direct connection string>" < ~/nextbreath.sql
+```
+
+เสร็จแล้ว Redeploy ทุก project เพื่อล้าง cache ใน memory
 
 ## 9. ปิด VPS
 
