@@ -177,7 +177,8 @@ Vercel → Add New → Project → import `9TheeXD/Next9` ทำ 4 ครั้�
 - `JWT_SECRET_KEY`, `CRON_SECRET`: สุ่ม
 
 **ciga-admin** (`cigarette/admin-web/.env.example`)
-- `DATABASE_URL`: connection string แบบ **Transaction pooler** (port 6543) ของ Supabase
+- `DATABASE_URL`: connection string แบบ **Transaction pooler** (port 6543) ของ Supabase ต่อท้ายด้วย
+  `?sslmode=no-verify` (ถ้าใช้ `sslmode=require` ไลบรารี `pg` จะปฏิเสธ cert ของ Supabase)
 - `JWT_SECRET`, `ADMIN_PASSWORD`: ค่าเดิมจาก `.env.local` เดิม ต้องใช้ `JWT_SECRET` เดิม ไม่งั้นผู้ใช้แอปหลุด login
 - `CORS_ORIGIN=https://app-ciga-next9.yumistack.net`
 - `FIREBASE_SERVICE_ACCOUNT`: เนื้อหาไฟล์ `serviceAccountKey.json`
@@ -185,7 +186,8 @@ Vercel → Add New → Project → import `9TheeXD/Next9` ทำ 4 ครั้�
 - `CF_ACCOUNT_ID`, `R2_*`, `SOUNDS_PUBLIC_BASE_URL=https://cdn.yumistack.net`
 
 **ciga-app**
-- `EXPO_PUBLIC_API_URL=https://ciga-next9.yumistack.net/api`
+- `EXPO_PUBLIC_API_URL=/api` (`vercel.json` ส่ง `/api/*` ต่อไปที่ `https://ciga-next9.yumistack.net` เหมือน nginx เดิม
+  ถ้าเปลี่ยนโดเมนของ ciga-admin ให้แก้ปลายทาง rewrite นั้นด้วย)
 
 ค่าที่เป็นไฟล์ JSON ทั้งไฟล์ (service account) ให้วางเนื้อหา JSON ลงช่อง value ได้เลย
 
