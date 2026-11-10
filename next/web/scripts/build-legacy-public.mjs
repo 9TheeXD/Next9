@@ -48,6 +48,25 @@ function walk(rel) {
 }
 
 walk("");
+
+// ShiftManager (duty check-in, ../../ShiftManager) is served by this site at /duty/, so its photo
+// uploads go to the same origin. Only the web pages: not the Apps Script source, archive or docs.
+const SHIFT = path.resolve(WEB, "..", "..", "ShiftManager");
+const SHIFT_SKIP = new Set(["apps-script", "archive", "README.md", ".env", ".gitignore", ".nojekyll"]);
+function copyShift(rel) {
+  const abs = path.join(SHIFT, rel);
+  for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
+    if (entry.name.startsWith(".") || SHIFT_SKIP.has(entry.name)) continue;
+    const childRel = rel ? path.join(rel, entry.name) : entry.name;
+    if (entry.isDirectory()) { copyShift(childRel); continue; }
+    if (!EXTS.has(path.extname(entry.name).toLowerCase())) continue;
+    const dest = path.join(OUT, "duty", childRel);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(path.join(SHIFT, childRel), dest);
+    copied.push(path.join("duty", childRel));
+  }
+}
+if (fs.existsSync(SHIFT)) copyShift("");
 // The old pages poll this to reload themselves after a deploy.
 fs.writeFileSync(path.join(OUT, "server_start_time.json"), JSON.stringify({ version: Date.now() }));
 // Folders that hold an index.html, for the slash redirects in next.config.ts.

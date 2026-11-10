@@ -46,6 +46,7 @@ next-env.d.ts
 /public/viewforms/
 /public/photos/
 /public/s/
+/public/duty/
 /public/assets/
 /public/main.js
 /public/nav-motion.js

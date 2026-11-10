@@ -12,7 +12,8 @@ branch `serverless` เตรียมโค้ดทุกระบบให้
 | Next Breath admin + API | `cigarette/admin-web` | Supabase Postgres (Singapore) | ciga-next9.yumistack.net |
 | Next Breath แอป (web) | `cigarette/mobile-app` | – (เรียก API ของ admin-web) | app-ciga-next9.yumistack.net |
 
-ไฟล์ (รูป วิดีโอ เสียง สมาชิก) อยู่ใน R2 bucket `assets` เหมือนเดิม ส่วน `ShiftManager` อยู่ repo แยก (ดูหัวข้อ 8)
+ไฟล์ (รูป วิดีโอ เสียง สมาชิก) อยู่ใน R2 bucket `assets` เหมือนเดิม
+ระบบลงเวร `ShiftManager/` รวมอยู่ใน repo นี้ เว็บ next9 เปิดให้ที่ `/duty/` (ดูหัวข้อ 8)
 
 region: function ทุกตัวตั้งไว้ที่ Singapore (`sin1` ใน `vercel.json`) ที่เดียวกับ Turso (`aws-ap-southeast-1`)
 และ Supabase หน้าหนึ่งยิง query หลายครั้ง ถ้า function กับ DB อยู่ห่างกัน ทุก query จะช้าตามระยะ
@@ -128,7 +129,7 @@ Cloudflare → R2 → bucket `assets` → Settings → CORS Policy:
 ```json
 [
   {
-    "AllowedOrigins": ["https://next9.yumistack.net", "https://<github-user>.github.io"],
+    "AllowedOrigins": ["https://next9.yumistack.net"],
     "AllowedMethods": ["PUT", "GET", "HEAD"],
     "AllowedHeaders": ["Content-Type"],
     "ExposeHeaders": ["ETag"],
@@ -137,7 +138,7 @@ Cloudflare → R2 → bucket `assets` → Settings → CORS Policy:
 ]
 ```
 
-แทน `https://<github-user>.github.io` ด้วยโดเมน GitHub Pages ที่เปิด ShiftManager (ไม่ต้องใส่ path)
+(ShiftManager เปิดจาก `/duty/` ของ next9 แล้ว ใช้ origin เดียวกัน)
 ถ้าจะทดสอบผ่านโดเมน `*.vercel.app` ก่อน ให้เพิ่มโดเมนนั้นด้วย
 R2 API token เดิม (`R2_ACCESS_KEY`/`R2_SECRET_KEY`) ต้องมีสิทธิ์ Object Read & Write ซึ่งเดิมก็ใช้เขียนอยู่แล้ว
 
@@ -213,17 +214,18 @@ cron-job.org → Create cronjob:
 
 cron ของ `next9` (รายวัน 03:00 น.) และ `assess-row` (backup 09:00 น.) Vercel รันเองตาม `vercel.json`
 
-## 8. ShiftManager
+## 8. ShiftManager (ระบบลงเวร)
 
-ตัวเว็บรันบน GitHub Pages อยู่แล้ว ไม่ต้องย้าย แต่ตอนเช็กอินเวร มันส่งรูปไปที่ API ของ next9
-(`https://next9.yumistack.net/api/photos/duty-upload`) ซึ่งจะย้ายมาอยู่บน Vercel
-`duty-upload` แบบเดิมยังใช้ได้ แต่ Vercel รับได้ไม่เกินราว 4.5MB ต่อครั้ง (รวมทุกรูปที่ส่งพร้อมกัน)
-รูปต้นฉบับจากมือถือหลายรูปจะเกิน
+copy มาจาก `DARWINZY/ShiftManager` (main ล่าสุด `40e5ebd`) อยู่ที่ `ShiftManager/` ใน repo นี้
+และเว็บ next9 เปิดให้ที่ **`https://next9.yumistack.net/duty/`** (build script copy เข้า `public/duty/`)
 
-ถ้าอยากให้ส่งรูปใหญ่ได้เหมือนเดิม ต้องแก้ `js/api.js` ของ ShiftManager ให้ส่งตรงเข้า R2
-(`duty-upload-url` แล้วตามด้วย `duty-commit`) ผมเตรียมไว้ใน branch `serverless` ของ repo ShiftManager
-ในเครื่อง ยังไม่ push ใช้ได้ทั้งกับ VPS เดิมและ serverless จึง merge ได้ทุกเมื่อ
-ถ้าไม่แก้ ทางเลือกคือให้ ShiftManager ย่อรูปก่อนส่ง (มีฟังก์ชัน `resizeImage` อยู่แล้ว)
+- เปิดจาก next9 รูปเวรส่งเข้า API ของ origin เดียวกัน และส่งตรงเข้า R2 ผ่าน `duty-upload-url` แล้วตามด้วย `duty-commit` ได้ทุกขนาด
+- `js/config.js`: `PHOTOS_ORIGIN` เลือกเอง เปิดจาก next9 / `*.vercel.app` / localhost ใช้ origin เดียวกัน
+  เปิดจากที่อื่น (GitHub Pages เดิม) ยิงไป `https://next9.yumistack.net`
+- Google Apps Script (`ShiftManager/apps-script/Code.gs`) ยังเหมือนเดิม ไม่ต้อง deploy ใหม่
+- GitHub Pages เดิมใช้ต่อได้ช่วงเปลี่ยนผ่าน แต่ส่งรูปได้ไม่เกินราว 4.5MB ต่อครั้ง
+  ให้บอกสมาชิกเปลี่ยนไปใช้ลิงก์ `/duty/` แล้วค่อยปิด GitHub Pages
+- แก้ ShiftManager ต่อจากนี้ให้แก้ใน `ShiftManager/` ของ repo นี้
 
 ## 9. ปิด VPS
 

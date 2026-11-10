@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#8f0a0a">
+  <meta name="description" content="ระบบบันทึกเวรประจำวัน สภานักเรียน">
+  <title>เวรประจำวัน — สภานักเรียน</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css?v=3.2.1">
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="hero-row">
+        <span class="hero-kicker"><i class="fas fa-clipboard-check"></i> สภานักเรียน</span>
+        <div class="hero-actions">
+          <a class="chip-btn" href="summary.html"><i class="fas fa-table-list"></i> สรุป</a>
+          <a class="chip-btn" href="photos.html"><i class="fas fa-images"></i> รูปเวร</a>
+        </div>
+      </div>
+      <h1>เวรประจำวัน</h1>
+      <p class="hero-sub">แตะชื่อของคุณเพื่อเริ่มลงเวร</p>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="card card-flush">
+      <div class="search">
+        <i class="fas fa-magnifying-glass"></i>
+        <input type="search" id="searchInput" class="input" placeholder="ค้นหาชื่อเล่น ชื่อจริง หรือตำแหน่ง" autocomplete="off">
+      </div>
+      <div id="nameList" class="name-list"></div>
+    </div>
+    <p class="foot">สภานักเรียน · v3.0</p>
+  </main>
+
+  <script src="js/config.js?v=3.2.1"></script>
+  <script src="js/data.js?v=3.2.1"></script>
+  <script src="js/auth.js?v=3.2.1"></script>
+  <script>
+    if (!Auth.redirectIfLoggedIn()) {
+      const list = document.getElementById("nameList");
+      const search = document.getElementById("searchInput");
+      const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+      function render(filter) {
+        const q = (filter || "").trim().toLowerCase();
+        const items = MEMBERS.filter(m => !q || [m.nickname, m.fullName, m.position].some(v => v.toLowerCase().includes(q)));
+        if (!items.length) {
+          list.innerHTML = '<div class="empty"><i class="far fa-face-meh"></i> ไม่พบรายชื่อ</div>';
+          return;
+        }
+        list.innerHTML = items.map(m => `
+          <button type="button" class="name-item" data-id="${m.id}">
+            <span class="avatar">${esc(m.nickname.charAt(0))}</span>
+            <span class="name-info">
+              <b>${esc(m.nickname)}</b>
+              <small>${esc(m.fullName)} · ${esc(m.position)}</small>
+            </span>
+            <i class="fas fa-chevron-right"></i>
+          </button>`).join("");
+      }
+
+      list.addEventListener("click", e => {
+        const b = e.target.closest(".name-item");
+        if (!b) return;
+        Auth.login(getMemberById(Number(b.dataset.id)));
+        location.href = "dashboard.html";
+      });
+      render("");
+      search.addEventListener("input", () => render(search.value));
+    }
+  </script>
+</body>
+</html>

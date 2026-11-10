@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#8f0a0a">
+  <meta name="description" content="สรุปการลงเวรประจำวันของสมาชิกสภานักเรียน">
+  <title>สรุปเวร — เวรประจำวัน</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css?v=3.2.1">
+</head>
+<body class="page-summary">
+  <header class="hero hero-slim">
+    <div class="hero-inner is-wide">
+      <div class="hero-row">
+        <a class="chip-btn" href="dashboard.html" id="backLink"><i class="fas fa-arrow-left"></i> ลงเวร</a>
+        <a class="chip-btn" href="photos.html"><i class="fas fa-images"></i> รูปเวร</a>
+      </div>
+      <h1><i class="fas fa-table-list"></i> สรุปเวร</h1>
+    </div>
+  </header>
+
+  <main class="main is-wide">
+    <div class="sum-layout" id="sumLayout">
+      <div class="card card-flush sum-card">
+        <div class="sum-bar">
+          <div class="sum-month">
+            <button type="button" class="icon-btn" id="mPrev" aria-label="เดือนก่อน"><i class="fas fa-chevron-left"></i></button>
+            <strong id="mLabel">—</strong>
+            <button type="button" class="icon-btn" id="mNext" aria-label="เดือนถัดไป"><i class="fas fa-chevron-right"></i></button>
+          </div>
+          <div class="search search-sm">
+            <i class="fas fa-magnifying-glass"></i>
+            <input type="search" id="q" class="input" placeholder="ค้นหาชื่อ / ชื่อเล่น / ชั้น / จุดเวร" autocomplete="off">
+          </div>
+          <div class="seg" role="group" aria-label="วันที่แสดง">
+            <button type="button" data-days="logged" title="เฉพาะวันที่มีคนลง">วันที่มีเวร</button>
+            <button type="button" data-days="all" title="ทุกวันในเดือน">ทุกวัน</button>
+          </div>
+        </div>
+        <div class="sum-info" id="info"></div>
+        <div class="sum-scroll" id="scroll">
+          <table class="sum-table" id="table"></table>
+        </div>
+        <div class="sum-legend" id="legend"></div>
+      </div>
+
+      <!-- รายละเอียดช่องที่เลือก (ขวาบนจอใหญ่ / แผ่นล่างบนมือถือ) -->
+      <aside class="sum-detail" id="detail" hidden>
+        <div class="sum-detail-head">
+          <div>
+            <b id="dName">—</b>
+            <small id="dSub">—</small>
+          </div>
+          <button type="button" class="icon-btn" id="dClose" aria-label="ปิด"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="sum-detail-body" id="dBody"></div>
+      </aside>
+    </div>
+    <p class="foot">สภานักเรียน · v3.2</p>
+  </main>
+  <div class="sum-backdrop" id="dBackdrop" hidden></div>
+
+  <!-- Lightbox -->
+  <div class="lb" id="lb" hidden>
+    <div class="lb-top">
+      <div class="lb-name" id="lbName"></div>
+      <a class="lb-btn" id="lbDl" title="ดาวน์โหลดต้นฉบับ"><i class="fas fa-download"></i></a>
+      <button type="button" class="lb-btn" id="lbClose" title="ปิด"><i class="fas fa-xmark"></i></button>
+    </div>
+    <button type="button" class="lb-nav lb-prev" id="lbPrev" aria-label="รูปก่อน"><i class="fas fa-chevron-left"></i></button>
+    <img id="lbImg" alt="">
+    <button type="button" class="lb-nav lb-next" id="lbNext" aria-label="รูปถัดไป"><i class="fas fa-chevron-right"></i></button>
+    <div class="lb-count" id="lbCount"></div>
+  </div>
+
+  <script src="js/config.js?v=3.2.1"></script>
+  <script src="js/data.js?v=3.2.1"></script>
+  <script src="js/auth.js?v=3.2.1"></script>
+  <script src="js/api.js?v=3.2.1"></script>
+  <script src="js/summary.js?v=3.2.1"></script>
+</body>
+</html>

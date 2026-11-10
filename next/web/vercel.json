@@ -144,6 +144,11 @@
       "source": "/viewforms/submit_inert/classic",
       "destination": "/viewforms/submit_inert/classic/",
       "permanent": false
+    },
+    {
+      "source": "/duty",
+      "destination": "/duty/",
+      "permanent": false
     }
   ]
 }

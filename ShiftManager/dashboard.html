@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#8f0a0a">
+  <meta name="description" content="ลงเวรประจำวัน แนบรูปหลักฐาน ดูปฏิทินและลงย้อนหลัง">
+  <title>ลงเวร — เวรประจำวัน</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css?v=3.2.1">
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="hero-row">
+        <span class="hero-kicker"><i class="fas fa-clipboard-check"></i> เวรประจำวัน</span>
+        <div class="hero-actions">
+          <a class="chip-btn" href="summary.html"><i class="fas fa-table-list"></i> สรุป</a>
+          <a class="chip-btn" href="photos.html"><i class="fas fa-images"></i> รูปเวร</a>
+          <button type="button" class="chip-btn" id="logoutBtn"><i class="fas fa-right-from-bracket"></i> ออก</button>
+        </div>
+      </div>
+      <h1>สวัสดี <span id="heroName">—</span></h1>
+      <p class="hero-sub" id="heroPos">—</p>
+    </div>
+  </header>
+
+  <main class="main">
+    <form id="dutyForm" class="card" novalidate>
+      <!-- วันที่ -->
+      <div class="date-bar" id="dateBar">
+        <div class="date-bar-text">
+          <span class="date-bar-label" id="dateLabel">วันนี้</span>
+          <strong id="dateText">—</strong>
+        </div>
+        <button type="button" class="link-btn" id="dateReset" hidden><i class="fas fa-rotate-left"></i> กลับเป็นวันนี้</button>
+        <button type="button" class="link-btn" id="datePick"><i class="far fa-calendar"></i> เปลี่ยนวัน</button>
+      </div>
+      <div class="notice" id="existNotice" hidden></div>
+
+      <!-- 1. จุดเวร -->
+      <section class="field">
+        <div class="field-head"><span class="step">1</span> จุดเวร <span class="req">*</span><span class="hint">เลือก 1 จุด</span></div>
+        <div class="duty-grid" id="dutyGrid"></div>
+      </section>
+
+      <!-- 2. สถานะ -->
+      <section class="field">
+        <div class="field-head"><span class="step">2</span> สถานะ</div>
+        <div class="status-grid" id="statusGrid"></div>
+      </section>
+
+      <!-- 3. รูป -->
+      <section class="field">
+        <div class="field-head"><span class="step">3</span> รูปหลักฐาน <span class="hint" id="photoCount">ไม่บังคับ · ใส่ได้หลายรูป</span></div>
+        <div class="pick-row">
+          <label class="pick-btn">
+            <i class="fas fa-camera"></i>
+            <span>ถ่ายรูป</span>
+            <small>เปิดกล้อง</small>
+            <input type="file" accept="image/*" capture="environment" id="camIn">
+          </label>
+          <label class="pick-btn">
+            <i class="fas fa-images"></i>
+            <span>เลือกจากอัลบั้ม</span>
+            <small>เลือกได้หลายรูป</small>
+            <input type="file" accept="image/*" multiple id="albumIn">
+          </label>
+        </div>
+        <div class="thumbs" id="thumbs"></div>
+      </section>
+
+      <!-- 4. หมายเหตุ -->
+      <section class="field">
+        <div class="field-head"><span class="step">4</span> หมายเหตุ <span class="hint">ถ้ามี</span></div>
+        <input type="text" id="note" class="input" placeholder="เช่น แลกเวรกับเพื่อน, มาสาย 10 นาที" maxlength="200" autocomplete="off">
+      </section>
+
+      <button type="submit" class="btn btn-block" id="submitBtn"><i class="fas fa-paper-plane"></i> <span>ส่งเวรวันนี้</span></button>
+    </form>
+
+    <section class="card" id="calCard">
+      <div class="card-title"><i class="far fa-calendar-check"></i> ปฏิทินของฉัน</div>
+      <p class="muted">แตะวันที่เพื่อดูหรือลงเวรย้อนหลัง</p>
+      <div id="calendar" class="calendar"></div>
+    </section>
+
+    <p class="foot">สภานักเรียน · v3.0</p>
+  </main>
+
+  <!-- ส่งข้อมูล -->
+  <div class="sheet-wrap" id="sendSheet" hidden>
+    <div class="sheet-backdrop"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sendTitle">
+      <div class="sheet-icon" id="sendIcon"><span class="spin spin-lg"></span></div>
+      <h2 id="sendTitle">กำลังส่ง...</h2>
+      <ul class="steps" id="sendSteps"></ul>
+      <div class="sheet-actions" id="sendActions" hidden>
+        <a class="btn btn-ghost" href="photos.html" id="sendPhotosLink"><i class="fas fa-images"></i> ดูรูปเวร</a>
+        <button type="button" class="btn" id="sendClose">เสร็จสิ้น</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- กล่องยืนยัน -->
+  <div class="sheet-wrap" id="askSheet" hidden>
+    <div class="sheet-backdrop"></div>
+    <div class="sheet" role="alertdialog" aria-modal="true" aria-labelledby="askTitle">
+      <div class="sheet-icon is-err"><i class="fas fa-trash"></i></div>
+      <h2 id="askTitle"></h2>
+      <p class="sheet-text" id="askText"></p>
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-ghost" id="askCancel">ยกเลิก</button>
+        <button type="button" class="btn btn-danger" id="askOk">ลบ</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/config.js?v=3.2.1"></script>
+  <script src="js/data.js?v=3.2.1"></script>
+  <script src="js/auth.js?v=3.2.1"></script>
+  <script src="js/api.js?v=3.2.1"></script>
+  <script src="js/calendar.js?v=3.2.1"></script>
+  <script src="js/app.js?v=3.2.1"></script>
+</body>
+</html>
