@@ -143,29 +143,32 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Daily trends for last 30 days
-    const dailyTrends: DailyTrendPoint[] = [];
+    // Daily trends for last 30 days. One query for the whole range, split into days here: 30 queries
+    // one after another were most of this endpoint's time against a hosted database.
+    const days: { start: Date; end: Date }[] = [];
     for (let i = 29; i >= 0; i--) {
       const day = new Date();
       day.setDate(day.getDate() - i);
       day.setHours(0, 0, 0, 0);
-
       const nextDay = new Date(day);
       nextDay.setDate(nextDay.getDate() + 1);
-
-      const dayLogs = await prisma.dailyLog.findMany({
-        where: { logDate: { gte: day, lt: nextDay } },
-        include: {
-          user: {
-            select: {
-              cigarettesPerDay: true,
-              pricePerPack: true,
-              cigarettesPerPack: true,
-            },
+      days.push({ start: day, end: nextDay });
+    }
+    const rangeLogs = await prisma.dailyLog.findMany({
+      where: { logDate: { gte: days[0].start, lt: days[days.length - 1].end } },
+      include: {
+        user: {
+          select: {
+            cigarettesPerDay: true,
+            pricePerPack: true,
+            cigarettesPerPack: true,
           },
         },
-      });
+      },
+    });
 
+    const dailyTrends: DailyTrendPoint[] = days.map(({ start, end }) => {
+      const dayLogs = rangeLogs.filter((l) => l.logDate >= start && l.logDate < end);
       let avoided = 0;
       let saved = 0;
       for (const log of dayLogs) {
@@ -176,14 +179,13 @@ export async function GET(request: NextRequest) {
           (log.user.pricePerPack ?? 0) / (log.user.cigarettesPerPack || 20);
         saved += dayAvoided * pricePerCig;
       }
-
-      dailyTrends.push({
-        date: day.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      return {
+        date: start.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         cigarettesAvoided: avoided,
         moneySaved: Math.round(saved * 100) / 100,
         activeUsers: dayLogs.length,
-      });
-    }
+      };
+    });
 
     return NextResponse.json<APIResponse<AnalyticsData>>(
       { success: true, data: { kpis, successRates, dailyTrends } },
