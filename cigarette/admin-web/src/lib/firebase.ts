@@ -1,15 +1,13 @@
 import * as admin from 'firebase-admin';
 
 // Initialize Firebase Admin for sending FCM Push Notifications
+// The service-account key JSON (was serviceAccountKey.json beside the app) as one env var.
 let serviceAccount = null;
-try {
-  serviceAccount = require('../../serviceAccountKey.json');
-} catch (e: any) {
-  console.warn("Could not load serviceAccountKey.json:", e.message);
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    try {
-      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    } catch (err) {}
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  try {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } catch (err) {
+    console.warn("FIREBASE_SERVICE_ACCOUNT is not valid JSON");
   }
 }
 

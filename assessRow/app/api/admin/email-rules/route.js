@@ -31,8 +31,8 @@ export async function GET(request) {
   if (!(await isAdmin())) return bad('Unauthorized', 401);
   const db = getDb();
   const test = new URL(request.url).searchParams.get('test');
-  const body = { rules: getRules(db) };
-  if (test) body.test = { email: test, result: resolveRole(db, test) };
+  const body = { rules: await getRules(db) };
+  if (test) body.test = { email: test, result: await resolveRole(db, test) };
   return NextResponse.json(body);
 }
 
@@ -41,10 +41,10 @@ export async function POST(request) {
   const p = parseRule(await request.json().catch(() => null));
   if (p.error) return bad(p.error);
   const db = getDb();
-  const max = db.prepare('SELECT COALESCE(MAX(position), 0) AS m FROM email_rules').get().m;
+  const max = (await db.prepare('SELECT COALESCE(MAX(position), 0) AS m FROM email_rules').get()).m;
   const r = p.rule;
-  db.prepare('INSERT INTO email_rules (local_kind, local_value, domain, role, position) VALUES (?, ?, ?, ?, ?)').run(r.local_kind, r.local_value, r.domain, r.role, max + 1);
-  return NextResponse.json({ success: true, rules: getRules(db) });
+  await db.prepare('INSERT INTO email_rules (local_kind, local_value, domain, role, position) VALUES (?, ?, ?, ?, ?)').run(r.local_kind, r.local_value, r.domain, r.role, max + 1);
+  return NextResponse.json({ success: true, rules: await getRules(db) });
 }
 
 // { id, ...rule } edits one rule; { order: [id, id, ...] } sets the checking order.
@@ -54,22 +54,24 @@ export async function PUT(request) {
   const db = getDb();
   if (Array.isArray(b?.order)) {
     const set = db.prepare('UPDATE email_rules SET position = ? WHERE id = ?');
-    db.transaction(() => b.order.forEach((id, i) => set.run(i + 1, Number(id))))();
-    return NextResponse.json({ success: true, rules: getRules(db) });
+    await db.transaction(async () => {
+      for (let i = 0; i < b.order.length; i++) await set.run(i + 1, Number(b.order[i]));
+    })();
+    return NextResponse.json({ success: true, rules: await getRules(db) });
   }
   const p = parseRule(b);
   if (p.error) return bad(p.error);
   const r = p.rule;
-  const res = db.prepare('UPDATE email_rules SET local_kind = ?, local_value = ?, domain = ?, role = ? WHERE id = ?').run(r.local_kind, r.local_value, r.domain, r.role, Number(b.id));
+  const res = await db.prepare('UPDATE email_rules SET local_kind = ?, local_value = ?, domain = ?, role = ? WHERE id = ?').run(r.local_kind, r.local_value, r.domain, r.role, Number(b.id));
   if (!res.changes) return bad('ไม่พบกฎนี้', 404);
-  return NextResponse.json({ success: true, rules: getRules(db) });
+  return NextResponse.json({ success: true, rules: await getRules(db) });
 }
 
 export async function DELETE(request) {
   if (!(await isAdmin())) return bad('Unauthorized', 401);
   const id = Number(new URL(request.url).searchParams.get('id'));
   const db = getDb();
-  const res = db.prepare('DELETE FROM email_rules WHERE id = ?').run(id);
+  const res = await db.prepare('DELETE FROM email_rules WHERE id = ?').run(id);
   if (!res.changes) return bad('ไม่พบกฎนี้', 404);
-  return NextResponse.json({ success: true, rules: getRules(db) });
+  return NextResponse.json({ success: true, rules: await getRules(db) });
 }

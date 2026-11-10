@@ -4,20 +4,20 @@ import { PageTransition } from "@/components/PageTransition";
 import { AlbumRoute } from "@/components/photos/AlbumRoute";
 import { AlbumFallback } from "@/components/photos/album/AlbumPage";
 
-const API_ORIGIN = process.env.LEGACY_API_ORIGIN ?? "http://127.0.0.1:8089";
+import { albumPreview, ensureSchema } from "../../../../server/api.mjs";
 
 type Props = { searchParams: Promise<{ [key: string]: string | string[] | undefined }> };
 
 // Link previews for shared album links (LINE, Facebook, Discord, X): crawlers don't run JavaScript, so
-// the album's title and cover must be in the HTML. server.js decides what an album may show (a locked
+// the album's title and cover must be in the HTML. the API (server/api.mjs) decides what an album may show (a locked
 // album never exposes a photo) and answers GET /api/photos/og.
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { id } = await searchParams;
   if (typeof id !== "string" || !id) return {};
   try {
-    const res = await fetch(`${API_ORIGIN}/api/photos/og?id=${encodeURIComponent(id)}`, { cache: "no-store" });
-    if (!res.ok) return {};
-    const og: { title: string; description: string; url: string; image: string } = await res.json();
+    await ensureSchema();
+    const og = (await albumPreview(id)) as { title: string; description: string; url: string; image: string } | null;
+    if (!og) return {};
     return {
       title: { absolute: og.title },
       description: og.description,

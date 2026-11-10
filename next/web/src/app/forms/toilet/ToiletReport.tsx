@@ -14,7 +14,7 @@ const OTHER = "อื่นๆ";
 // Requests are the same as the old page's: GET /api/toilet/config, POST /api/toilet/submit
 // { roomId, role, problem, customProblem }.
 export function ToiletReport() {
-  const id = useSearchParams().get("id");
+  const id = useSearchParams()?.get("id") ?? null;
   const [state, setState] = useState<"loading" | "notfound" | "form" | "done">("loading");
   const [room, setRoom] = useState<Room | null>(null);
   const [problems, setProblems] = useState<string[]>([]);

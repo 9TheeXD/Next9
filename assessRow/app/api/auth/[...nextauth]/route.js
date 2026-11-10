@@ -40,7 +40,7 @@ export const authOptions = {
         const { isLockedOut, noteFailure, verifyAccount } = require('@/lib/adminAccounts');
         if (isLockedOut(username)) return null;
         try {
-          const acc = verifyAccount(getDb(), username, password);
+          const acc = await verifyAccount(getDb(), username, password);
           if (acc) return { id: `admin:${acc.username}`, name: acc.displayName || acc.username, role: 'admin', prefix: acc.username, adminSource: 'db' };
         } catch (e) {
           console.error('Admin account check failed:', e);
@@ -60,7 +60,7 @@ export const authOptions = {
         try {
           const { getDb } = require('@/lib/db');
           const { resolveRole } = require('@/lib/roles');
-          const found = resolveRole(getDb(), user.email);
+          const found = await resolveRole(getDb(), user.email);
           if (!found) return false;
           user.role = found.role;
           user.prefix = found.prefix;
@@ -84,7 +84,7 @@ export const authOptions = {
       if (token.via === 'credentials' && token.adminSource === 'db') {
         try {
           const { getDb } = require('@/lib/db');
-          const still = getDb().prepare('SELECT 1 FROM admin_accounts WHERE username = ?').get(token.prefix);
+          const still = await getDb().prepare('SELECT 1 FROM admin_accounts WHERE username = ?').get(token.prefix);
           if (!still) token.role = 'student';
         } catch {
           // keep the role from sign-in
@@ -98,7 +98,7 @@ export const authOptions = {
         try {
           const { getDb } = require('@/lib/db');
           const { resolveRole } = require('@/lib/roles');
-          const found = resolveRole(getDb(), token.email);
+          const found = await resolveRole(getDb(), token.email);
           token.role = found ? found.role : 'student';
         } catch {
           // keep the role from sign-in

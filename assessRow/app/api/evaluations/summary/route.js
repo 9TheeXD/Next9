@@ -18,7 +18,7 @@ export async function GET(request) {
 
     const db = getDb();
     
-    if (session.user.role !== 'admin' && checkSystemLock(db, session.user.role)) {
+    if (session.user.role !== 'admin' && await checkSystemLock(db, session.user.role)) {
       return NextResponse.json({ success: false, message: 'ระบบปิดปรับปรุงชั่วคราว' }, { status: 503 });
     }
 
@@ -62,7 +62,7 @@ export async function GET(request) {
     // terms=1 (sent by /v2): leave out days between terms.
     const termsOnly = searchParams.get('terms') === '1';
     if (termsOnly) {
-      const f = termDateFilter('date');
+      const f = await termDateFilter('date');
       query += f.sql;
       params.push(...f.params);
     }
@@ -104,8 +104,8 @@ export async function GET(request) {
 
     // The room query below is built from the same inputs, so these identify the whole answer.
     const cacheKey = JSON.stringify(['summary', query, params]);
-    const json = cachedJson(db, cacheKey, startDate && isValidDateFormat(startDate) ? startDate : null, endDate && isValidDateFormat(endDate) ? endDate : null, () => {
-      const rows = db.prepare(query).all(...params);
+    const json = await cachedJson(db, cacheKey, startDate && isValidDateFormat(startDate) ? startDate : null, endDate && isValidDateFormat(endDate) ? endDate : null, async () => {
+      const rows = await db.prepare(query).all(...params);
 
       // Also compute per-room averages (average across all criteria)
       let roomQuery = `
@@ -129,7 +129,7 @@ export async function GET(request) {
         roomParams.push(endDate);
       }
       if (termsOnly) {
-        const f = termDateFilter('date');
+        const f = await termDateFilter('date');
         roomQuery += f.sql;
         roomParams.push(...f.params);
       }
@@ -168,7 +168,7 @@ export async function GET(request) {
         ORDER BY grade, room
       `;
 
-      const roomRows = db.prepare(roomQuery).all(...roomParams);
+      const roomRows = await db.prepare(roomQuery).all(...roomParams);
       return { details: rows, roomAverages: roomRows };
     });
     return new NextResponse(json, { headers: { 'Content-Type': 'application/json' } });

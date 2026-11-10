@@ -35,7 +35,7 @@ export async function GET() {
 
   try {
     const db = getDb();
-    const whitelist = db.prepare('SELECT prefix, role, created_at FROM whitelist ORDER BY created_at DESC').all();
+    const whitelist = await db.prepare('SELECT prefix, role, created_at FROM whitelist ORDER BY created_at DESC').all();
     return NextResponse.json({ whitelist });
   } catch (error) {
     console.error('Whitelist GET error:', error);
@@ -55,7 +55,7 @@ export async function POST(request) {
     if (n.error) return NextResponse.json({ error: n.error }, { status: 400 });
 
     const db = getDb();
-    db.prepare('INSERT INTO whitelist (prefix, role) VALUES (?, ?)').run(n.prefix, validRole);
+    await db.prepare('INSERT INTO whitelist (prefix, role) VALUES (?, ?)').run(n.prefix, validRole);
     return NextResponse.json({ success: true, prefix: n.prefix, role: validRole });
   } catch (error) {
     if (error.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
@@ -80,7 +80,7 @@ export async function DELETE(request) {
     }
 
     const db = getDb();
-    db.prepare('DELETE FROM whitelist WHERE prefix = ?').run(prefix.trim().toLowerCase());
+    await db.prepare('DELETE FROM whitelist WHERE prefix = ?').run(prefix.trim().toLowerCase());
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Whitelist DELETE error:', error);
@@ -100,7 +100,7 @@ export async function PUT(request) {
     }
     const key = prefix.trim().toLowerCase();
     const db = getDb();
-    const r = db.prepare('UPDATE whitelist SET role = ? WHERE prefix = ?').run(role, key);
+    const r = await db.prepare('UPDATE whitelist SET role = ? WHERE prefix = ?').run(role, key);
     if (!r.changes) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (error) {

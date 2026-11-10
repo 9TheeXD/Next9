@@ -10,7 +10,7 @@ import { navProgress } from "@/lib/navProgress";
 export function NavProgress() {
   const state = useSyncExternalStore(navProgress.subscribe, navProgress.get, () => "idle" as const);
   const pathname = usePathname();
-  const search = useSearchParams().toString();
+  const search = useSearchParams()?.toString() ?? "";
   const first = useRef(true);
 
   // The new URL has rendered: finish the bar, and release a browser Back that /nav-motion.js is

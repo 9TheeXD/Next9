@@ -18,7 +18,7 @@ export async function GET(request) {
 
     const db = getDb();
     
-    if (session.user.role !== 'admin' && checkSystemLock(db, session.user.role)) {
+    if (session.user.role !== 'admin' && await checkSystemLock(db, session.user.role)) {
       return NextResponse.json({ success: false, message: 'ระบบปิดปรับปรุงชั่วคราว' }, { status: 503 });
     }
 
@@ -145,13 +145,13 @@ export async function GET(request) {
 
     // terms=1 (sent by /v2): leave out days between terms.
     if (searchParams.get('terms') === '1') {
-      const f = termDateFilter('e.date');
+      const f = await termDateFilter('e.date');
       query = query.replace('e.date >= ? AND e.date <= ?', 'e.date >= ? AND e.date <= ?' + f.sql);
       params = [params[0], params[1], ...f.params, ...params.slice(2)];
     }
 
     const cacheKey = JSON.stringify(['ranking', query, params]);
-    const json = cachedJson(db, cacheKey, startDate, endDate, () => ({ rankings: db.prepare(query).all(...params) }));
+    const json = await cachedJson(db, cacheKey, startDate, endDate, async () => ({ rankings: await db.prepare(query).all(...params) }));
     return new NextResponse(json, { headers: { 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('Ranking GET error occurred:', error);

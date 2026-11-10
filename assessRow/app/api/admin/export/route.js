@@ -17,7 +17,7 @@ export async function GET(request) {
   const end = searchParams.get('end');
   if (!isValidDateFormat(start) || !isValidDateFormat(end) || start > end) return new Response('Invalid range', { status: 400 });
 
-  const rows = getDb()
+  const rows = await getDb()
     .prepare(
       `SELECT e.date, e.grade, e.room, e.zone, e.evaluator_id,
               CASE WHEN w.role = 'council' THEN 'สภานักเรียน' WHEN w.role = 'teacher' THEN 'ครู'

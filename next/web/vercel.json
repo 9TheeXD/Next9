@@ -1,0 +1,149 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": [
+    "hnd1"
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/daily",
+      "schedule": "0 20 * * *"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/forms/building",
+      "destination": "/forms/building/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/building/classic",
+      "destination": "/forms/building/classic/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/inert",
+      "destination": "/forms/inert/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/inert/classic",
+      "destination": "/forms/inert/classic/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/inert/edit",
+      "destination": "/forms/inert/edit/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/inert/edit/classic",
+      "destination": "/forms/inert/edit/classic/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/pinkbook",
+      "destination": "/forms/pinkbook/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/pinkbook/classic",
+      "destination": "/forms/pinkbook/classic/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/submit_inert",
+      "destination": "/forms/submit_inert/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/submit_inert/classic",
+      "destination": "/forms/submit_inert/classic/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/toilet",
+      "destination": "/forms/toilet/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/toilet/admin",
+      "destination": "/forms/toilet/admin/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/toilet/admin/classic",
+      "destination": "/forms/toilet/admin/classic/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/toilet/classic",
+      "destination": "/forms/toilet/classic/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/toilet/manage",
+      "destination": "/forms/toilet/manage/",
+      "permanent": false
+    },
+    {
+      "source": "/forms/toilet/manage/classic",
+      "destination": "/forms/toilet/manage/classic/",
+      "permanent": false
+    },
+    {
+      "source": "/photos",
+      "destination": "/photos/",
+      "permanent": false
+    },
+    {
+      "source": "/photos/album",
+      "destination": "/photos/album/",
+      "permanent": false
+    },
+    {
+      "source": "/s",
+      "destination": "/s/",
+      "permanent": false
+    },
+    {
+      "source": "/viewforms/building",
+      "destination": "/viewforms/building/",
+      "permanent": false
+    },
+    {
+      "source": "/viewforms/building/classic",
+      "destination": "/viewforms/building/classic/",
+      "permanent": false
+    },
+    {
+      "source": "/viewforms/inert",
+      "destination": "/viewforms/inert/",
+      "permanent": false
+    },
+    {
+      "source": "/viewforms/inert/classic",
+      "destination": "/viewforms/inert/classic/",
+      "permanent": false
+    },
+    {
+      "source": "/viewforms/pinkbook",
+      "destination": "/viewforms/pinkbook/",
+      "permanent": false
+    },
+    {
+      "source": "/viewforms/pinkbook/classic",
+      "destination": "/viewforms/pinkbook/classic/",
+      "permanent": false
+    },
+    {
+      "source": "/viewforms/submit_inert",
+      "destination": "/viewforms/submit_inert/",
+      "permanent": false
+    },
+    {
+      "source": "/viewforms/submit_inert/classic",
+      "destination": "/viewforms/submit_inert/classic/",
+      "permanent": false
+    }
+  ]
+}

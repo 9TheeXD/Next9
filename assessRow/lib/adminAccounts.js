@@ -18,8 +18,8 @@ function checkPassword(password, stored) {
   return got.length === want.length && crypto.timingSafeEqual(got, want);
 }
 
-function listAccounts(db) {
-  return db.prepare('SELECT username, display_name, created_at, last_login FROM admin_accounts ORDER BY username').all();
+async function listAccounts(db) {
+  return await db.prepare('SELECT username, display_name, created_at, last_login FROM admin_accounts ORDER BY username').all();
 }
 
 // Returns an error message, or null when the password may be used.
@@ -48,10 +48,10 @@ function noteFailure(username) {
 }
 
 // Checks a username/password against the accounts table. Returns the account or null.
-function verifyAccount(db, username, password) {
-  const row = db.prepare('SELECT username, display_name, password_hash FROM admin_accounts WHERE username = ?').get(username);
+async function verifyAccount(db, username, password) {
+  const row = await db.prepare('SELECT username, display_name, password_hash FROM admin_accounts WHERE username = ?').get(username);
   if (!row || !checkPassword(password, row.password_hash)) return null;
-  db.prepare("UPDATE admin_accounts SET last_login = datetime('now', 'localtime') WHERE username = ?").run(username);
+  await db.prepare("UPDATE admin_accounts SET last_login = datetime('now', '+7 hours') WHERE username = ?").run(username);
   return { username: row.username, displayName: row.display_name };
 }
 

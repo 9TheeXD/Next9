@@ -4,6 +4,7 @@ ShiftManager/
 # secrets / env
 .env
 .env.*
+!.env.example
 service-account.json
 *-chatbot-*.json
 *.pem
@@ -53,3 +54,7 @@ server_start_time.json
 .DS_Store
 .git.hidden/
 serviceAccountKey*.json
+
+# local dev stand-ins
+.dev-r2/
+data-dev/

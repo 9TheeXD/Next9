@@ -1,6 +1,3 @@
-const cron = require('node-cron');
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
 const https = require('https');
 const zlib = require('zlib');
@@ -75,57 +72,27 @@ function uploadBufferToR2(key, buffer, contentType) {
     });
 }
 
+// Daily copy of every table to R2 as gzipped JSON (Vercel cron: GET /api/cron/backup).
+// The VPS version copied the SQLite file; Turso keeps its own point-in-time history as well, this is
+// the copy that stays in the school's own storage.
 async function runBackup() {
-    console.log(`[Backup] Starting backup at ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' })}`);
-    try {
-        const db = getDb();
-        const backupPath = path.join(process.cwd(), 'data', 'assess-backup.db');
-        
-        // 1. Safely backup SQLite database (handles WAL mode)
-        await db.backup(backupPath);
-        console.log(`[Backup] SQLite backup created at ${backupPath}`);
-        
-        // 2. Read and compress the backup file
-        const dbBuffer = fs.readFileSync(backupPath);
-        const compressedBuffer = zlib.gzipSync(dbBuffer);
-        
-        // 3. Generate filename based on date (Asia/Bangkok)
-        const formatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: 'Asia/Bangkok',
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-        });
-        const parts = formatter.formatToParts(new Date());
-        const getP = (type) => parts.find(p => p.type === type).value;
-        const dateStr = `${getP('year')}-${getP('month')}-${getP('day')}_${getP('hour')}-${getP('minute')}-${getP('second')}`;
-        
-        const r2Key = `next9/assess-row/assess-db-backup_${dateStr}.db.gz`;
-        
-        // 4. Upload to R2
-        console.log(`[Backup] Uploading to R2: ${r2Key} (${compressedBuffer.length} bytes)`);
-        await uploadBufferToR2(r2Key, compressedBuffer, 'application/gzip');
-        
-        console.log(`[Backup] Upload successful: ${r2Key}`);
-        
-        // 5. Cleanup
-        fs.unlinkSync(backupPath);
-    } catch (err) {
-        console.error(`[Backup] Failed:`, err);
-    }
-}
-
-function initAutoBackup() {
-    if (global.__cron_started) return;
-    global.__cron_started = true;
-    
-    // Run backup every day at 09:00 AM Asia/Bangkok Time
-    cron.schedule('0 9 * * *', () => {
-        runBackup();
-    }, {
-        timezone: "Asia/Bangkok"
+    const db = getDb();
+    const tables = (await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all()).map(r => r.name);
+    const dump = { createdAt: new Date().toISOString(), tables: {} };
+    for (const t of tables) dump.tables[t] = await db.prepare(`SELECT * FROM "${t}"`).all();
+    const compressedBuffer = zlib.gzipSync(Buffer.from(JSON.stringify(dump)));
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Bangkok',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
     });
-    
-    console.log('[Backup] Auto-backup service started (Cron: 0 9 * * * Asia/Bangkok)');
+    const parts = formatter.formatToParts(new Date());
+    const getP = (type) => parts.find(p => p.type === type).value;
+    const dateStr = `${getP('year')}-${getP('month')}-${getP('day')}_${getP('hour')}-${getP('minute')}-${getP('second')}`;
+    const r2Key = `next9/assess-row/assess-db-backup_${dateStr}.json.gz`;
+    await uploadBufferToR2(r2Key, compressedBuffer, 'application/gzip');
+    console.log(`[Backup] ${r2Key} (${compressedBuffer.length} bytes, ${tables.length} tables)`);
+    return { key: r2Key, bytes: compressedBuffer.length };
 }
 
-module.exports = { initAutoBackup, runBackup };
+module.exports = { runBackup };

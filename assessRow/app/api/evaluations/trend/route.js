@@ -15,13 +15,13 @@ const { cachedJson } = require('@/lib/resultCache');
 // vs teacher weighting), so if anything in the range is edited after all, it is recomputed.
 const memoryCache = new Map();
 
-function ensureCacheTable(db) {
-  db.exec('CREATE TABLE IF NOT EXISTS trend_cache (key TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT DEFAULT (datetime(\'now\')))');
+async function ensureCacheTable(db) {
+  await db.exec('CREATE TABLE IF NOT EXISTS trend_cache (key TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT DEFAULT (datetime(\'now\')))');
 }
 
-function rangeFingerprint(db, startDateStr, endDateStr) {
-  const e = db.prepare('SELECT COUNT(*) AS n, TOTAL(score) AS s, TOTAL(id * score) AS w, MAX(id) AS m FROM evaluations WHERE date >= ? AND date <= ?').get(startDateStr || '0000-00-00', endDateStr);
-  const w = db.prepare("SELECT COUNT(*) AS n, GROUP_CONCAT(prefix || ':' || IFNULL(role, ''), ',') AS g FROM (SELECT prefix, role FROM whitelist ORDER BY prefix)").get();
+async function rangeFingerprint(db, startDateStr, endDateStr) {
+  const e = await db.prepare('SELECT COUNT(*) AS n, TOTAL(score) AS s, TOTAL(id * score) AS w, MAX(id) AS m FROM evaluations WHERE date >= ? AND date <= ?').get(startDateStr || '0000-00-00', endDateStr);
+  const w = await db.prepare("SELECT COUNT(*) AS n, GROUP_CONCAT(prefix || ':' || IFNULL(role, ''), ',') AS g FROM (SELECT prefix, role FROM whitelist ORDER BY prefix)").get();
   return [e.n, e.s, e.w, e.m, w.n, w.g].join('|');
 }
 
@@ -43,7 +43,7 @@ export async function GET(request) {
 
     const db = getDb();
 
-    if (session.user.role !== 'admin' && checkSystemLock(db, session.user.role)) {
+    if (session.user.role !== 'admin' && await checkSystemLock(db, session.user.role)) {
       return NextResponse.json({ success: false, message: 'ระบบปิดปรับปรุงชั่วคราว' }, { status: 503 });
     }
 
@@ -90,7 +90,7 @@ export async function GET(request) {
 
     // Apply term date boundaries: term=<id> keeps to that term, no term keeps to the current one
     // (from its first day), term=all to every term.
-    const terms = getTerms(db);
+    const terms = await getTerms(db);
     let termRow = null;
     if (explicitRange || term === 'all') {
       // already bounded above, or the whole history
@@ -101,7 +101,7 @@ export async function GET(request) {
         if (!endDateStr || endDateStr > termRow.endDate) endDateStr = termRow.endDate;
       }
     } else {
-      const cur = getCurrentTerm(db, logicalTodayStr, terms).term;
+      const cur = (await getCurrentTerm(db, logicalTodayStr, terms)).term;
       if (cur && (!startDateStr || startDateStr < cur.startDate)) startDateStr = cur.startDate;
     }
 
@@ -110,12 +110,12 @@ export async function GET(request) {
     let cacheKey = null, fingerprint = null;
     if (closed) {
       try {
-        ensureCacheTable(db);
+        await ensureCacheTable(db);
         cacheKey = JSON.stringify({ v: 1, start: startDateStr, end: endDateStr, grade: gradeParam || null });
-        fingerprint = rangeFingerprint(db, startDateStr, endDateStr);
+        fingerprint = await rangeFingerprint(db, startDateStr, endDateStr);
         const mem = memoryCache.get(cacheKey);
         if (mem && mem.fingerprint === fingerprint) return jsonResponse(mem.payload);
-        const row = db.prepare('SELECT fingerprint, payload FROM trend_cache WHERE key = ?').get(cacheKey);
+        const row = await db.prepare('SELECT fingerprint, payload FROM trend_cache WHERE key = ?').get(cacheKey);
         if (row && row.fingerprint === fingerprint) {
           memoryCache.set(cacheKey, row);
           return jsonResponse(row.payload);
@@ -159,7 +159,7 @@ export async function GET(request) {
       params.push(endDateStr);
     }
     if (termsOnly) {
-      const f = termDateFilter('e.date');
+      const f = await termDateFilter('e.date');
       query += f.sql;
       params.push(...f.params);
     }
@@ -218,7 +218,7 @@ export async function GET(request) {
       roomParams.push(endDateStr);
     }
     if (termsOnly) {
-      const f = termDateFilter('e.date');
+      const f = await termDateFilter('e.date');
       roomQuery += f.sql;
       roomParams.push(...f.params);
     }
@@ -245,18 +245,18 @@ export async function GET(request) {
       ORDER BY date ASC, grade ASC, room ASC
     `;
 
-    const compute = () => ({
-      gradeAverages: db.prepare(query).all(...params),
-      roomDetails: db.prepare(roomQuery).all(...roomParams),
+    const compute = async () => ({
+      gradeAverages: await db.prepare(query).all(...params),
+      roomDetails: await db.prepare(roomQuery).all(...roomParams),
     });
     // A finished term is stored in trend_cache below; anything else is kept in memory while its
     // evaluations are unchanged.
     const payload = cacheKey
-      ? JSON.stringify(compute())
-      : cachedJson(db, JSON.stringify(['trend', query, params, roomQuery, roomParams]), startDateStr, endDateStr, compute);
+      ? JSON.stringify(await compute())
+      : await cachedJson(db, JSON.stringify(['trend', query, params, roomQuery, roomParams]), startDateStr, endDateStr, compute);
     if (cacheKey) {
       try {
-        db.prepare('INSERT OR REPLACE INTO trend_cache (key, fingerprint, payload) VALUES (?, ?, ?)').run(cacheKey, fingerprint, payload);
+        await db.prepare('INSERT OR REPLACE INTO trend_cache (key, fingerprint, payload) VALUES (?, ?, ?)').run(cacheKey, fingerprint, payload);
         memoryCache.set(cacheKey, { fingerprint, payload });
       } catch (e) {
         console.error('Trend cache write failed');

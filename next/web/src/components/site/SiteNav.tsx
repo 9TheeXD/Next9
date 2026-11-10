@@ -18,7 +18,7 @@ const LINKS = [
 export function SiteNav() {
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
 
   useEffect(() => {
     let last = 0;

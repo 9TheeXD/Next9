@@ -6,6 +6,7 @@ import { isMediaFile, isVideoFile, type UploadFile, type UploadOrder } from "./m
 import { createUploadMeter, type MeterView, type UploadMeter } from "./uploadMeter";
 import { createConcurrencyTuner } from "./uploadConcurrency";
 import { readExifDate } from "@/lib/photos/exifDate";
+import { readVideoMeta } from "@/lib/photos/videoMeta";
 
 // Upload flow of the album page: options modal (image quality + format), client-side compression,
 // per-file XHR upload with byte progress, the status panel, cancel, the done popup, and folder uploads
@@ -285,6 +286,23 @@ export type UploadEnv = {
   refreshNav: () => void;
 };
 
+type UploadReply = { success?: boolean; message?: string; cancelled?: boolean; images?: { id: string }[]; uploads?: { id: string; key: string; url: string; contentType: string }[] };
+const postJson = async (url: string, body: unknown, headers: Record<string, string>): Promise<UploadReply> => {
+  let res: Response;
+  try {
+    res = await fetch(url, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch {
+    throw new Error("network");
+  }
+  let data: UploadReply | null = null;
+  try {
+    data = await res.json();
+  } catch {}
+  if (res.status === 409 && data && data.cancelled) throw new Error("aborted");
+  if (!res.ok || !data) throw new Error((data && data.message) || "HTTP " + res.status);
+  return data;
+};
+
 export function useUploads(env: UploadEnv) {
   // Identifies this mount of the album page to the server, which uses it with UploadOrder to date each
   // photo by its picked position rather than by when its request happened to finish, and to recognise a
@@ -485,25 +503,25 @@ export function useUploads(env: UploadEnv) {
     askQualityRef.current = askQuality;
   });
 
-  const uploadFileWithProgress = (url: string, formData: FormData, headers: Record<string, string>, onProgress: (loaded: number) => void) =>
-    new Promise<{ success?: boolean; message?: string; images?: { id: string }[] }>((resolve, reject) => {
+  // Uploads go straight to storage (R2): the API hands out a signed PUT URL per file
+  // (/api/photos/upload-url), the file is PUT there with progress, then the API is told it arrived
+  // (/api/photos/upload-commit). The site's serverless functions accept only a few MB per request,
+  // far less than a photo original or a video, so the bytes never pass through them.
+  const putFileWithProgress = (url: string, file: File, contentType: string, onProgress: (loaded: number) => void) =>
+    new Promise<void>((resolve, reject) => {
       // fetch() cannot report upload progress; XHR reports bytes as they leave.
       const xhr = new XMLHttpRequest();
       activeXhrs.current.add(xhr);
       const settle = () => activeXhrs.current.delete(xhr);
-      xhr.open("POST", url);
-      Object.keys(headers).forEach((k) => xhr.setRequestHeader(k, headers[k]));
+      xhr.open("PUT", url);
+      xhr.setRequestHeader("Content-Type", contentType || file.type || "application/octet-stream");
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onProgress(e.loaded);
       };
       xhr.onload = () => {
         settle();
-        let data = null;
-        try {
-          data = JSON.parse(xhr.responseText);
-        } catch {}
-        if (xhr.status >= 200 && xhr.status < 300 && data) resolve(data);
-        else reject(new Error((data && data.message) || "HTTP " + xhr.status));
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error("HTTP " + xhr.status));
       };
       xhr.onerror = () => {
         settle();
@@ -513,7 +531,7 @@ export function useUploads(env: UploadEnv) {
         settle();
         reject(new Error("aborted"));
       };
-      xhr.send(formData);
+      xhr.send(file);
     });
 
   const startUploadFlow = useCallback(async (files: UploadFile[], q: string, fmtChoice: string) => {
@@ -632,8 +650,6 @@ export function useUploads(env: UploadEnv) {
       pumpPrepare();
       if (!uploading.current) return;
       const targetAlbumId = rawFile.__targetAlbumId || e.albumId();
-      const formData = new FormData();
-      formData.append("file", file);
       const fileBytes = file.size || rawFile.size || 0;
       inFlight.set(slotKey, 0);
       setPanel((p) => ({ ...p, count: countLabel() }));
@@ -644,12 +660,10 @@ export function useUploads(env: UploadEnv) {
         // has already stored, which is what makes sending one again safe.
         if (rawFile.__order) headers["X-Upload-Order"] = `${uploadSession}:${rawFile.__order.block}:${rawFile.__order.seq}`;
         // Re-encoding dropped the EXIF block; pass the capture time on so the server can still store it.
+        let takenAt: { date: string; offset?: string } | null = null;
         if (file !== rawFile) {
           const taken = await readExifDate(rawFile);
-          if (taken) {
-            headers["X-Taken-At"] = taken.date;
-            if (taken.offset) headers["X-Taken-Offset"] = taken.offset;
-          }
+          if (taken) takenAt = { date: taken.date, offset: taken.offset || "" };
         }
         let lastSlotPct = -1;
         let lastLoaded = 0;
@@ -671,22 +685,45 @@ export function useUploads(env: UploadEnv) {
         // with it. That is not a file the visitor has to deal with by hand, so it is simply sent
         // again; X-Upload-Order means the server hands back the copy it already has rather than
         // storing the photo twice (which is what "ลองอีกครั้ง" used to do).
-        let data;
-        for (let attempt = 1; ; attempt++) {
-          try {
-            data = await uploadFileWithProgress(`/api/photos/upload/${encodeURIComponent(targetAlbumId)}`, formData, headers, onProgress);
-            break;
-          } catch (err) {
-            const msg = (err as Error).message;
-            if (msg !== "network" || attempt >= UPLOAD_ATTEMPTS || !uploading.current) throw err;
-            console.warn("[upload] retrying", rawFile.name, "after a network error");
-            inFlight.set(slotKey, 0);
-            meter.setLoaded(slotKey, 0);
-            lastLoaded = 0;
-            await new Promise((r) => setTimeout(r, UPLOAD_RETRY_DELAY_MS));
-            if (!uploading.current) throw new Error("aborted");
+        const retrying = async <T,>(what: () => Promise<T>, resetProgress: boolean): Promise<T> => {
+          for (let attempt = 1; ; attempt++) {
+            try {
+              return await what();
+            } catch (err) {
+              const msg = (err as Error).message;
+              if (msg !== "network" || attempt >= UPLOAD_ATTEMPTS || !uploading.current) throw err;
+              console.warn("[upload] retrying", rawFile.name, "after a network error");
+              if (resetProgress) {
+                inFlight.set(slotKey, 0);
+                meter.setLoaded(slotKey, 0);
+                lastLoaded = 0;
+              }
+              await new Promise((r) => setTimeout(r, UPLOAD_RETRY_DELAY_MS));
+              if (!uploading.current) throw new Error("aborted");
+            }
           }
+        };
+        const albumPath = encodeURIComponent(targetAlbumId);
+        const fileName = file.name || rawFile.name || "file";
+        const signed = await retrying(() => postJson(`/api/photos/upload-url/${albumPath}`, { files: [{ name: fileName, size: fileBytes, type: file.type }] }, headers), false);
+        const up = signed.uploads && signed.uploads[0];
+        if (!signed.success || !up) throw new Error(signed.message || "upload rejected");
+        const isVideo = isVideoFile(rawFile);
+        // Size and a still frame of a video are read here while the file uploads (the server has no ffmpeg).
+        const extra = isVideo ? readVideoMeta(file).catch(() => null) : imageSize(file).catch(() => null);
+        await retrying(() => putFileWithProgress(up.url, file, up.contentType, onProgress), true);
+        if (!uploading.current) throw new Error("aborted");
+        const info = await extra;
+        const entry: Record<string, unknown> = { id: up.id, key: up.key, name: fileName, size: fileBytes, takenAt, lastModified: rawFile.lastModified || null };
+        if (isVideo && info && "duration" in info) {
+          entry.video = { width: info.width, height: info.height, duration: info.duration };
+          entry.poster = info.poster;
+        } else if (info && "w" in info) {
+          entry.width = info.w;
+          entry.height = info.h;
         }
+        // The commit is idempotent per file id, so a repeat after a lost reply never stores it twice.
+        const data = await retrying(() => postJson(`/api/photos/upload-commit/${albumPath}`, { files: [entry] }, headers), false);
         // A 200 that says it did not work is a failed file: without this its tile sat on "uploading".
         if (!data.success) throw new Error(data.message || "upload rejected");
         // The file is stored; the server still has to make the thumbnails, so the tile keeps its

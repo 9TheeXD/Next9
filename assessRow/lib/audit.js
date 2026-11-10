@@ -3,9 +3,9 @@
 //   edit:            { date, evaluatorId, grade, room, zone, before: { criterion: score }, after: { criterion: score } }
 //   delete-*:        { date, rows: [{ evaluator_id, grade, room, zone, criterion, score }] }
 
-function writeAudit(db, action, target, detail) {
-  return db.prepare('INSERT INTO admin_audit (action, target, detail) VALUES (?, ?, ?)')
-    .run(action, target, detail == null ? null : JSON.stringify(detail)).lastInsertRowid;
+async function writeAudit(db, action, target, detail) {
+  return (await db.prepare('INSERT INTO admin_audit (action, target, detail) VALUES (?, ?, ?)')
+    .run(action, target, detail == null ? null : JSON.stringify(detail))).lastInsertRowid;
 }
 
 function parseDetail(text) {
@@ -24,9 +24,9 @@ function canRestore(row, detail) {
   return false;
 }
 
-function recentAudit(db, limit = 30) {
-  return db.prepare('SELECT id, action, target, detail, created_at, restored_at FROM admin_audit ORDER BY id DESC LIMIT ?')
-    .all(limit)
+async function recentAudit(db, limit = 30) {
+  return (await db.prepare('SELECT id, action, target, detail, created_at, restored_at FROM admin_audit ORDER BY id DESC LIMIT ?')
+    .all(limit))
     .map((row) => {
       const detail = parseDetail(row.detail);
       return { id: row.id, action: row.action, target: row.target, created_at: row.created_at, restored_at: row.restored_at, restorable: canRestore(row, detail) };
@@ -41,8 +41,8 @@ function unitLabel(grade, room) {
 // Puts back the scores an audit row describes. Edits restore the previous scores (overwrite).
 // Deletes re-insert the removed rows; rows that exist again are left as they are.
 // Returns { status, message, restored, skipped }. Runs in one transaction.
-function restoreAudit(db, id) {
-  const row = db.prepare('SELECT id, action, target, detail, restored_at FROM admin_audit WHERE id = ?').get(id);
+async function restoreAudit(db, id) {
+  const row = await db.prepare('SELECT id, action, target, detail, restored_at FROM admin_audit WHERE id = ?').get(id);
   if (!row) return { status: 404, message: 'ไม่พบรายการนี้' };
   if (row.restored_at) return { status: 409, message: 'กู้คืนรายการนี้ไปแล้ว' };
   const detail = parseDetail(row.detail);
@@ -62,23 +62,23 @@ function restoreAudit(db, id) {
 
   let restored = 0;
   let skipped = 0;
-  db.transaction(() => {
+  await db.transaction(async () => {
     if (row.action === 'edit') {
       const { date, evaluatorId, grade, room, zone, before } = detail;
       for (const [criterion, score] of Object.entries(before)) {
-        upsert.run(grade, room, zone, Number(criterion), score, date, evaluatorId);
+        await upsert.run(grade, room, zone, Number(criterion), score, date, evaluatorId);
         restored++;
       }
-      writeAudit(db, 'restore', `กู้คืนคะแนนเดิม ${evaluatorId} · ${unitLabel(grade, room)} · ${date}`, { source: id });
+      await writeAudit(db, 'restore', `กู้คืนคะแนนเดิม ${evaluatorId} · ${unitLabel(grade, room)} · ${date}`, { source: id });
     } else {
       for (const r of detail.rows) {
-        const changed = insertIfMissing.run(r.grade, r.room, r.zone, r.criterion, r.score, detail.date, r.evaluator_id).changes;
+        const changed = (await insertIfMissing.run(r.grade, r.room, r.zone, r.criterion, r.score, detail.date, r.evaluator_id)).changes;
         restored += changed;
         skipped += 1 - changed;
       }
-      writeAudit(db, 'restore', `กู้คืน: ${row.target} (คืน ${restored} คะแนน, ข้าม ${skipped})`, { source: id });
+      await writeAudit(db, 'restore', `กู้คืน: ${row.target} (คืน ${restored} คะแนน, ข้าม ${skipped})`, { source: id });
     }
-    db.prepare("UPDATE admin_audit SET restored_at = datetime('now', 'localtime') WHERE id = ?").run(id);
+    await db.prepare("UPDATE admin_audit SET restored_at = datetime('now', '+7 hours') WHERE id = ?").run(id);
   })();
 
   return { status: 200, message: `กู้คืนแล้ว ${restored} คะแนน${skipped ? ` (ข้าม ${skipped} ที่มีอยู่แล้ว)` : ''}`, restored, skipped };

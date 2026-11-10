@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-const API_ORIGIN = process.env.LEGACY_API_ORIGIN ?? "http://127.0.0.1:8089";
+import { ensureSchema, sharePreview } from "../../../server/api.mjs";
 
 type Props = { searchParams: Promise<{ [key: string]: string | string[] | undefined }> };
 
@@ -17,14 +17,13 @@ type SharePreview = {
 
 const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : "");
 
-// server.js decides what a share link may show (revoked, expired, deleted) and answers
-// GET /api/photos/og?share=<token>. Anything unexpected falls back to the generic page.
+// The API (server/api.mjs) decides what a share link may show (revoked, expired, deleted); it runs in
+// this same process, so the preview is read directly instead of over HTTP.
 async function loadPreview(token: string): Promise<SharePreview | null> {
   if (!/^[A-Za-z0-9_-]{8,40}$/.test(token)) return null;
   try {
-    const res = await fetch(`${API_ORIGIN}/api/photos/og?share=${encodeURIComponent(token)}`, { cache: "no-store" });
-    if (!res.ok) return null;
-    return (await res.json()) as SharePreview;
+    await ensureSchema();
+    return (await sharePreview(token)) as SharePreview | null;
   } catch {
     return null;
   }

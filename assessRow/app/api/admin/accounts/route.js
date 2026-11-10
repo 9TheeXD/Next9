@@ -17,10 +17,10 @@ async function adminSession() {
 const bad = (message, status = 400) => NextResponse.json({ success: false, message }, { status });
 const cleanName = (v) => String(v || '').trim().slice(0, 60);
 
-function payload(db, session) {
+async function payload(db, session) {
   return {
     success: true,
-    accounts: listAccounts(db),
+    accounts: await listAccounts(db),
     envUsername: (process.env.ADMIN_USERNAME || '').toLowerCase() || null,
     me: session.user.prefix || null,
   };
@@ -29,7 +29,7 @@ function payload(db, session) {
 export async function GET() {
   const session = await adminSession();
   if (!session) return bad('Unauthorized', 401);
-  return NextResponse.json(payload(getDb(), session));
+  return NextResponse.json(await payload(getDb(), session));
 }
 
 export async function POST(request) {
@@ -43,12 +43,12 @@ export async function POST(request) {
   if (problem) return bad(problem);
   const db = getDb();
   try {
-    db.prepare('INSERT INTO admin_accounts (username, display_name, password_hash) VALUES (?, ?, ?)').run(username, cleanName(b.displayName), hashPassword(b.password));
+    await db.prepare('INSERT INTO admin_accounts (username, display_name, password_hash) VALUES (?, ?, ?)').run(username, cleanName(b.displayName), hashPassword(b.password));
   } catch (e) {
     if (String(e.code).startsWith('SQLITE_CONSTRAINT')) return bad('มีชื่อผู้ใช้นี้แล้ว');
     throw e;
   }
-  return NextResponse.json(payload(db, session));
+  return NextResponse.json(await payload(db, session));
 }
 
 export async function PUT(request) {
@@ -57,14 +57,14 @@ export async function PUT(request) {
   const b = (await request.json().catch(() => null)) || {};
   const username = String(b.username || '').trim().toLowerCase();
   const db = getDb();
-  if (!db.prepare('SELECT 1 FROM admin_accounts WHERE username = ?').get(username)) return bad('ไม่พบบัญชีนี้', 404);
-  if (b.displayName !== undefined) db.prepare('UPDATE admin_accounts SET display_name = ? WHERE username = ?').run(cleanName(b.displayName), username);
+  if (!await db.prepare('SELECT 1 FROM admin_accounts WHERE username = ?').get(username)) return bad('ไม่พบบัญชีนี้', 404);
+  if (b.displayName !== undefined) await db.prepare('UPDATE admin_accounts SET display_name = ? WHERE username = ?').run(cleanName(b.displayName), username);
   if (b.password !== undefined) {
     const problem = passwordProblem(b.password);
     if (problem) return bad(problem);
-    db.prepare('UPDATE admin_accounts SET password_hash = ? WHERE username = ?').run(hashPassword(b.password), username);
+    await db.prepare('UPDATE admin_accounts SET password_hash = ? WHERE username = ?').run(hashPassword(b.password), username);
   }
-  return NextResponse.json(payload(db, session));
+  return NextResponse.json(await payload(db, session));
 }
 
 export async function DELETE(request) {
@@ -72,7 +72,7 @@ export async function DELETE(request) {
   if (!session) return bad('Unauthorized', 401);
   const username = String(new URL(request.url).searchParams.get('username') || '').trim().toLowerCase();
   const db = getDb();
-  const r = db.prepare('DELETE FROM admin_accounts WHERE username = ?').run(username);
+  const r = await db.prepare('DELETE FROM admin_accounts WHERE username = ?').run(username);
   if (!r.changes) return bad('ไม่พบบัญชีนี้', 404);
-  return NextResponse.json(payload(db, session));
+  return NextResponse.json(await payload(db, session));
 }

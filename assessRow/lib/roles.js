@@ -38,21 +38,21 @@ function ruleMatches(rule, local) {
   }
 }
 
-function getRules(db) {
-  return db.prepare('SELECT id, local_kind, local_value, domain, role, position FROM email_rules ORDER BY position, id').all();
+async function getRules(db) {
+  return await db.prepare('SELECT id, local_kind, local_value, domain, role, position FROM email_rules ORDER BY position, id').all();
 }
 
 // Returns { role, prefix } or null when the account may not sign in. `prefix` (the part before @) is
 // what evaluations are stored under.
-function resolveRole(db, email) {
+async function resolveRole(db, email) {
   const parts = splitEmail(email);
   if (!parts) return null;
   const { local, domain } = parts;
   if (domain !== SCHOOL_DOMAIN) return null;
   // The first rule that matches this email, if any.
-  const rule = getRules(db).find((r) => ruleMatches(r, local));
+  const rule = (await getRules(db)).find((r) => ruleMatches(r, local));
   // A rule set to ห้ามเข้าใช้ wins over a whitelisted name.
-  const byName = db.prepare('SELECT role FROM whitelist WHERE prefix = ?').get(local);
+  const byName = await db.prepare('SELECT role FROM whitelist WHERE prefix = ?').get(local);
   if (byName && ROLES.includes(byName.role) && rule?.role !== 'deny') return { role: byName.role, prefix: local, source: 'whitelist' };
   if (rule && rule.role !== 'deny') return { role: rule.role, prefix: local, source: 'rule' };
   return null;

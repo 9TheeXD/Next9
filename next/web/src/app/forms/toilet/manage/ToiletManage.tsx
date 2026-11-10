@@ -9,7 +9,7 @@ import { TOILET_PW_KEY, formatTime, verifyToilet, type Room, type Submission } f
 // old page: GET /api/toilet/submissions[?roomId=], GET /api/toilet/config, POST /api/toilet/close { id }.
 export function ToiletManage() {
   const [password, setPassword] = useStoredPassword(TOILET_PW_KEY);
-  const [room, setRoom] = useState(useSearchParams().get("id") || "");
+  const [room, setRoom] = useState(useSearchParams()?.get("id") || "");
   const [rooms, setRooms] = useState<Room[]>([]);
   const [items, setItems] = useState<Submission[] | null>(null);
   const [tab, setTab] = useState<"open" | "closed">("open");

@@ -23,7 +23,7 @@ export async function GET(request) {
 
     const db = getDb();
     
-    if (session.user.role !== 'admin' && checkSystemLock(db, session.user.role)) {
+    if (session.user.role !== 'admin' && await checkSystemLock(db, session.user.role)) {
       return NextResponse.json({ success: false, message: 'ระบบปิดปรับปรุงชั่วคราว' }, { status: 503 });
     }
 
@@ -55,7 +55,7 @@ export async function GET(request) {
 
     query += ' ORDER BY grade, room, criterion';
 
-    const rows = db.prepare(query).all(...params);
+    const rows = await db.prepare(query).all(...params);
     return NextResponse.json(rows);
   } catch (error) {
     console.error('Evaluations GET error occurred');
@@ -90,10 +90,10 @@ export async function POST(request) {
     if (hour === 24) hour = 0;
     const minute = parseInt(parts.find(p => p.type === 'minute').value, 10);
     const timeInMinutes = hour * 60 + minute;
-    const evalWindow = getEvalWindow(db);
+    const evalWindow = await getEvalWindow(db);
     // Days admins closed (weekends, holidays) on /admin.
     const bkkToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-    const dayStatus = evalDayStatus(getEvalDays(db), bkkToday);
+    const dayStatus = evalDayStatus(await getEvalDays(db), bkkToday);
     if (!dayStatus.open) {
       return NextResponse.json({ success: false, message: dayStatus.reason }, { status: 403 });
     }
@@ -102,7 +102,7 @@ export async function POST(request) {
     }
     
     // Check if system is locked
-    if (session.user.role !== 'admin' && checkSystemLock(db, session.user.role)) {
+    if (session.user.role !== 'admin' && await checkSystemLock(db, session.user.role)) {
       return NextResponse.json({ success: false, message: 'ระบบปิดปรับปรุงชั่วคราว ไม่สามารถประเมินได้' }, { status: 403 });
     }
 
@@ -153,7 +153,7 @@ export async function POST(request) {
       return NextResponse.json({ success: false, message: 'ไม่พบข้อมูลผู้ประเมิน กรุณาเข้าสู่ระบบใหม่' }, { status: 400 });
     }
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO evaluations (grade, room, zone, criterion, score, date, evaluator_id)
       VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(grade, room, zone, criterion, date, evaluator_id)
@@ -161,7 +161,7 @@ export async function POST(request) {
     `).run(gradeNum, roomNum, zone, criterionNum, scoreNum, date, evaluatorId);
 
     const { logAction } = require('@/lib/logger');
-    logAction(evaluatorId, session.user.role, 'evaluate');
+    await logAction(evaluatorId, session.user.role, 'evaluate');
 
     return NextResponse.json({ success: true });
   } catch (error) {

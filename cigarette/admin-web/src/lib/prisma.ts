@@ -11,7 +11,13 @@ const connectionString =
   "postgresql://nextbreath:localdev_changeme@localhost:5432/nextbreath?schema=public";
 
 function createPrismaClient(): PrismaClient {
-  const pool = new pg.Pool({ connectionString });
+  // Serverless: every instance has its own pool, so keep it small and let idle connections go.
+  // Use the provider's pooled connection string (Supabase "Transaction pooler", port 6543).
+  const pool = new pg.Pool({
+    connectionString,
+    max: Number(process.env.PG_POOL_MAX || 3),
+    idleTimeoutMillis: 10000,
+  });
   const adapter = new PrismaPg(pool);
 
   return new PrismaClient({

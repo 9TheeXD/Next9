@@ -1,23 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-
-const s3 = new S3Client({
-  region: process.env.AWS_REGION || "ap-southeast-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "MOCK_KEY",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "MOCK_SECRET",
-  },
-});
-
-const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME || "nextbreath-sounds";
-
-// Helper to extract S3 key from URL
-function getKeyFromUrl(url: string) {
-  if (!url || !url.includes("amazonaws.com/")) return null;
-  return url.split("amazonaws.com/")[1];
-}
+import { deleteSoundByUrl, putSound } from "@/lib/storage";
 
 export async function PUT(
   request: NextRequest,
@@ -52,30 +36,12 @@ export async function PUT(
       const fileBuffer = Buffer.from(await file.arrayBuffer());
       const fileExt = file.name.split(".").pop() || "mp3";
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const key = `sounds/${fileName}`;
-
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: BUCKET_NAME,
-          Key: key,
-          Body: fileBuffer,
-          ContentType: file.type,
-        })
-      );
-
-      url = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION || "ap-southeast-1"}.amazonaws.com/${key}`;
+      url = await putSound(fileName, fileBuffer, file.type);
       finalDuration = parseInt(duration, 10);
 
       // If we are replacing a non-system sound, or a system sound that already has a custom URL, delete the old custom URL from S3
       if (existingSound.url !== existingSound.defaultUrl) {
-        const oldKey = getKeyFromUrl(existingSound.url);
-        if (oldKey) {
-          try {
-            await s3.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: oldKey }));
-          } catch (e) {
-            console.error("Failed to delete old sound from S3:", e);
-          }
-        }
+        await deleteSoundByUrl(existingSound.url);
       }
     }
 
@@ -120,14 +86,7 @@ export async function DELETE(
     if (existingSound.isSystem) {
       // System sounds cannot be deleted, only reset to defaultUrl
       if (existingSound.url !== existingSound.defaultUrl && existingSound.defaultUrl) {
-        const oldKey = getKeyFromUrl(existingSound.url);
-        if (oldKey) {
-          try {
-            await s3.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: oldKey }));
-          } catch (e) {
-            console.error("Failed to delete old sound from S3:", e);
-          }
-        }
+        await deleteSoundByUrl(existingSound.url);
 
         const resetSound = await prisma.sound.update({
           where: { id },
@@ -139,14 +98,7 @@ export async function DELETE(
       }
     } else {
       // Custom sounds are fully deleted
-      const oldKey = getKeyFromUrl(existingSound.url);
-      if (oldKey) {
-        try {
-          await s3.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: oldKey }));
-        } catch (e) {
-          console.error("Failed to delete sound from S3:", e);
-        }
-      }
+      await deleteSoundByUrl(existingSound.url);
 
       await prisma.sound.delete({ where: { id } });
       return NextResponse.json({ success: true, message: "Deleted successfully" }, { status: 200 });

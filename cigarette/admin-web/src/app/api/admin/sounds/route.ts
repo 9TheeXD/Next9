@@ -1,20 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import fs from "fs/promises";
-import path from "path";
-
-// Ensure env vars exist
-const s3 = new S3Client({
-  region: process.env.AWS_REGION || "ap-southeast-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "MOCK_KEY",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "MOCK_SECRET",
-  },
-});
-
-const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME || "nextbreath-sounds";
+import { putSound } from "@/lib/storage";
 
 export async function GET(request: NextRequest) {
   const auth = authenticateRequest(request);
@@ -56,34 +43,7 @@ export async function POST(request: NextRequest) {
     const fileExt = file.name.split(".").pop() || "wav";
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     
-    let url = "";
-    
-    // Check if AWS is configured
-    const isAwsConfigured = process.env.AWS_ACCESS_KEY_ID && process.env.AWS_ACCESS_KEY_ID !== "MOCK_KEY";
-
-    if (isAwsConfigured) {
-      const key = `sounds/${fileName}`;
-      // Upload to S3
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: BUCKET_NAME,
-          Key: key,
-          Body: fileBuffer,
-          ContentType: file.type || "audio/wav",
-        })
-      );
-      // Construct URL
-      url = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION || "ap-southeast-1"}.amazonaws.com/${key}`;
-    } else {
-      // Fallback to local file system
-      const publicDir = path.join(process.cwd(), "public", "sounds");
-      await fs.mkdir(publicDir, { recursive: true });
-      const filePath = path.join(publicDir, fileName);
-      await fs.writeFile(filePath, fileBuffer);
-      // Build absolute URL via API route (Next.js doesn't serve post-build static files)
-      const host = request.headers.get("host") || "localhost:7011";
-      url = `https://${host}/api/sounds/${fileName}`;
-    }
+    const url = await putSound(fileName, fileBuffer, file.type || "audio/wav");
 
     const sound = await prisma.sound.create({
       data: {

@@ -21,7 +21,7 @@ export async function POST(request) {
     let userId = session.user.prefix || (session.user.email ? session.user.email.split('@')[0] : 'unknown');
 
     const { logAction } = require('@/lib/logger');
-    logAction(userId, session.user.role, 'view');
+    await logAction(userId, session.user.role, 'view');
 
     return NextResponse.json({ success: true });
   } catch (error) {

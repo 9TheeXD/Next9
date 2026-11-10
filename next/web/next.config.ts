@@ -1,12 +1,17 @@
 import type { NextConfig } from "next";
+import fs from "node:fs";
+import path from "node:path";
 
-// The site moves to Next.js one route at a time. Anything this app does not render yet is handed to
-// the existing stack, so the whole site keeps working at every step of the migration:
-//   - /api/* goes to server.js (the backend stays as it is)
-//   - every other path without a Next.js route falls back to the legacy static files
-// In production nginx can do the same split; these origins are overridable for that setup.
-const API_ORIGIN = process.env.LEGACY_API_ORIGIN ?? "http://127.0.0.1:8089";
-const STATIC_ORIGIN = process.env.LEGACY_STATIC_ORIGIN ?? "http://127.0.0.1:8072";
+// Everything runs in this one Next.js app (one Vercel project):
+//   - /api/*  the site's API, server/api.mjs, mounted by src/pages/api/[...path].ts
+//   - pages that are not migrated yet: the legacy static files, copied into public/ by
+//     scripts/build-legacy-public.mjs before every build; a folder URL maps to its index.html below.
+//     (/forms/building -> /forms/building/ is a redirect in vercel.json: a Next.js redirect here would
+//     loop with trailingSlash, and Vercel's routing matches the exact path.)
+let LEGACY_DIRS: string[] = [];
+try {
+  LEGACY_DIRS = JSON.parse(fs.readFileSync(path.join(__dirname, "legacy-dirs.json"), "utf8"));
+} catch {}
 
 const nextConfig: NextConfig = {
   // The legacy site's package-lock.json one level up made Next.js treat the whole project folder
@@ -33,16 +38,18 @@ const nextConfig: NextConfig = {
   // Mastodon and the embed services are not.
   htmlLimitedBots:
     /[\w-]+-Google|Google-[\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight|line-poker|TelegramBot|kakaotalk-scrap|Viber|Zalo|Pinterest|Mastodon|Embedly|Iframely|Snapchat/i,
+  // Link previews and server pages read the API in-process; nothing here talks to a separate server.
+  serverExternalPackages: ["sharp", "@libsql/client", "libsql", "@google-cloud/dialogflow"],
+  // Next.js image optimisation has a small free quota on Vercel; photos come from R2 already sized.
+  images: { unoptimized: true },
   async rewrites() {
     return {
-      afterFiles: [
-        { source: "/api/:path*", destination: `${API_ORIGIN}/api/:path*` },
+      beforeFiles: [
+        // inspectors.json used to be a file beside the pages; it is kept in the database now.
+        { source: "/inspectors.json", destination: "/api/inspectors" },
       ],
       // Only reached when no Next.js route matches, so a migrated page automatically wins.
-      fallback: [
-        { source: "/:path*/", destination: `${STATIC_ORIGIN}/:path*/` },
-        { source: "/:path*", destination: `${STATIC_ORIGIN}/:path*` },
-      ],
+      fallback: LEGACY_DIRS.map((d) => ({ source: `/${d}/`, destination: `/${d}/index.html` })),
     };
   },
 };

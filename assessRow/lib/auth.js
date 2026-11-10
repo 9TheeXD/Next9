@@ -10,38 +10,38 @@ function verifyPassword(password, hash) {
   return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(hash));
 }
 
-function createSession(userId) {
+async function createSession(userId) {
   const db = getDb();
   const sessionId = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
-  db.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)').run(sessionId, userId, expiresAt);
+  await db.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)').run(sessionId, userId, expiresAt);
   return { sessionId, expiresAt };
 }
 
-function validateSession(sessionId) {
+async function validateSession(sessionId) {
   if (!sessionId || typeof sessionId !== 'string') return null;
   const db = getDb();
-  const session = db.prepare(
+  const session = await db.prepare(
     'SELECT s.id, s.user_id, s.expires_at, u.student_id FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = ?'
   ).get(sessionId);
 
   if (!session) return null;
   if (new Date(session.expires_at) < new Date()) {
-    db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+    await db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
     return null;
   }
   return { userId: session.user_id, studentId: session.student_id };
 }
 
-function deleteSession(sessionId) {
+async function deleteSession(sessionId) {
   if (!sessionId) return;
   const db = getDb();
-  db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+  await db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
 }
 
-function deleteAllUserSessions(userId) {
+async function deleteAllUserSessions(userId) {
   const db = getDb();
-  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+  await db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
 }
 
 // TODO(security): Consider using OAuth providers for authentication

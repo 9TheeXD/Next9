@@ -143,10 +143,10 @@ function getStudentMaxDate() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function checkSystemLock(db, userRole = null) {
-  const lockedRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('system_locked');
+async function checkSystemLock(db, userRole = null) {
+  const lockedRow = await db.prepare('SELECT value FROM settings WHERE key = ?').get('system_locked');
   if (lockedRow && lockedRow.value === 'true') {
-    const untilRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('lock_until');
+    const untilRow = await db.prepare('SELECT value FROM settings WHERE key = ?').get('lock_until');
     if (untilRow && untilRow.value) {
       const untilDate = new Date(untilRow.value);
       if (new Date() > untilDate) {
@@ -155,7 +155,7 @@ function checkSystemLock(db, userRole = null) {
     }
     
     if (userRole) {
-      const targetRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('lock_target');
+      const targetRow = await db.prepare('SELECT value FROM settings WHERE key = ?').get('lock_target');
       const lockTarget = targetRow ? targetRow.value : 'all';
       if (lockTarget === 'student' && userRole !== 'student') {
         return false;
@@ -191,10 +191,10 @@ const toMinutes = (hhmm) => {
   const m = /^(\d{2}):(\d{2})$/.exec(hhmm || '');
   return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
 };
-function getEvalWindow(db) {
-  const get = (key) => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value;
-  let from = get('eval_open_from');
-  let to = get('eval_open_to');
+async function getEvalWindow(db) {
+  const get = async (key) => (await db.prepare('SELECT value FROM settings WHERE key = ?').get(key))?.value;
+  let from = await get('eval_open_from');
+  let to = await get('eval_open_to');
   if (toMinutes(from) === null || toMinutes(to) === null || toMinutes(from) >= toMinutes(to)) ({ from, to } = EVAL_WINDOW_DEFAULT);
   return { from, to, fromMinutes: toMinutes(from), toMinutes: toMinutes(to) };
 }
@@ -220,9 +220,9 @@ function normalizeEvalDays(v) {
   const weekdays = Array.isArray(v?.weekdays) ? [...new Set(v.weekdays.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort() : ALL_WEEKDAYS;
   return { weekdays, closed: cleanDayList(v?.closed), open: cleanDayList(v?.open) };
 }
-function getEvalDays(db) {
+async function getEvalDays(db) {
   try {
-    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('eval_days');
+    const row = await db.prepare('SELECT value FROM settings WHERE key = ?').get('eval_days');
     return normalizeEvalDays(row ? JSON.parse(row.value) : null);
   } catch {
     return normalizeEvalDays(null);

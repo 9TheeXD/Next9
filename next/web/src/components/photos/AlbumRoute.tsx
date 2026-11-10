@@ -9,7 +9,7 @@ import type { Mode } from "./album/model";
 // album, so the page is keyed by which one is showing: moving between albums is one page leaving and
 // another entering, and they slide.
 export function AlbumRoute() {
-  const search = useSearchParams();
+  const search = useSearchParams() ?? new URLSearchParams();
   const share = search.get("share");
   const mode: Mode = share !== null ? { kind: "share", token: share, albumId: search.get("a") || "" } : search.get("view") === "all" ? { kind: "all" } : { kind: "album", id: search.get("id") || "" };
   const key = mode.kind === "all" ? "all" : mode.kind === "share" ? `share:${mode.token}:${mode.albumId}` : `album:${mode.id}`;

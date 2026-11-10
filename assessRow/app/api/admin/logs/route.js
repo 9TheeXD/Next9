@@ -38,7 +38,7 @@ export async function GET(request) {
 
     const db = getDb();
 
-    const countRows = db.prepare(`SELECT action, COUNT(*) AS n FROM system_logs${whereSql} GROUP BY action`).all(...params);
+    const countRows = await db.prepare(`SELECT action, COUNT(*) AS n FROM system_logs${whereSql} GROUP BY action`).all(...params);
     const counts = { all: 0, evaluate: 0, view: 0 };
     for (const r of countRows) {
       counts[r.action] = r.n;
@@ -53,8 +53,8 @@ export async function GET(request) {
     }
     const listWhereSql = listWhere.length ? ` WHERE ${listWhere.join(' AND ')}` : '';
 
-    const total = db.prepare(`SELECT COUNT(*) AS n FROM system_logs${listWhereSql}`).get(...listParams).n;
-    const logs = db
+    const total = (await db.prepare(`SELECT COUNT(*) AS n FROM system_logs${listWhereSql}`).get(...listParams)).n;
+    const logs = await db
       .prepare(`SELECT id, action, user_id, role, date, timestamp FROM system_logs${listWhereSql} ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?`)
       .all(...listParams, limit, (page - 1) * limit);
 

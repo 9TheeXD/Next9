@@ -11,8 +11,8 @@ const { getEvalWindow, evalTimeToMinutes, getEvalDays, normalizeEvalDays, evalDa
 export async function GET() {
   try {
     const db = getDb();
-    const { from, to } = getEvalWindow(db);
-    const days = getEvalDays(db);
+    const { from, to } = await getEvalWindow(db);
+    const days = await getEvalDays(db);
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     return NextResponse.json({ from, to, days, today, todayStatus: evalDayStatus(days, today) });
   } catch {
@@ -33,7 +33,7 @@ export async function POST(request) {
     // { days: { weekdays, closed, open } } updates only which days are open.
     if (body.days) {
       const days = normalizeEvalDays(body.days);
-      set.run('eval_days', JSON.stringify(days));
+      await set.run('eval_days', JSON.stringify(days));
       return NextResponse.json({ success: true, days, message: 'บันทึกวันประเมินแล้ว' });
     }
 
@@ -43,8 +43,8 @@ export async function POST(request) {
     if (f === null || t === null || f >= t || t >= 24 * 60) {
       return NextResponse.json({ message: 'เวลาไม่ถูกต้อง (เวลาเปิดต้องมาก่อนเวลาปิด)' }, { status: 400 });
     }
-    set.run('eval_open_from', from);
-    set.run('eval_open_to', to);
+    await set.run('eval_open_from', from);
+    await set.run('eval_open_to', to);
     return NextResponse.json({ success: true, from, to, message: `ตั้งเวลาประเมินเป็น ${from} – ${to} น. แล้ว` });
   } catch (error) {
     console.error('Failed to set evaluation time:', error);

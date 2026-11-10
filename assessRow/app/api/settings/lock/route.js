@@ -14,12 +14,12 @@ export async function GET() {
     let locked = false;
     let lockUntil = null;
 
-    const lockedRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('system_locked');
+    const lockedRow = await db.prepare('SELECT value FROM settings WHERE key = ?').get('system_locked');
     if (lockedRow && lockedRow.value === 'true') {
       locked = true;
     }
 
-    const untilRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('lock_until');
+    const untilRow = await db.prepare('SELECT value FROM settings WHERE key = ?').get('lock_until');
     if (untilRow && untilRow.value) {
       lockUntil = untilRow.value;
     }
@@ -30,12 +30,12 @@ export async function GET() {
       if (new Date() > untilDate) {
         locked = false;
         // Auto-unlock in DB
-        db.prepare(`UPDATE settings SET value = ?, updated_at = datetime('now') WHERE key = ?`).run('false', 'system_locked');
+        await db.prepare(`UPDATE settings SET value = ?, updated_at = datetime('now') WHERE key = ?`).run('false', 'system_locked');
       }
     }
     
     let target = 'all';
-    const targetRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('lock_target');
+    const targetRow = await db.prepare('SELECT value FROM settings WHERE key = ?').get('lock_target');
     if (targetRow && targetRow.value) {
       target = targetRow.value;
     }
@@ -48,10 +48,10 @@ export async function GET() {
     }
 
     // The text admins can set for the maintenance popup (empty = the built-in wording).
-    const textRow = (key) => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value || '';
+    const textRow = async (key) => (await db.prepare('SELECT value FROM settings WHERE key = ?').get(key))?.value || '';
     // `exempt`: admins are never blocked (the early check in app/layout.js reads this).
     const exempt = session?.user?.role === 'admin';
-    return NextResponse.json({ locked, lockUntil, target, exempt, title: textRow('lock_title'), message: textRow('lock_message') });
+    return NextResponse.json({ locked, lockUntil, target, exempt, title: await textRow('lock_title'), message: await textRow('lock_message') });
   } catch (error) {
     console.error('Failed to get lock status:', error);
     // Fail open if db error
@@ -68,19 +68,19 @@ export async function POST(request) {
 
     const { action, minutes, target, until, title, message } = await request.json();
     const db = getDb();
-    const setSetting = (key, value) =>
-      db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run(key, value);
+    const setSetting = async (key, value) =>
+      await db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run(key, value);
 
     // Popup wording only, without locking or unlocking.
     if (action === 'text') {
-      setSetting('lock_title', String(title || '').slice(0, 120));
-      setSetting('lock_message', String(message || '').slice(0, 1000));
+      await setSetting('lock_title', String(title || '').slice(0, 120));
+      await setSetting('lock_message', String(message || '').slice(0, 1000));
       return NextResponse.json({ success: true, message: 'บันทึกข้อความแล้ว' });
     }
 
     if (action === 'unlock') {
-      db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run('system_locked', 'false');
-      db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run('lock_until', '');
+      await db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run('system_locked', 'false');
+      await db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run('lock_until', '');
       return NextResponse.json({ success: true, message: 'ระบบเปิดให้ใช้งานแล้ว' });
     } 
     
@@ -96,11 +96,11 @@ export async function POST(request) {
         lockUntil = untilDate.toISOString();
       }
       const lockTarget = target === 'student' ? 'student' : 'all';
-      if (title !== undefined) setSetting('lock_title', String(title || '').slice(0, 120));
-      if (message !== undefined) setSetting('lock_message', String(message || '').slice(0, 1000));
-      db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run('system_locked', 'true');
-      db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run('lock_until', lockUntil);
-      db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run('lock_target', lockTarget);
+      if (title !== undefined) await setSetting('lock_title', String(title || '').slice(0, 120));
+      if (message !== undefined) await setSetting('lock_message', String(message || '').slice(0, 1000));
+      await db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run('system_locked', 'true');
+      await db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run('lock_until', lockUntil);
+      await db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run('lock_target', lockTarget);
       return NextResponse.json({ success: true, message: 'ระบบถูกปิดการใช้งานเรียบร้อยแล้ว' });
     }
 

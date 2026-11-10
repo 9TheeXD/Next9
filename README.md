@@ -2,6 +2,11 @@
 
 Monorepo for the SDH Council systems. Three independent projects live side by side; each has its own `package.json`.
 
+> **Branch `serverless`:** every system runs on Vercel + Turso + Supabase + Cloudflare R2 instead of the VPS.
+> The old Express-style `next/server.js` is now `next/web/server/api.mjs`, served by the Next.js app; the
+> LINE bot is `next/web/src/pages/api/line/webhook.ts`; the Discord bot is gone. Setup and data migration:
+> [SERVERLESS.md](SERVERLESS.md). The Docker/VPS instructions below apply to `main`.
+
 | Folder | What it is | Stack |
 |---|---|---|
 | [`next/`](next) | Main "next9" platform: Node server (port 8089), Next.js web (`next/web`), forms (building, inert, pinkbook, toilet), LINE bot, Discord bot | Node 20, Express-style `server.js`, better-sqlite3, Next.js 16, Docker |

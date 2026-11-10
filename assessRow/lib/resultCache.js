@@ -1,24 +1,23 @@
 // In-memory cache for the evaluation summaries. A stored answer is reused only while a fingerprint of
-// the evaluations in its date range (and of the whitelist, which decides council vs teacher
-// weighting) is unchanged, so a new or edited score is picked up on the very next request. Taking the
-// fingerprint scans the range once without grouping or joins, a fraction of what the summaries cost.
+// the evaluations (and of the whitelist, which decides council vs teacher weighting) is unchanged, so a
+// new or edited score is picked up on the very next request.
 const MAX_ENTRIES = 300;
 const entries = new Map();
 
-function fingerprint(db, startDate, endDate) {
-  const e = db
-    .prepare('SELECT COUNT(*) AS n, TOTAL(score) AS s, TOTAL(id * score) AS w, MAX(id) AS m FROM evaluations WHERE date >= ? AND date <= ?')
-    .get(startDate || '0000-00-00', endDate || '9999-12-31');
-  const w = db.prepare("SELECT COUNT(*) AS n, GROUP_CONCAT(prefix || ':' || IFNULL(role, ''), ',') AS g FROM (SELECT prefix, role FROM whitelist ORDER BY prefix)").get();
-  return [e.n, e.s, e.w, e.m, w.n, w.g].join('|');
+// data_version (lib/db.js) changes with every evaluation or whitelist change: one row read instead of a
+// scan of the date range. The range is part of the cache key already.
+async function fingerprint(db) {
+  const row = await db.prepare("SELECT value FROM settings WHERE key = 'data_version'").get();
+  if (!row) throw new Error('no data_version');
+  return String(row.value);
 }
 
 // Returns the JSON text for `key`, computing it with `compute()` (which returns a plain object) when
 // nothing valid is stored.
-function cachedJson(db, key, startDate, endDate, compute) {
+async function cachedJson(db, key, startDate, endDate, compute) {
   let fp = null;
   try {
-    fp = fingerprint(db, startDate, endDate);
+    fp = await fingerprint(db);
     const hit = entries.get(key);
     if (hit && hit.fp === fp) {
       entries.delete(key);
@@ -28,7 +27,7 @@ function cachedJson(db, key, startDate, endDate, compute) {
   } catch {
     fp = null;
   }
-  const json = JSON.stringify(compute());
+  const json = JSON.stringify(await compute());
   if (fp) {
     entries.set(key, { fp, json });
     if (entries.size > MAX_ENTRIES) entries.delete(entries.keys().next().value);

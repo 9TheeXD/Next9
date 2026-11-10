@@ -192,7 +192,9 @@ export async function GET(request: Request) {
     const key = searchParams.get('key');
     const force = searchParams.get('force') === 'true';
 
-    if (key !== process.env.CRON_SECRET) {
+    // ?key=<CRON_SECRET> (external scheduler) or "Authorization: Bearer <CRON_SECRET>" (Vercel cron).
+    const bearer = request.headers.get('authorization');
+    if (!process.env.CRON_SECRET || (key !== process.env.CRON_SECRET && bearer !== `Bearer ${process.env.CRON_SECRET}`)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -237,7 +239,11 @@ export async function GET(request: Request) {
 
       const notifTime = getNotificationTime(user.surveyResponse?.cravingTime);
       
-      if (!force && (bkkHour !== notifTime.hour || bkkMinute !== notifTime.minute)) {
+      // On the VPS this ran every minute and matched the exact minute. The scheduler that calls it now
+      // (cron-job.org, every 5 minutes, see DEPLOY.md) may be a little late or skip a run, so a user is
+      // due from their time until an hour after it; "Already sent today" above keeps it to once a day.
+      const minutesLate = (bkkHour * 60 + bkkMinute) - (notifTime.hour * 60 + notifTime.minute);
+      if (!force && (minutesLate < 0 || minutesLate > 60)) {
          skipped.push({ id: user.displayId, reason: `Not the time (target ${notifTime.hour}:${notifTime.minute}, now ${bkkHour}:${bkkMinute})` });
          continue;
       }

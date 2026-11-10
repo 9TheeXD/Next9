@@ -63,7 +63,7 @@ export async function GET(request) {
     }
 
     const db = getDb();
-    const records = db
+    const records = (await db
       .prepare(
         `SELECT e.evaluator_id, w.role AS role, e.grade, e.room, e.zone, ${CRITERION_COLUMNS}
          FROM evaluations e
@@ -72,7 +72,7 @@ export async function GET(request) {
          GROUP BY e.evaluator_id, e.grade, e.room, e.zone
          ORDER BY e.evaluator_id, e.grade, e.room`,
       )
-      .all(...params)
+      .all(...params))
       .map((r) => ({
         evaluator_id: r.evaluator_id,
         role: r.role,
@@ -87,7 +87,7 @@ export async function GET(request) {
       criteria: CRITERIA,
       scoreLabels: SCORE_LABELS,
       records,
-      audit: recentAudit(db, 30),
+      audit: await recentAudit(db, 30),
     });
   } catch (error) {
     console.error('Admin evaluations GET error:', error);
@@ -114,7 +114,7 @@ export async function PUT(request) {
     }
 
     const db = getDb();
-    const before = db.prepare(`SELECT criterion, score FROM evaluations WHERE ${KEY_WHERE}`).all(...keyArgs(key));
+    const before = await db.prepare(`SELECT criterion, score FROM evaluations WHERE ${KEY_WHERE}`).all(...keyArgs(key));
     if (before.length === 0) {
       return NextResponse.json({ success: false, message: 'ไม่พบการประเมินนี้ (อาจถูกลบไปแล้ว)' }, { status: 404 });
     }
@@ -125,11 +125,11 @@ export async function PUT(request) {
       ON CONFLICT(grade, room, zone, criterion, date, evaluator_id)
       DO UPDATE SET score = excluded.score
     `);
-    db.transaction(() => {
+    await db.transaction(async () => {
       for (const c of CRITERION_NOS) {
-        upsert.run(key.grade, key.room, key.zone, c, next[c], key.date, key.evaluatorId);
+        await upsert.run(key.grade, key.room, key.zone, c, next[c], key.date, key.evaluatorId);
       }
-      writeAudit(db, 'edit', `แก้ไข ${key.evaluatorId} · ${unitLabel(key.grade, key.room)} · ${key.date}`, {
+      await writeAudit(db, 'edit', `แก้ไข ${key.evaluatorId} · ${unitLabel(key.grade, key.room)} · ${key.date}`, {
         date: key.date,
         evaluatorId: key.evaluatorId,
         grade: key.grade,
@@ -189,17 +189,17 @@ export async function DELETE(request) {
     }
 
     const db = getDb();
-    const rows = db
+    const rows = await db
       .prepare(`SELECT evaluator_id, grade, room, zone, criterion, score FROM evaluations WHERE ${whereSql} ORDER BY evaluator_id, grade, room, criterion`)
       .all(...args);
     if (rows.length === 0) {
       return NextResponse.json({ success: false, message: 'ไม่พบการประเมินที่จะลบ (อาจถูกลบไปแล้ว)' }, { status: 404 });
     }
 
-    db.transaction(() => {
-      db.prepare(`DELETE FROM evaluations WHERE ${whereSql}`).run(...args);
+    await db.transaction(async () => {
+      await db.prepare(`DELETE FROM evaluations WHERE ${whereSql}`).run(...args);
       // Keep the removed rows in the audit detail so the restore button can put them back.
-      writeAudit(db, action, `${target} (${rows.length} คะแนน)`, { date, rows });
+      await writeAudit(db, action, `${target} (${rows.length} คะแนน)`, { date, rows });
     })();
 
     return NextResponse.json({ success: true, deleted: rows.length, message: `ลบ ${rows.length} คะแนนแล้ว` });
@@ -218,7 +218,7 @@ export async function POST(request) {
     const id = Number(body.id);
     if (!Number.isInteger(id) || id <= 0) return bad('รายการไม่ถูกต้อง');
 
-    const result = restoreAudit(getDb(), id);
+    const result = await restoreAudit(getDb(), id);
     return NextResponse.json({ success: result.status === 200, message: result.message, restored: result.restored, skipped: result.skipped }, { status: result.status });
   } catch (error) {
     console.error('Admin evaluations restore error:', error);

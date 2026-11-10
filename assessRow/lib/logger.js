@@ -7,7 +7,7 @@ function getBangkokDateString() {
   return formatter.format(d);
 }
 
-function logAction(userId, role, action) {
+async function logAction(userId, role, action) {
   try {
     if (!userId || !role || !action) return;
     
@@ -27,7 +27,7 @@ function logAction(userId, role, action) {
       VALUES (?, ?, ?, ?)
     `);
     
-    stmt.run(action, userId, displayRole, date);
+    await stmt.run(action, userId, displayRole, date);
   } catch (error) {
     console.error('Failed to log action:', error);
   }
