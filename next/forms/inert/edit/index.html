@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/inert.svg">
+    <title>ตั้งค่าฟิลด์แบบฟอร์มเฉื่อย - สภานักเรียน</title>
+    <link rel="stylesheet" href="../style.css">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <style>
+        /* Edit Page Specific Styles */
+        .column-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        .column-card {
+            display: flex;
+            align-items: center;
+            background: #fff;
+            border: 1px solid #dadce0;
+            border-radius: 6px;
+            padding: 12px;
+            gap: 16px;
+            transition: box-shadow 0.2s;
+        }
+        .column-card:hover {
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .column-card.sortable-ghost { opacity: 0.4; }
+        .column-card.sortable-drag { background: #f8f9fa; }
+        
+        .drag-handle {
+            cursor: grab;
+            color: #9aa0a6;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            padding: 0 4px;
+        }
+        .drag-handle:active { cursor: grabbing; }
+        
+        .col-index {
+            width: 30px;
+            text-align: center;
+            font-weight: 600;
+            color: #5f6368;
+            font-size: 0.9rem;
+        }
+        .col-inputs {
+            display: flex;
+            gap: 12px;
+            flex: 1;
+        }
+        .col-inputs input, .col-inputs select {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            font-family: 'Prompt', sans-serif;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .col-inputs input:focus, .col-inputs select:focus {
+            border-color: #b00909;
+        }
+        
+        .btn {
+            background: #b00909;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Prompt', sans-serif;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: background 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn:hover { background: #8a0707; }
+        .btn-danger { background: #dc3545; padding: 8px; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-warning { background: #ffc107; padding: 8px; color: #212529; }
+        .btn-warning:hover { background: #e0a800; }
+        
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 12px 24px;
+            border-radius: 6px;
+            background: #323232;
+            color: white;
+            font-family: 'Prompt', sans-serif;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transform: translateX(120%);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+        }
+        .toast.show { transform: translateX(0); }
+        .toast.success { border-left: 4px solid #28a745; }
+        .toast.error { border-left: 4px solid #dc3545; }
+
+        @media (max-width: 768px) {
+            .col-inputs { flex-direction: column; gap: 8px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="form-container">
+        <!-- Editor Section -->
+        <div id="editor-section">
+            <div class="form-card header-card">
+                <h1>ตั้งค่าโครงสร้างแบบฟอร์มลง Google Sheets (สาย-เฉื่อย)</h1>
+                <p>สามารถกำหนด Spreadsheet ID และชื่อแท็บแยกตามภาคเรียน รวมถึงจัดเรียงคอลัมน์ได้ทันที</p>
+            </div>
+            
+            <div class="form-card" style="margin-bottom: 20px;">
+                <div class="section-header" style="flex-wrap: wrap; gap: 8px;">
+                    <h2><i class='bx bx-spreadsheet' style="color: #0f9d58;"></i> ตั้งค่า Google Sheets แยกตามภาคเรียน</h2>
+                    <div style="display: flex; gap: 6px;">
+                        <button type="button" class="btn btn-sm" id="btn-term-2" onclick="setEditTerm('2')" style="padding: 6px 14px; font-size: 0.85rem; background: #0f9d58; color: white;">ภาคเรียนที่ 2 (ปัจจุบัน)</button>
+                        <button type="button" class="btn btn-sm" id="btn-term-1" onclick="setEditTerm('1')" style="padding: 6px 14px; font-size: 0.85rem; background: #f1f3f4; color: #3c4043;">ภาคเรียนที่ 1</button>
+                    </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 14px;">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="display: block; font-weight: 500; margin-bottom: 6px; font-size: 0.95rem;">Spreadsheet ID หรือ URL ลิงก์ของชีต <span style="color: #dc3545;">*</span></label>
+                        <input type="text" id="sheet-id" placeholder="วางลิงก์ Google Sheets หรือ ID เช่น 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" style="width: 100%; padding: 10px 12px; border: 1px solid #dadce0; border-radius: 6px; font-family: 'Prompt', sans-serif; font-size: 0.9rem;">
+                        <small style="color: #5f6368; display: block; margin-top: 4px;">ระบบจะดึงเฉพาะ Spreadsheet ID ให้อัตโนมัติหากวางทั้ง URL ลิงก์</small>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label style="display: block; font-weight: 500; margin-bottom: 6px; font-size: 0.9rem;">ชื่อแท็บชีตรวม</label>
+                            <input type="text" id="sheet-range" placeholder="เช่น Sheet1 หรือ รวม" style="width: 100%; padding: 8px 12px; border: 1px solid #dadce0; border-radius: 6px; font-family: 'Prompt', sans-serif; font-size: 0.9rem;">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="display: block; font-weight: 500; margin-bottom: 6px; font-size: 0.9rem;">ชื่อแท็บ ม.ต้น</label>
+                            <input type="text" id="sheet-junior-range" placeholder="เช่น ม.ต้น" style="width: 100%; padding: 8px 12px; border: 1px solid #dadce0; border-radius: 6px; font-family: 'Prompt', sans-serif; font-size: 0.9rem;">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="display: block; font-weight: 500; margin-bottom: 6px; font-size: 0.9rem;">ชื่อแท็บ ม.ปลาย</label>
+                            <input type="text" id="sheet-high-range" placeholder="เช่น ม.ปลาย" style="width: 100%; padding: 8px 12px; border: 1px solid #dadce0; border-radius: 6px; font-family: 'Prompt', sans-serif; font-size: 0.9rem;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-card">
+                <div class="section-header">
+                    <h2>คอลัมน์ใน Google Sheets</h2>
+                </div>
+
+                <!-- Columns Mapping -->
+                <div class="form-group">
+                    <div class="section-header">
+                        <h3 style="margin:0; font-size: 1.1rem;"><i class='bx bx-table'></i> คอลัมน์ใน Google Sheets (Columns)</h3>
+                        <button class="btn btn-secondary" onclick="addColumn()" style="padding: 0.5rem 1rem; font-size: 0.85rem;"><i class='bx bx-plus'></i> เพิ่มคอลัมน์</button>
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; padding: 0 1rem 0 4rem; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.85rem; font-weight: 500;">
+                        <div style="flex: 1;">ชื่อหัวคอลัมน์ (Header Name)</div>
+                        <div style="flex: 1;">ข้อมูลที่จะดึงมาใส่ (Data Source)</div>
+                        <div style="width: 40px;"></div>
+                    </div>
+                    
+                    <div id="columns-list" class="column-list">
+                        <!-- Items will be generated here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save Section with Admin Password -->
+            <div class="form-card" style="margin-top: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; background: #f8fafc; border: 1px solid #cbd5e1;">
+                <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 260px;">
+                    <label style="font-weight: 600; font-size: 0.95rem; white-space: nowrap; color: #334155;"><i class='bx bx-lock-alt'></i> รหัสผ่านแอดมิน <span style="color: #dc3545;">*</span>:</label>
+                    <input type="password" id="save-password" placeholder="กรอกรหัสผ่านเพื่อบันทึก..." style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: 'Prompt', sans-serif; font-size: 0.9rem; flex: 1; max-width: 320px;">
+                </div>
+                <button class="btn btn-primary" id="btn-save" style="padding: 10px 24px; font-size: 0.95rem;"><i class='bx bx-save'></i> บันทึกข้อมูลการตั้งค่า</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">ข้อความแจ้งเตือน</div>
+
+    <script>
+        let currentPassword = '';
+
+        const dataSources = [
+            { value: "timestamp", label: "ประทับเวลา (Timestamp)" },
+            { value: "dateFormatted", label: "วันที่ (Date)" },
+            { value: "inspector", label: "ชื่อผู้ตรวจ (Inspector)" },
+            { value: "studentId", label: "รหัสนักเรียน (Student ID)" },
+            { value: "name", label: "ชื่อ-สกุล (Name)" },
+            { value: "cls", label: "ชั้น (Class)" },
+            { value: "room", label: "ห้อง (Room)" },
+            { value: "number", label: "เลขที่ (Number)" },
+            { value: "typeVal", label: "สาย/เฉื่อย (Type)" },
+            { value: "violations", label: "รายการผิดระเบียบ (Violations)" },
+            { value: "", label: "-- ว่างเปล่า (Empty) --" }
+        ];
+
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = `toast show ${type}`;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function updateColumnIndexes() {
+            const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            document.querySelectorAll('.col-index').forEach((el, index) => {
+                let letter = '';
+                let temp = index;
+                while (temp >= 0) {
+                    letter = alphabet[temp % 26] + letter;
+                    temp = Math.floor(temp / 26) - 1;
+                }
+                el.textContent = letter;
+            });
+        }
+
+        function addColumn(header = '', source = '') {
+            const list = document.getElementById('columns-list');
+            const div = document.createElement('div');
+            div.className = 'column-card';
+            
+            let optionsHtml = '';
+            dataSources.forEach(src => {
+                const selected = src.value === source ? 'selected' : '';
+                optionsHtml += `<option value="${src.value}" ${selected}>${src.label}</option>`;
+            });
+
+            div.innerHTML = `
+                <div class="drag-handle"><i class='bx bx-grid-vertical'></i></div>
+                <div class="col-index"></div>
+                <div class="col-inputs">
+                    <input type="text" class="inp-header" value="${header.replace(/"/g, '&quot;')}" placeholder="ชื่อคอลัมน์ (เช่น ประทับเวลา)">
+                    <select class="inp-source">
+                        ${optionsHtml}
+                    </select>
+                </div>
+                <button class="btn btn-danger" onclick="this.parentElement.remove(); updateColumnIndexes();" title="ลบคอลัมน์"><i class='bx bx-trash'></i></button>
+            `;
+            list.appendChild(div);
+            updateColumnIndexes();
+        }
+
+        // Setup Sortable for drag and drop
+        new Sortable(document.getElementById('columns-list'), {
+            handle: '.drag-handle',
+            animation: 150,
+            onEnd: function () {
+                updateColumnIndexes();
+            }
+        });
+
+        let currentEditTerm = '2';
+        let termConfigs = {
+            '1': { SHEET_ID: '', SHEET_RANGE: 'Sheet1', SHEET_JUNIOR_RANGE: 'ม.ต้น', SHEET_HIGH_RANGE: 'ม.ปลาย' },
+            '2': { SHEET_ID: '', SHEET_RANGE: 'Sheet1', SHEET_JUNIOR_RANGE: 'ม.ต้น', SHEET_HIGH_RANGE: 'ม.ปลาย' }
+        };
+
+        function parseSpreadsheetId(val) {
+            if (!val) return '';
+            val = val.trim();
+            const match = val.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+            return match ? match[1] : val;
+        }
+
+        function saveCurrentTermInputs() {
+            termConfigs[currentEditTerm] = {
+                SHEET_ID: parseSpreadsheetId(document.getElementById('sheet-id').value),
+                SHEET_RANGE: document.getElementById('sheet-range').value.trim() || 'Sheet1',
+                SHEET_JUNIOR_RANGE: document.getElementById('sheet-junior-range').value.trim() || 'ม.ต้น',
+                SHEET_HIGH_RANGE: document.getElementById('sheet-high-range').value.trim() || 'ม.ปลาย'
+            };
+        }
+
+        function renderTermInputs() {
+            const tCfg = termConfigs[currentEditTerm] || {};
+            document.getElementById('sheet-id').value = tCfg.SHEET_ID || '';
+            document.getElementById('sheet-range').value = tCfg.SHEET_RANGE || 'Sheet1';
+            document.getElementById('sheet-junior-range').value = tCfg.SHEET_JUNIOR_RANGE || 'ม.ต้น';
+            document.getElementById('sheet-high-range').value = tCfg.SHEET_HIGH_RANGE || 'ม.ปลาย';
+
+            const btn2 = document.getElementById('btn-term-2');
+            const btn1 = document.getElementById('btn-term-1');
+            if (currentEditTerm === '2') {
+                btn2.style.background = '#0f9d58';
+                btn2.style.color = 'white';
+                btn1.style.background = '#f1f3f4';
+                btn1.style.color = '#3c4043';
+            } else {
+                btn1.style.background = '#0f9d58';
+                btn1.style.color = 'white';
+                btn2.style.background = '#f1f3f4';
+                btn2.style.color = '#3c4043';
+            }
+        }
+
+        window.setEditTerm = function(term) {
+            saveCurrentTermInputs();
+            currentEditTerm = String(term);
+            renderTermInputs();
+        };
+
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/inert/config');
+                const data = await res.json();
+                if (data.success) {
+                    const cfg = data.config;
+                    
+                    document.getElementById('columns-list').innerHTML = '';
+                    
+                    if (cfg.COLUMNS) {
+                        cfg.COLUMNS.forEach(c => addColumn(c.header, c.source));
+                    } else if (cfg.HEADERS) {
+                        cfg.HEADERS.forEach((h, i) => addColumn(h, dataSources[i] ? dataSources[i].value : ''));
+                    }
+
+                    // Load Google Sheets Settings into termConfigs
+                    const baseCfg = {
+                        SHEET_ID: cfg.SHEET_ID || '',
+                        SHEET_RANGE: cfg.SHEET_RANGE || 'Sheet1',
+                        SHEET_JUNIOR_RANGE: cfg.SHEET_JUNIOR_RANGE || 'ม.ต้น',
+                        SHEET_HIGH_RANGE: cfg.SHEET_HIGH_RANGE || 'ม.ปลาย'
+                    };
+
+                    termConfigs['1'] = (cfg.terms && cfg.terms['1']) ? { ...baseCfg, ...cfg.terms['1'] } : { ...baseCfg };
+                    termConfigs['2'] = (cfg.terms && cfg.terms['2']) ? { ...baseCfg, ...cfg.terms['2'] } : { ...baseCfg };
+
+                    renderTermInputs();
+                }
+            } catch (e) {
+                showToast('ไม่สามารถโหลดข้อมูลได้', 'error');
+            }
+        }
+
+        function getCookie(name) {
+            const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+            return v ? v[2] : null;
+        }
+
+        function setCookie(name, value, days) {
+            const d = new Date;
+            d.setTime(d.getTime() + 24*60*60*1000*days);
+            document.cookie = name + "=" + value + ";path=/;expires=" + d.toGMTString();
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const savedPwd = getCookie('inert_admin_pwd');
+            if (savedPwd) {
+                const pwdInput = document.getElementById('save-password');
+                if (pwdInput) pwdInput.value = savedPwd;
+            }
+            await loadConfig();
+        });
+
+        document.getElementById('sheet-id').addEventListener('blur', (e) => {
+            const parsed = parseSpreadsheetId(e.target.value);
+            if (parsed && parsed !== e.target.value) {
+                e.target.value = parsed;
+            }
+        });
+
+        document.getElementById('btn-save').addEventListener('click', async () => {
+            const pwd = document.getElementById('save-password').value.trim();
+            if (!pwd) {
+                showToast('กรุณากรอกรหัสผ่านแอดมินเพื่อบันทึกข้อมูล', 'error');
+                document.getElementById('save-password').focus();
+                return;
+            }
+
+            const btn = document.getElementById('btn-save');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> กำลังบันทึก...";
+            btn.disabled = true;
+
+            saveCurrentTermInputs();
+
+            const COLUMNS = Array.from(document.getElementById('columns-list').children).map(row => {
+                return {
+                    header: row.querySelector('.inp-header').value.trim(),
+                    source: row.querySelector('.inp-source').value
+                };
+            });
+
+            const activeTermCfg = termConfigs[currentEditTerm];
+            const payload = {
+                COLUMNS: COLUMNS,
+                SHEET_ID: activeTermCfg.SHEET_ID || termConfigs['2'].SHEET_ID || termConfigs['1'].SHEET_ID,
+                SHEET_RANGE: activeTermCfg.SHEET_RANGE || 'Sheet1',
+                SHEET_JUNIOR_RANGE: activeTermCfg.SHEET_JUNIOR_RANGE || 'ม.ต้น',
+                SHEET_HIGH_RANGE: activeTermCfg.SHEET_HIGH_RANGE || 'ม.ปลาย',
+                terms: termConfigs
+            };
+
+            try {
+                const res = await fetch('/api/inert/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': pwd
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (res.status === 401) {
+                    showToast('รหัสผ่านแอดมินไม่ถูกต้อง!', 'error');
+                    document.getElementById('save-password').focus();
+                } else {
+                    const data = await res.json();
+                    if (data.success) {
+                        setCookie('inert_admin_pwd', pwd, 30);
+                        showToast('บันทึกข้อมูลการตั้งค่าเรียบร้อยแล้ว!', 'success');
+                    } else {
+                        showToast(data.message || 'บันทึกข้อมูลล้มเหลว', 'error');
+                    }
+                }
+            } catch (e) {
+                showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

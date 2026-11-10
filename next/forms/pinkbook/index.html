@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#ec4899">
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/pinkbook.svg">
+    <title>บันทึกการตรวจเล่มชมพู | สภานักเรียน</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css?v=9">
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<!-- Custom Modal for Adding Item -->
+<div class="custom-modal-overlay" id="custom-modal">
+    <div class="custom-modal-content">
+        <h3><i class="fa-solid fa-plus-circle"></i> เพิ่มรายการที่ไม่เรียบร้อย</h3>
+        <div class="form-group" style="margin-top:16px;">
+            <label style="font-size:0.85rem;font-weight:600;color:#374151;margin-bottom:6px;display:block;">รายละเอียด <span class="required">*</span></label>
+            <input type="text" id="modal-input" placeholder="พิมพ์ชื่อรายการ..." autocomplete="off" style="width:100%;box-sizing:border-box;">
+        </div>
+        <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px;">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.9rem;color:#374151;">
+                <input type="checkbox" id="modal-allow-week" style="width:17px;height:17px;cursor:pointer;">
+                <span>ต้องเลือกสัปดาห์ที่เกิดปัญหา</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.9rem;color:#374151;">
+                <input type="checkbox" id="modal-save-permanent" style="width:17px;height:17px;cursor:pointer;">
+                <span>บันทึกหัวข้อนี้ไว้ถาวร</span>
+            </label>
+            <p style="font-size:0.78rem;color:#9ca3af;margin:0;padding-left:27px;line-height:1.5;">
+                * ถ้าไม่ติ๊กจะอยู่ชั่วคราวบนหน้าเว็บนี้เท่านั้น ถ้าติ๊กทุกคนจะเห็นหัวข้อนี้<br>
+                * หากต้องการลบหัวข้อนี้ออกในภายหลังให้ติดต่อผู้พัฒนา
+            </p>
+        </div>
+        <div class="custom-modal-actions" style="margin-top:20px;">
+            <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+            <button class="btn btn-primary" onclick="confirmModal()">เพิ่มรายการ</button>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Modal for Confirmation -->
+<div class="custom-modal-overlay" id="confirm-modal">
+    <div class="custom-modal-content">
+        <h3><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger)"></i> ยืนยันการล้างฟอร์ม?</h3>
+        <p style="margin-top:12px; margin-bottom:24px; color:var(--text-muted)">ข้อมูลในส่วนที่ 2, 3, 4 จะถูกลบทั้งหมด คุณแน่ใจหรือไม่?</p>
+        <div class="custom-modal-actions">
+            <button class="btn btn-secondary" onclick="closeConfirmModal()">ยกเลิก</button>
+            <button class="btn btn-primary" style="background:var(--danger)" onclick="executeClearForm()">ยืนยันล้างข้อมูล</button>
+        </div>
+    </div>
+</div>
+
+<!-- Success Modal -->
+<div class="custom-modal-overlay" id="success-modal">
+    <div class="custom-modal-content" style="text-align: center;">
+        <i class="fa-solid fa-circle-check" style="font-size: 4rem; color: #10b981; margin-bottom: 16px;"></i>
+        <h3 style="font-size: 1.25rem;">บันทึกข้อมูลสำเร็จ</h3>
+        <p style="color: var(--text-muted); margin-bottom: 24px; margin-top: 8px;">ส่งข้อมูลการตรวจลงฐานข้อมูลเรียบร้อยแล้ว</p>
+        <button class="btn btn-primary" style="width: 100%; padding: 12px;" onclick="closeSuccessModal()">ปิดหน้าต่าง</button>
+    </div>
+</div>
+
+<div class="form-overlay" onclick="toggleForm()"></div>
+
+<div class="split-container">
+    <!-- LEFT PANE: INPUT FORM -->
+    <div class="left-pane">
+        <div class="mobile-sidebar-header">
+            <h3><i class="fa-solid fa-pen-to-square"></i> กรอกข้อมูล</h3>
+            <button class="btn-icon" type="button" onclick="toggleForm()" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <div class="form-card header-card">
+            <div class="header-icon"><i class="fa-solid fa-book"></i></div>
+            <div>
+                <h1>เล่มชมพู</h1>
+                <p>บันทึกการตรวจเล่มชมพู · สภานักเรียน · <span style="background:var(--primary);color:#fff;padding:2px 8px;border-radius:12px;font-size:0.8rem;font-weight:600;">ภาคเรียนที่ 2/2569</span></p>
+            </div>
+        </div>
+
+        <div class="form-card">
+            <h2 class="step-title"><i class="fa-solid fa-user-check"></i> ข้อมูลผู้ตรวจ</h2>
+            
+            <div class="form-group" id="grp-inspector">
+                <label class="section-label">ชื่อผู้ตรวจ <span class="required">*</span></label>
+                <div class="searchable-select" id="inspector-select">
+                    <input type="text" id="inspector-input" placeholder="พิมพ์เพื่อค้นหา หรือเลือกจากรายการ..." autocomplete="off">
+                    <div class="select-dropdown" id="inspector-dropdown"></div>
+                </div>
+            </div>
+            
+            <div class="form-group" id="grp-week">
+                <label class="section-label">สัปดาห์ที่ตรวจ <span class="required">*</span></label>
+                <select id="select-inspector-week">
+                    <option value="" disabled selected>-- เลือกสัปดาห์ --</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-card">
+            <h2 class="step-title"><i class="fa-solid fa-users"></i> ข้อมูลห้องเรียน</h2>
+            
+            <label class="section-label">เลือกระดับชั้น/ห้อง <span class="required">*</span></label>
+            <div class="dual-dropdowns">
+                <select id="select-grade">
+                    <option value="" disabled selected>-- เลือกระดับชั้น --</option>
+                    <option value="ม.1">ม.1</option>
+                    <option value="ม.2">ม.2</option>
+                    <option value="ม.3">ม.3</option>
+                    <option value="ม.4">ม.4</option>
+                    <option value="ม.5">ม.5</option>
+                    <option value="ม.6">ม.6</option>
+                </select>
+                <select id="select-room" disabled>
+                    <option value="" disabled selected>-- เลือกห้อง --</option>
+                </select>
+            </div>
+
+            <div id="group-wrapper">
+                <label class="section-label">กลุ่ม <span class="required">*</span></label>
+                <div class="radio-group-modern">
+                    <label class="radio-label">
+                        <input type="radio" name="group" value="ก">
+                        <span class="radio-button">ก</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="group" value="ข">
+                        <span class="radio-button">ข</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-card section-disabled" id="status-card">
+            <h2 class="step-title"><i class="fa-solid fa-clipboard-check"></i> สถานะการตรวจ</h2>
+            <p class="subtitle" id="status-subtitle">* เลือกระดับชั้น ห้องเรียน และกลุ่มก่อน</p>
+            <div class="radio-group-modern" style="margin-top: 12px;">
+                <label class="radio-label">
+                    <input type="radio" name="overall_status" value="เรียบร้อย" disabled>
+                    <span class="radio-button status-neat">เรียบร้อย</span>
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="overall_status" value="ไม่เรียบร้อย" disabled>
+                    <span class="radio-button status-messy">ไม่เรียบร้อย</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="form-card checklist-card section-disabled" id="section3-card" style="display: none;">
+            <h2 class="step-title"><i class="fa-solid fa-list-check"></i> รายการที่ไม่เรียบร้อย</h2>
+            <p class="subtitle">* เลือกระดับชั้นและห้องเรียนก่อน</p>
+            
+            <div id="checklist-container">
+                <!-- Dynamically populated by JS -->
+            </div>
+
+            <button class="btn-add-item" onclick="openModal()">+ เพิ่มรายการ</button>
+        </div>
+
+        <div class="form-card section-disabled" id="section4-card">
+            <h2 class="step-title"><i class="fa-solid fa-calendar-xmark"></i> สัปดาห์ที่ยังไม่ส่ง</h2>
+            <p class="subtitle">* เลือกระดับชั้นและห้องเรียนก่อน</p>
+            
+            <button class="btn btn-secondary btn-block" type="button" onclick="openUnsubmittedModal()">
+                <i class="fa-solid fa-hand-pointer"></i> เลือกสัปดาห์ที่ยังไม่ส่ง 
+                <span id="unsub-badge" class="badge badge-dark" style="display:none">0</span>
+            </button>
+        </div>
+        
+        <div class="form-nav">
+            <button class="btn btn-secondary" onclick="requestClearForm()">
+                <i class="fa-solid fa-rotate-right"></i> ล้างฟอร์ม
+            </button>
+            <button class="btn btn-primary" onclick="addToTable()">
+                <i class="fa-solid fa-plus"></i> เพิ่มลงตาราง <i class="fa-solid fa-arrow-right"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- RIGHT PANE: DASHBOARD / SUMMARY -->
+    <div class="right-pane">
+        <div class="dashboard-header">
+            <div class="dashboard-title">
+                <h2><i class="fa-solid fa-table-list"></i> สรุปผลการตรวจสอบ</h2>
+                <span class="badge" id="summary-badge">0 ห้อง</span>
+            </div>
+            <button class="mobile-menu-btn" type="button" onclick="toggleForm()">
+                <i class="fa-solid fa-plus"></i> เพิ่มข้อมูล
+            </button>
+        </div>
+
+        <div class="dashboard-content">
+            <div class="table-container" id="summary-table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th width="15%">ห้องเรียน</th>
+                            <th width="10%">กลุ่ม</th>
+                            <th width="12%">สถานะ</th>
+                            <th width="30%">รายการที่ต้องแก้ไข</th>
+                            <th width="18%">สัปดาห์ที่ยังไม่ส่ง</th>
+                            <th width="9%">เวลา</th>
+                            <th width="10%">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summary-tbody">
+                        <!-- Items appended here -->
+                    </tbody>
+                </table>
+                <div class="history-link-wrap">
+                    <button type="button" class="history-link" onclick="openHistory()">
+                        <i class="fa-solid fa-clock-rotate-left"></i> ดูประวัติการส่ง
+                    </button>
+                </div>
+                <div class="empty-state" id="empty-state">
+                    <i class="fa-regular fa-folder-open"></i>
+                    <p>ยังไม่มีข้อมูลชั่วคราว<br><span>กรอกข้อมูลฝั่งซ้ายแล้วกดปุ่ม "เพิ่มลงตาราง"</span></p>
+                </div>
+            </div>
+            
+            <div class="dashboard-footer">
+                <button class="btn btn-primary btn-large" onclick="submitToDatabase()">
+                    <i class="fa-solid fa-check-to-slot"></i> บันทึกการตรวจลงฐานข้อมูล
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Submission history drawer -->
+<div class="drawer-overlay" id="history-overlay" onclick="closeHistory()"></div>
+<aside class="history-drawer" id="history-drawer" aria-label="ประวัติการส่ง" aria-hidden="true">
+    <div class="drawer-head">
+        <div class="drawer-title">
+            <span class="drawer-icon"><i class="fa-solid fa-clock-rotate-left"></i></span>
+            <div>
+                <h3>ประวัติการส่ง</h3>
+                <p id="history-count">กำลังโหลด…</p>
+            </div>
+        </div>
+        <button type="button" class="drawer-close" onclick="closeHistory()" aria-label="ปิด"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="drawer-filter">
+        <select id="history-name" aria-label="เลือกชื่อผู้ตรวจ">
+            <option value="">ทุกคน</option>
+        </select>
+        <button type="button" class="btn btn-secondary" id="history-clear" onclick="clearHistoryFilter()" hidden>ล้าง</button>
+    </div>
+    <div class="drawer-body" id="history-body"></div>
+</aside>
+
+<script src="shared_form.js?v=3"></script>
+<script src="app.js?v=10"></script>
+</body>
+</html>

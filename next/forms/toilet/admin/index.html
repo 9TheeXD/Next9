@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/toilet.svg">
+    <title>จัดการระบบห้องน้ำ - สภานักเรียน Admin</title>
+    <link rel="stylesheet" href="/style.css?v=2">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Login Gate -->
+    <div id="loginGate" class="toilet-login-page">
+        <div class="toilet-login-card">
+            <div style="font-size:2.5rem;margin-bottom:16px;">⚙️</div>
+            <h2>Admin Panel</h2>
+            <p class="toilet-login-sub">จัดการห้องน้ำและรายการปัญหา</p>
+            <input type="password" class="toilet-login-input" id="passwordInput" placeholder="รหัสผ่าน" onkeydown="if(event.key==='Enter')doLogin()">
+            <button class="toilet-login-btn" onclick="doLogin()"><i class="fas fa-lock-open"></i> เข้าสู่ระบบ</button>
+            <div class="toilet-login-error" id="loginError"></div>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="adminPanel" class="toilet-dashboard" style="display:none;">
+        <header class="toilet-dash-header">
+            <h1><i class="fas fa-cog"></i> จัดการระบบห้องน้ำ</h1>
+            <p>เพิ่ม/ลบ ห้องน้ำ และกำหนดรายการปัญหา</p>
+        </header>
+
+        <div class="toilet-dash-content">
+            <!-- Rooms Section -->
+            <div class="toilet-admin-section" style="animation-delay:0.1s;">
+                <h2><i class="fas fa-restroom"></i> รายการห้องน้ำ</h2>
+                <div class="toilet-admin-list" id="roomsList"></div>
+                <div class="toilet-admin-add-row">
+                    <input type="text" class="toilet-admin-input" id="newRoomId" placeholder="รหัสห้อง (ID)">
+                    <input type="text" class="toilet-admin-input" id="newRoomName" placeholder="ชื่อห้องน้ำ">
+                    <button class="toilet-admin-add-btn" onclick="addRoom()"><i class="fas fa-plus"></i> เพิ่ม</button>
+                </div>
+            </div>
+
+            <!-- Problems Section -->
+            <div class="toilet-admin-section" style="animation-delay:0.2s;">
+                <h2><i class="fas fa-list-check"></i> รายการปัญหา</h2>
+                <div class="toilet-admin-list" id="problemsList"></div>
+                <div class="toilet-admin-add-row">
+                    <input type="text" class="toilet-admin-input" id="newProblem" placeholder="ชื่อปัญหา" onkeydown="if(event.key==='Enter')addProblem()">
+                    <button class="toilet-admin-add-btn" onclick="addProblem()"><i class="fas fa-plus"></i> เพิ่ม</button>
+                </div>
+            </div>
+
+            <!-- Spacer for save button -->
+            <div style="height:80px;"></div>
+        </div>
+
+        <button class="toilet-admin-save" id="saveBtn" onclick="saveConfig()">
+            <i class="fas fa-save"></i> บันทึกทั้งหมด
+        </button>
+    </div>
+
+    <div class="toilet-toast" id="toast"></div>
+
+    <script>
+        let password = '';
+        let configData = { rooms: [], problems: [] };
+        let hasChanges = false;
+
+        function showToast(msg, type) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'toilet-toast ' + type + ' show';
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        async function doLogin() {
+            const pw = document.getElementById('passwordInput').value;
+            if (!pw) return;
+            try {
+                const res = await fetch('/api/toilet/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pw })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    password = pw;
+                    localStorage.setItem('toilet_pw', pw);
+                    document.getElementById('loginGate').style.display = 'none';
+                    document.getElementById('adminPanel').style.display = 'block';
+                    loadConfig();
+                } else {
+                    document.getElementById('loginError').textContent = 'รหัสผ่านไม่ถูกต้อง';
+                }
+            } catch (e) {
+                document.getElementById('loginError').textContent = 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์';
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/toilet/config');
+                configData = await res.json();
+                renderRooms();
+                renderProblems();
+            } catch (e) {
+                showToast('โหลดข้อมูลไม่สำเร็จ', 'error');
+            }
+        }
+
+        function renderRooms() {
+            const list = document.getElementById('roomsList');
+            if (configData.rooms.length === 0) {
+                list.innerHTML = '<div style="padding:16px;color:#aaa;text-align:center;font-size:0.9rem;">ยังไม่มีห้องน้ำ</div>';
+                return;
+            }
+            list.innerHTML = configData.rooms.map((r, i) => `
+                <div class="toilet-admin-item">
+                    <span class="toilet-admin-item-id">#${r.id}</span>
+                    <span class="toilet-admin-item-name">${r.name}</span>
+                    <button class="toilet-admin-item-del" onclick="removeRoom(${i})" title="ลบ">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>`).join('');
+        }
+
+        function renderProblems() {
+            const list = document.getElementById('problemsList');
+            if (configData.problems.length === 0) {
+                list.innerHTML = '<div style="padding:16px;color:#aaa;text-align:center;font-size:0.9rem;">ยังไม่มีปัญหา</div>';
+                return;
+            }
+            list.innerHTML = configData.problems.map((p, i) => `
+                <div class="toilet-admin-item">
+                    <span class="toilet-admin-item-name">${p}</span>
+                    <button class="toilet-admin-item-del" onclick="removeProblem(${i})" title="ลบ">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>`).join('');
+        }
+
+        function addRoom() {
+            const id = document.getElementById('newRoomId').value.trim();
+            const name = document.getElementById('newRoomName').value.trim();
+            if (!id || !name) { showToast('กรุณากรอกรหัสและชื่อห้อง', 'error'); return; }
+            if (configData.rooms.find(r => r.id === id)) { showToast('รหัสห้องนี้มีอยู่แล้ว', 'error'); return; }
+            configData.rooms.push({ id, name });
+            document.getElementById('newRoomId').value = '';
+            document.getElementById('newRoomName').value = '';
+            hasChanges = true;
+            renderRooms();
+        }
+
+        function removeRoom(index) {
+            const room = configData.rooms[index];
+            if (!confirm(`ลบห้อง "${room.name}" (${room.id})?`)) return;
+            configData.rooms.splice(index, 1);
+            hasChanges = true;
+            renderRooms();
+        }
+
+        function addProblem() {
+            const p = document.getElementById('newProblem').value.trim();
+            if (!p) { showToast('กรุณากรอกชื่อปัญหา', 'error'); return; }
+            if (configData.problems.includes(p)) { showToast('ปัญหานี้มีอยู่แล้ว', 'error'); return; }
+            configData.problems.push(p);
+            document.getElementById('newProblem').value = '';
+            hasChanges = true;
+            renderProblems();
+        }
+
+        function removeProblem(index) {
+            const p = configData.problems[index];
+            if (!confirm(`ลบปัญหา "${p}"?`)) return;
+            configData.problems.splice(index, 1);
+            hasChanges = true;
+            renderProblems();
+        }
+
+        async function saveConfig() {
+            const btn = document.getElementById('saveBtn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> กำลังบันทึก...';
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/toilet/save-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': password },
+                    body: JSON.stringify({ rooms: configData.rooms, problems: configData.problems })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('บันทึกสำเร็จ!', 'success');
+                    hasChanges = false;
+                } else {
+                    showToast('บันทึกไม่สำเร็จ', 'error');
+                }
+            } catch (e) {
+                showToast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์', 'error');
+            }
+            btn.innerHTML = '<i class="fas fa-save"></i> บันทึกทั้งหมด';
+            btn.disabled = false;
+        }
+
+        // Warn before leaving with unsaved changes
+        window.addEventListener('beforeunload', e => {
+            if (hasChanges) { e.preventDefault(); e.returnValue = ''; }
+        });
+
+        // Init
+        (function () {
+            const saved = localStorage.getItem('toilet_pw');
+            if (saved) {
+                password = saved;
+                document.getElementById('loginGate').style.display = 'none';
+                document.getElementById('adminPanel').style.display = 'block';
+                loadConfig();
+            }
+        })();
+    </script>
+</body>
+</html>

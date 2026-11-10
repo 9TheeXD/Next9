@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/inert.svg">
+    <title>รายงานส่งเล่มตรวจสาย-เฉื่อย - สภานักเรียน</title>
+    <script>
+        (function() {
+            var ua = navigator.userAgent || navigator.vendor || window.opera;
+            var isAndroid = /android/i.test(ua);
+            var isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+            var isInApp = /FBAN|FBAV|Instagram|Line|Messenger|Twitter/i.test(ua);
+
+            if (isInApp) {
+                if (ua.indexOf("Line") > -1 && window.location.href.indexOf("openExternalBrowser=1") === -1) {
+                    window.location.href = window.location.href + (window.location.href.indexOf('?') > -1 ? '&' : '?') + 'openExternalBrowser=1';
+                } else if (isAndroid) {
+                    var url = window.location.href.replace(/^https?:\/\//, '');
+                    window.location.href = "intent://" + url + "#Intent;scheme=https;package=com.android.chrome;end";
+                } else if (isIOS) {
+                    document.addEventListener("DOMContentLoaded", function() {
+                        var overlay = document.createElement("div");
+                        overlay.style.position = "fixed";
+                        overlay.style.top = "0";
+                        overlay.style.left = "0";
+                        overlay.style.width = "100%";
+                        overlay.style.height = "100%";
+                        overlay.style.backgroundColor = "rgba(0,0,0,0.9)";
+                        overlay.style.color = "white";
+                        overlay.style.zIndex = "99999";
+                        overlay.style.display = "flex";
+                        overlay.style.flexDirection = "column";
+                        overlay.style.alignItems = "center";
+                        overlay.style.justifyContent = "center";
+                        overlay.style.textAlign = "center";
+                        overlay.style.padding = "20px";
+                        overlay.style.fontFamily = "Prompt, sans-serif";
+                        
+                        overlay.innerHTML = `
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom:20px; color:#f87171;">
+                                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
+                            <h2 style="margin-bottom: 10px; font-size:1.5rem;">ฟอร์มไม่รองรับการใช้งานผ่านแอพนี้</h2>
+                            <p style="font-size: 1.1rem; line-height: 1.6; color:#e2e8f0;">
+                                กรุณากดที่ <b>จุด 3 จุด (หรือเมนู)</b> มุมบนขวา<br>
+                                แล้วเลือก <b>"เปิดในเบราว์เซอร์ระบบ" / "Open in Safari"</b><br>
+                                เพื่อส่งข้อมูลและอัปโหลดรูปได้อย่างสมบูรณ์
+                            </p>
+                        `;
+                        document.body.appendChild(overlay);
+                    });
+                }
+            }
+        })();
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Prompt', sans-serif;
+            background: #f0f0f0;
+            color: #202124;
+            min-height: 100vh;
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .form-container {
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        .form-card {
+            background: #fff;
+            border-radius: 10px;
+            border: 1px solid #dadce0;
+            padding: 24px;
+            margin-bottom: 14px;
+            position: relative;
+        }
+
+        .header-card {
+            border-top: 10px solid #b00909;
+            padding-top: 24px;
+        }
+
+        .header-card h1 {
+            font-size: 1.65rem;
+            font-weight: 700;
+            color: #202124;
+            margin-bottom: 6px;
+        }
+
+        .header-card p {
+            font-size: 0.9rem;
+            color: #5f6368;
+        }
+
+        .form-card h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #202124;
+            margin-bottom: 18px;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #202124;
+            margin-bottom: 12px;
+        }
+
+        .required { color: #b00909; }
+
+        select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #dadce0;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-family: 'Prompt', sans-serif;
+            color: #202124;
+            background: #fff;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+            cursor: pointer;
+            appearance: auto;
+        }
+
+        select:focus {
+            border-color: #b00909;
+            box-shadow: 0 0 0 2px rgba(176, 9, 9, 0.12);
+        }
+
+        .checkbox-group-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 480px) {
+            .checkbox-group-wrapper { grid-template-columns: 1fr; }
+        }
+
+        .location-group h3 {
+            font-size: 0.9rem;
+            color: #5f6368;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label.checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border: 1px solid #dadce0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            font-size: 0.9rem;
+            margin-bottom: 0; /* Override the 12px margin-bottom from .form-group label */
+            font-weight: normal; /* Override the font-weight: 500 */
+        }
+
+        .form-group label.checkbox-item:hover {
+            background: #fef7f7;
+            border-color: #e0b0b0;
+        }
+
+        .form-group label.checkbox-item.selected {
+            background: #fce8e8;
+            border-color: #b00909;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #dadce0;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+            position: relative;
+            flex-shrink: 0;
+            margin: 0 8px 0 0;
+            padding: 0;
+            transform: translateY(-1px);
+            transition: all 0.2s;
+            pointer-events: none; /* Let label handle click */
+        }
+
+        .checkbox-item.selected input[type="checkbox"] {
+            background: #b00909;
+            border-color: #b00909;
+        }
+
+        .checkbox-item.selected input[type="checkbox"]::after {
+            content: '';
+            position: absolute;
+            left: 5px;
+            top: 1px;
+            width: 5px;
+            height: 10px;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .upload-action-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            background: #fafafa;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #5f6368;
+            font-size: 0.95rem;
+            gap: 8px;
+        }
+
+        .upload-action-btn:hover {
+            background: #fef7f7;
+            border-color: #b00909;
+            color: #b00909;
+        }
+
+        .upload-action-btn svg {
+            width: 28px;
+            height: 28px;
+        }
+
+        .preview-container {
+            margin-top: 10px;
+            position: relative;
+            display: none;
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #000;
+            text-align: center;
+        }
+
+        .preview-container img {
+            width: 100%;
+            height: auto;
+            max-height: 250px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .btn-remove-preview {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-remove-preview:hover {
+            background: rgba(176, 9, 9, 0.9);
+        }
+
+        .form-nav {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 20px;
+            margin-bottom: 40px;
+        }
+
+        .btn-primary {
+            background: #b00909;
+            color: #fff;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-family: 'Prompt', sans-serif;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-primary:hover {
+            background: #8a0707;
+        }
+
+        .btn-primary:disabled {
+            background: #dadce0;
+            color: #9aa0a6;
+            cursor: not-allowed;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #323232;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            transition: transform 0.3s;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast.error {
+            background: #d32f2f;
+        }
+
+        #success-card {
+            display: none;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        #success-card h2 {
+            color: #1e8e3e;
+            margin-bottom: 10px;
+        }
+
+        .success-icon {
+            color: #1e8e3e;
+            width: 64px;
+            height: 64px;
+            margin-bottom: 16px;
+        }
+        /* ===== Searchable Select ===== */
+        .searchable-select {
+            position: relative;
+        }
+        .searchable-select input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #dadce0;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-family: 'Prompt', sans-serif;
+            color: #202124;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .searchable-select input:focus {
+            border-color: #b00909;
+            box-shadow: 0 0 0 2px rgba(176, 9, 9, 0.12);
+        }
+        .select-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 220px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid #dadce0;
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .select-dropdown.open { display: block; }
+        .select-option {
+            padding: 10px 14px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .select-option:hover,
+        .select-option.highlighted {
+            background: #fce8e8;
+        }
+        .select-option mark {
+            background: #ffe082;
+            color: inherit;
+            padding: 0;
+            border-radius: 2px;
+        }
+
+        }
+    </style>
+</head>
+<body>
+
+<div class="form-container" id="form-container">
+    <div class="form-card header-card">
+        <h1>บันทึกการส่งเล่มตรวจสาย-เฉื่อย</h1>
+        <p>สภานักเรียน โรงเรียนสิรินธร จังหวัดสุรินทร์</p>
+    </div>
+
+    <form id="inertForm">
+        <div class="form-card">
+            <div class="form-group">
+                <label>1. เลือกผู้รายงาน <span class="required">*</span></label>
+                <div class="searchable-select" id="inspector-select">
+                    <input type="text" id="inspector-input" placeholder="พิมพ์เพื่อค้นหา หรือเลือกจากรายการ..." autocomplete="off" required>
+                    <div class="select-dropdown" id="inspector-dropdown"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-card">
+            <div class="form-group">
+                <label>2. เลือกชั้นที่ตรวจ (เลือกได้หลายข้อ)</label>
+                <div class="checkbox-group-wrapper">
+                    <div class="location-group">
+                        <h3>ข้างอ.5</h3>
+                        <div class="checkbox-group" id="cb-a5"></div>
+                    </div>
+                    <div class="location-group">
+                        <h3>หลังโดม</h3>
+                        <div class="checkbox-group" id="cb-dome"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-card">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>3. อัปโหลดหรือถ่ายรูปหลักฐาน <span class="required">*</span></label>
+                <div class="upload-grid" id="upload-grid">
+                    <div class="upload-action-btn" id="btn-camera" onclick="document.getElementById('cameraInput').click()">
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        เปิดกล้อง
+                    </div>
+                    <div class="upload-action-btn" id="btn-gallery" onclick="document.getElementById('galleryInput').click()">
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        เลือกรูปภาพ
+                    </div>
+                </div>
+
+                <input type="file" id="cameraInput" accept="image/*" capture style="display: none;">
+                <input type="file" id="galleryInput" accept="image/*" style="display: none;">
+
+                <div class="preview-container" id="previewContainer">
+                    <button type="button" class="btn-remove-preview" id="btnRemoveImage" title="ลบรูปภาพ">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                    <img id="imagePreview" alt="Preview">
+                </div>
+            </div>
+        </div>
+
+        <div class="form-nav">
+            <button type="submit" class="btn-primary" id="submitBtn">ส่งแบบฟอร์ม</button>
+        </div>
+    </form>
+</div>
+
+<!-- Success State -->
+<div class="form-container" id="success-container" style="display: none;">
+    <div class="form-card header-card" id="success-card">
+        <svg class="success-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <h2>บันทึกสำเร็จ</h2>
+        <p>ระบบได้บันทึกข้อมูลการส่งเล่มเรียบร้อยแล้ว</p>
+        <button class="btn-primary" style="margin-top: 24px;" onclick="window.location.reload()">ส่งรายงานอีกครั้ง</button>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+    function showToast(message, isError = false) {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        if (isError) toast.classList.add('error');
+        else toast.classList.remove('error');
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        // Load Inspectors & Searchable Select Logic
+        const inspectorInput = document.getElementById('inspector-input');
+        const inspectorDropdown = document.getElementById('inspector-dropdown');
+        let inspectorList = [];
+        
+        try {
+            const res = await fetch('/inspectors.json');
+            if (res.ok) {
+                inspectorList = await res.json();
+            }
+        } catch (e) {
+            inspectorInput.placeholder = "โหลดรายชื่อล้มเหลว";
+        }
+
+        function renderDropdown(filterText = "") {
+            inspectorDropdown.innerHTML = "";
+            let matchCount = 0;
+            const lowerFilter = filterText.toLowerCase();
+
+            for (let name of inspectorList) {
+                if (name.toLowerCase().includes(lowerFilter)) {
+                    const div = document.createElement("div");
+                    div.className = "select-option";
+                    
+                    if (filterText) {
+                        const regex = new RegExp(`(${filterText})`, "gi");
+                        div.innerHTML = name.replace(regex, "<mark>$1</mark>");
+                    } else {
+                        div.textContent = name;
+                    }
+                    
+                    div.onclick = () => {
+                        inspectorInput.value = name;
+                        inspectorDropdown.classList.remove("open");
+                    };
+                    inspectorDropdown.appendChild(div);
+                    matchCount++;
+                }
+            }
+            if (matchCount === 0) {
+                const div = document.createElement("div");
+                div.className = "select-option";
+                div.textContent = "ไม่พบรายชื่อ";
+                div.style.color = "#9aa0a6";
+                inspectorDropdown.appendChild(div);
+            }
+        }
+
+        inspectorInput.addEventListener('focus', () => {
+            renderDropdown(inspectorInput.value);
+            inspectorDropdown.classList.add("open");
+        });
+
+        inspectorInput.addEventListener('input', (e) => {
+            renderDropdown(e.target.value);
+            inspectorDropdown.classList.add("open");
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('inspector-select').contains(e.target)) {
+                inspectorDropdown.classList.remove("open");
+            }
+        });
+
+        // Render Checkboxes
+        const levels = ['ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6'];
+        const cbA5 = document.getElementById('cb-a5');
+        const cbDome = document.getElementById('cb-dome');
+
+        function createCheckbox(parent, value, labelText) {
+            const label = document.createElement('label');
+            label.className = 'form-group label.checkbox-item';
+            // Wait, className shouldn't have label in it. It should just be checkbox-item. 
+            // The CSS targets `.form-group label.checkbox-item` so `<label class="checkbox-item">` is correct.
+            label.className = 'checkbox-item';
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.name = 'classes';
+            checkbox.value = value;
+            
+            const span = document.createElement('span');
+            span.textContent = labelText;
+
+            label.appendChild(checkbox);
+            label.appendChild(span);
+
+            checkbox.addEventListener('change', (e) => {
+                if (e.target.checked) label.classList.add('selected');
+                else label.classList.remove('selected');
+            });
+
+            parent.appendChild(label);
+        }
+
+        levels.forEach(level => {
+            createCheckbox(cbA5, `ข้างอ.5 ${level}`, level);
+            createCheckbox(cbDome, `หลังโดม ${level}`, level);
+        });
+
+        // Image Preview
+        const cameraInput = document.getElementById('cameraInput');
+        const galleryInput = document.getElementById('galleryInput');
+        const previewContainer = document.getElementById('previewContainer');
+        const preview = document.getElementById('imagePreview');
+        const uploadGrid = document.getElementById('upload-grid');
+        const btnRemoveImage = document.getElementById('btnRemoveImage');
+        let selectedImageFile = null;
+
+        function handleImageSelection(e) {
+            const file = e.target.files[0];
+            if (file) {
+                selectedImageFile = file;
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    preview.src = event.target.result;
+                    previewContainer.style.display = 'block';
+                    uploadGrid.style.display = 'none';
+                }
+                reader.readAsDataURL(file);
+            }
+            // Reset input values so selecting the same file again triggers change
+            e.target.value = '';
+        }
+
+        cameraInput.addEventListener('change', handleImageSelection);
+        galleryInput.addEventListener('change', handleImageSelection);
+
+        btnRemoveImage.addEventListener('click', () => {
+            selectedImageFile = null;
+            preview.src = '';
+            previewContainer.style.display = 'none';
+            uploadGrid.style.display = 'grid';
+        });
+
+        // Form Submit
+        const form = document.getElementById('inertForm');
+        const submitBtn = document.getElementById('submitBtn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const reporter = document.getElementById('inspector-input').value.trim();
+            const checkedBoxes = document.querySelectorAll('input[name="classes"]:checked');
+            const classes = Array.from(checkedBoxes).map(cb => cb.value);
+            const file = selectedImageFile;
+
+            if (!reporter) {
+                showToast("กรุณากรอกชื่อผู้รายงาน", true);
+                return;
+            }
+            if (!file) {
+                showToast("กรุณาอัปโหลดรูปภาพหลักฐาน", true);
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'กำลังส่งข้อมูล...';
+
+            const formData = new FormData();
+            formData.append('reporter', reporter);
+            formData.append('classes', JSON.stringify(classes));
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/api/submit-inert/submit', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    document.getElementById('form-container').style.display = 'none';
+                    document.getElementById('success-container').style.display = 'block';
+                    document.getElementById('success-card').style.display = 'block';
+                } else {
+                    throw new Error(data.message || "Upload failed");
+                }
+            } catch (err) {
+                showToast("เกิดข้อผิดพลาด: " + err.message, true);
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'ส่งแบบฟอร์ม';
+            }
+        });
+    });
+</script>
+</body>
+</html>

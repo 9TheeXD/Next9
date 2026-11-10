@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <base href="/forms/toilet/">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/toilet.svg">
+    <title>แจ้งปัญหาห้องน้ำ - สภานักเรียน</title>
+    <meta name="description" content="แบบฟอร์มแจ้งปัญหาห้องน้ำ โดยพรรค NEXT9">
+    <link rel="stylesheet" href="/style.css?v=2">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Not Found State -->
+    <div id="notFoundState" class="toilet-state-page" style="display:none;">
+        <div class="toilet-state-card">
+            <div class="toilet-state-icon">🚫</div>
+            <h2>ไม่พบห้องน้ำ</h2>
+            <p>กรุณาสแกน QR Code ที่ห้องน้ำเพื่อเข้าสู่แบบฟอร์ม<br>หรือตรวจสอบลิงก์อีกครั้ง</p>
+        </div>
+    </div>
+
+    <!-- Success State -->
+    <div id="successState" class="toilet-state-page" style="display:none;">
+        <div class="toilet-state-card">
+            <div class="toilet-state-icon">✅</div>
+            <h2>ส่งแบบฟอร์มสำเร็จ!</h2>
+            <p>ขอบคุณที่แจ้งปัญหา<br>ทีมงานจะดำเนินการแก้ไขโดยเร็ว</p>
+            <button onclick="location.reload()" class="toilet-submit-btn" style="margin-top:24px;">แจ้งปัญหาอีกครั้ง</button>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="toilet-state-page">
+        <div class="toilet-state-card">
+            <div class="toilet-state-icon"><i class="fas fa-spinner fa-spin" style="color:var(--accent);"></i></div>
+            <h2>กำลังโหลด...</h2>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <div id="formState" style="display:none;">
+        <div class="toilet-page">
+            <div class="toilet-banner"></div>
+            <div class="toilet-form-container">
+                <!-- Title Card -->
+                <div class="toilet-card toilet-card-title">
+                    <h1><i class="fas fa-toilet" style="color:var(--accent);margin-right:8px;font-size:1.4rem;"></i> แบบฟอร์มแจ้งปัญหาห้องน้ำ</h1>
+                    <div class="toilet-room-name">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <span id="roomNameDisplay">-</span>
+                    </div>
+                </div>
+
+                <!-- Role Card -->
+                <div class="toilet-card">
+                    <label class="toilet-form-label">บทบาทของคุณ <span class="required-star">*</span></label>
+                    <div class="toilet-radio-group" id="roleGroup">
+                        <label class="toilet-radio-option">
+                            <input type="radio" name="role" value="นักเรียน">
+                            <span>นักเรียน</span>
+                        </label>
+                        <label class="toilet-radio-option">
+                            <input type="radio" name="role" value="ครู">
+                            <span>ครู</span>
+                        </label>
+                        <label class="toilet-radio-option">
+                            <input type="radio" name="role" value="บุคคลอื่น">
+                            <span>บุคคลอื่น</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Problem Card -->
+                <div class="toilet-card">
+                    <label class="toilet-form-label">ปัญหาที่พบ <span class="required-star">*</span></label>
+                    <div class="toilet-radio-group" id="problemGroup">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+
+                <!-- Submit -->
+                <div class="toilet-card">
+                    <div class="toilet-submit-row">
+                        <button class="toilet-submit-btn" id="submitBtn" onclick="submitForm()">
+                            <i class="fas fa-paper-plane"></i> ส่งแบบฟอร์ม
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toilet-toast" id="toast"></div>
+
+    <script>
+        let currentRoomId = null;
+        let configData = null;
+
+        function showToast(msg, type) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'toilet-toast ' + type + ' show';
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        async function init() {
+            const hash = new URLSearchParams(window.location.search).get('id');
+            if (!hash) {
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('notFoundState').style.display = 'flex';
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/toilet/config');
+                configData = await res.json();
+                const room = configData.rooms.find(r => r.id === hash);
+
+                if (!room) {
+                    document.getElementById('loadingState').style.display = 'none';
+                    document.getElementById('notFoundState').style.display = 'flex';
+                    return;
+                }
+
+                currentRoomId = hash;
+                document.getElementById('roomNameDisplay').textContent = room.name + ' (ID: ' + room.id + ')';
+
+                // Build problem radio list
+                const group = document.getElementById('problemGroup');
+                group.innerHTML = '';
+                configData.problems.forEach(p => {
+                    group.innerHTML += `
+                        <label class="toilet-radio-option">
+                            <input type="radio" name="problem" value="${p}" onchange="onProblemChange()">
+                            <span>${p}</span>
+                        </label>`;
+                });
+                // Add "อื่นๆ"
+                group.innerHTML += `
+                    <label class="toilet-radio-option">
+                        <input type="radio" name="problem" value="อื่นๆ" onchange="onProblemChange()">
+                        <span>อื่นๆ</span>
+                    </label>
+                    <input type="text" class="toilet-text-input" id="customProblem" placeholder="กรุณาระบุปัญหา..." style="display:none;">`;
+
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('formState').style.display = 'block';
+            } catch (e) {
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('notFoundState').style.display = 'flex';
+            }
+        }
+
+        function onProblemChange() {
+            const val = document.querySelector('input[name="problem"]:checked')?.value;
+            const customInput = document.getElementById('customProblem');
+            customInput.style.display = val === 'อื่นๆ' ? 'block' : 'none';
+            if (val !== 'อื่นๆ') customInput.value = '';
+        }
+
+        async function submitForm() {
+            const role = document.querySelector('input[name="role"]:checked')?.value;
+            const problem = document.querySelector('input[name="problem"]:checked')?.value;
+            const customProblem = document.getElementById('customProblem').value.trim();
+
+            if (!role) { showToast('กรุณาเลือกบทบาท', 'error'); return; }
+            if (!problem) { showToast('กรุณาเลือกปัญหา', 'error'); return; }
+            if (problem === 'อื่นๆ' && !customProblem) { showToast('กรุณาระบุปัญหา', 'error'); return; }
+
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> กำลังส่ง...';
+
+            try {
+                const res = await fetch('/api/toilet/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ roomId: currentRoomId, role, problem, customProblem })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('formState').style.display = 'none';
+                    document.getElementById('successState').style.display = 'flex';
+                } else {
+                    showToast('เกิดข้อผิดพลาด: ' + (data.message || ''), 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-paper-plane"></i> ส่งแบบฟอร์ม';
+                }
+            } catch (e) {
+                showToast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-paper-plane"></i> ส่งแบบฟอร์ม';
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

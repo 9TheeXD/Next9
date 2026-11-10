@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/inert.svg">
+    <title>แบบฟอร์มลงชื่อ สาย - เฉื่อย | สภานักเรียน</title>
+    <meta name="description" content="แบบฟอร์มลงชื่อนักเรียนสาย-เฉื่อย สภานักเรียนโรงเรียนสิรินธร">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="form-container">
+
+    <!-- ==================== PAGE 1 ==================== -->
+    <div id="page1" class="form-page active">
+        <div class="form-card header-card">
+            <h1>แบบฟอร์มลงชื่อ สาย - เฉื่อย</h1>
+            <p>สภานักเรียน โรงเรียนสิรินธร จังหวัดสุรินทร์</p>
+        </div>
+
+        <div class="form-card">
+            <h2>ลงชื่อผู้กรอก</h2>
+
+            <div class="form-group" id="grp-date">
+                <label>วันที่ <span class="required">*</span></label>
+                <input type="date" id="form-date">
+                <div class="error-msg">กรุณาเลือกวันที่</div>
+            </div>
+
+            <div class="form-group" id="grp-inspector">
+                <label>ชื่อผู้ตรวจ <span class="required">*</span></label>
+                <div class="searchable-select" id="inspector-select">
+                    <input type="text" id="inspector-input" placeholder="พิมพ์เพื่อค้นหา หรือเลือกจากรายการ..." autocomplete="off">
+                    <div class="select-dropdown" id="inspector-dropdown"></div>
+                </div>
+                <div class="error-msg">กรุณาเลือกชื่อผู้ตรวจ</div>
+            </div>
+        </div>
+
+        <div class="form-nav">
+            <span></span>
+            <button class="btn btn-primary" onclick="goToPage(2)">ถัดไป</button>
+        </div>
+    </div>
+
+    <!-- ==================== PAGE 2 ==================== -->
+    <div id="page2" class="form-page">
+        <div class="form-card header-card">
+            <h1>แบบฟอร์มลงชื่อ สาย - เฉื่อย</h1>
+            <p>สภานักเรียน โรงเรียนสิรินธร จังหวัดสุรินทร์</p>
+        </div>
+
+        <div class="form-card">
+            <h2>ลงชื่อนักเรียน สาย - เฉื่อย</h2>
+            <p class="subtitle">ให้สภาเป็นผู้กรอกด้วยตนเอง</p>
+        </div>
+
+        <div class="autofill-bar">
+            <span>ระบบเติมอัตโนมัติ</span>
+            <label class="toggle-switch">
+                <input type="checkbox" id="autofill-toggle" checked>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <div id="student-boxes"></div>
+
+        <button class="btn-add" id="btn-add-student" onclick="addStudentBox()">
+            + เพิ่มนักเรียน
+        </button>
+
+        <div class="form-nav">
+            <button class="btn btn-secondary" onclick="goToPage(1)">← ย้อนกลับ</button>
+            <button class="btn btn-primary" id="btn-submit" onclick="submitForm()">ส่งแบบฟอร์ม</button>
+        </div>
+    </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+<!-- Loading -->
+<div class="loading-overlay" id="loading"><div class="spinner"></div></div>
+
+<script src="app.js?v=2"></script>
+</body>
+</html>

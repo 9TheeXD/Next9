@@ -1,0 +1,460 @@
+/* Tool pages (forms, dashboards, admin). Prefixed t-. */
+.t-page {
+  min-height: 100vh;
+  background: #f5f3f2;
+  color: var(--text-dark);
+  font-family: "Prompt", "Outfit", sans-serif;
+  line-height: 1.55;
+}
+.t-page button,
+.t-page input,
+.t-page textarea,
+.t-page select,
+.t-modal button,
+.t-login input,
+.t-login button {
+  font: inherit;
+}
+:where(.t-page) a {
+  color: inherit;
+  text-decoration: none;
+}
+.t-head {
+  padding: 28px 16px 64px;
+  background:
+    radial-gradient(600px 240px at 90% 0%, rgba(255, 255, 255, 0.14), transparent 60%),
+    linear-gradient(150deg, #c41a1a, #6e0505);
+  color: #fff;
+}
+.t-head-inner,
+.t-main {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.t-head-inner.is-wide,
+.t-main.is-wide {
+  max-width: 1040px;
+}
+.t-head h1 {
+  margin: 0;
+  font-size: clamp(1.4rem, 4.5vw, 1.9rem);
+  font-weight: 700;
+  line-height: 1.25;
+}
+.t-head h1 i {
+  margin-right: 6px;
+  opacity: 0.9;
+}
+.t-head-sub {
+  margin-top: 6px;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+.t-main {
+  margin-top: -44px;
+  padding: 0 16px 48px;
+}
+
+/* Cards */
+.t-card {
+  margin-bottom: 14px;
+  padding: 20px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.06);
+}
+.t-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.t-card-title i {
+  color: var(--accent);
+}
+.t-label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+.t-req {
+  color: var(--accent);
+}
+.t-muted {
+  color: var(--text-light);
+  font-size: 0.9rem;
+}
+
+/* Choice buttons (radio) */
+.t-choices {
+  display: grid;
+  gap: 8px;
+}
+.t-choices.is-row {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+}
+.t-choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1.5px solid #e8e2e0;
+  border-radius: 14px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.t-choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.t-choice-dot {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #cfc6c4;
+  border-radius: 50%;
+  transition: border 0.15s;
+}
+.t-choice.is-on {
+  border-color: var(--accent);
+  background: #fdf3f3;
+}
+.t-choice.is-on .t-choice-dot {
+  border: 6px solid var(--accent);
+}
+.t-choice:focus-within {
+  outline: 2px solid rgba(176, 9, 9, 0.35);
+  outline-offset: 2px;
+}
+
+/* Inputs */
+.t-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid #e6e1df;
+  border-radius: 12px;
+  background: #fff;
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.t-input:focus {
+  border-color: var(--accent);
+}
+
+/* Buttons */
+.t-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.t-btn:active {
+  transform: scale(0.98);
+}
+.t-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.t-btn-block {
+  width: 100%;
+  padding: 15px 20px;
+  font-size: 1.05rem;
+}
+.t-btn-ghost {
+  background: #f1eeed;
+  color: var(--text-dark);
+}
+.t-btn-ok {
+  background: #1f8f4e;
+}
+.t-btn-sm {
+  padding: 8px 14px;
+  font-size: 0.9rem;
+}
+.t-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 10px;
+  background: #fdf0f0;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+/* Tabs and filter pills */
+.t-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: 16px;
+  padding: 4px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.16);
+}
+.t-tabs button {
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.t-tabs button.is-on {
+  background: #fff;
+  color: var(--accent);
+}
+.t-tabs button span {
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.12);
+  font-size: 0.8rem;
+}
+.t-pills {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.t-pills::-webkit-scrollbar {
+  display: none;
+}
+.t-pills button {
+  flex: none;
+  padding: 8px 16px;
+  border: 1.5px solid #e6e1df;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.t-pills button.is-on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Lists */
+.t-list {
+  display: grid;
+  gap: 8px;
+}
+.t-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #faf8f7;
+  border: 1px solid #f0ebe9;
+}
+.t-row-main {
+  flex: 1;
+  min-width: 0;
+}
+.t-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #fbefef;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.t-tag.is-grey {
+  background: #efeceb;
+  color: #555;
+}
+.t-empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: #a39b99;
+}
+.t-empty i {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 2rem;
+}
+
+/* Center states, login */
+.t-center {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 16px;
+  background: #f5f3f2;
+  font-family: "Prompt", "Outfit", sans-serif;
+}
+.t-state,
+.t-login {
+  width: min(400px, 100%);
+  padding: 36px 28px;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+.t-state h2,
+.t-login h1 {
+  margin: 14px 0 6px;
+  font-size: 1.4rem;
+}
+.t-state p,
+.t-login p {
+  margin: 0;
+  color: var(--text-light);
+}
+.t-state-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #fbefef;
+  color: var(--accent);
+  font-size: 1.9rem;
+}
+.t-state-icon.is-ok {
+  background: #e7f6ed;
+  color: #1f8f4e;
+}
+.t-state .t-btn {
+  margin-top: 24px;
+}
+.t-login {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.t-login-icon {
+  font-size: 2.2rem;
+  color: var(--accent);
+}
+.t-login h1 {
+  margin: 0;
+}
+.t-login p {
+  margin-bottom: 6px;
+}
+.t-login input {
+  padding: 13px 14px;
+  border: 1.5px solid #e6e1df;
+  border-radius: 12px;
+  font-size: 16px;
+  text-align: center;
+  outline: none;
+}
+.t-login input:focus {
+  border-color: var(--accent);
+}
+.t-login-error {
+  color: var(--accent);
+  font-size: 0.88rem;
+}
+
+/* Sticky bottom bar */
+.t-bar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px);
+}
+.t-bar > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--text-light);
+}
+.t-bar > span.is-dirty {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Toast, modal */
+.t-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 12px 20px;
+  border-radius: 999px;
+  color: #fff;
+  font-family: "Prompt", sans-serif;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  transform: translateX(-50%);
+  animation: t-pop 0.2s ease-out;
+}
+.t-toast.is-success {
+  background: #1f8f4e;
+}
+.t-toast.is-error {
+  background: var(--accent);
+}
+@keyframes t-pop {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+}
+.t-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+  font-family: "Prompt", sans-serif;
+}
+.t-modal-card {
+  width: min(380px, 100%);
+  padding: 24px;
+  border-radius: 18px;
+  background: #fff;
+}
+.t-modal-card p {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.t-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+.t-confirm {
+  z-index: 5000;
+}

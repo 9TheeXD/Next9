@@ -1,0 +1,55 @@
+# separate repo (origin DARWINZY/ShiftManager) — keep out
+ShiftManager/
+
+# secrets / env
+.env
+.env.*
+service-account.json
+*-chatbot-*.json
+*.pem
+*.key
+
+# real data
+data/
+data-dev/
+member/profile/
+students.json
+inspectors.json
+toilet_config.json
+toilet_submissions.json
+*.db
+*.sqlite
+*.sqlite3
+
+# deps / build
+node_modules/
+.next/
+dist/
+build/
+.turbo/
+.dev-r2
+
+# archives / binaries (too big for GitHub)
+*.tar.gz
+*.tar.gz.backup
+*.zip
+*.apk
+*.aab
+*.ipa
+final/
+
+# tool-local / runtime
+.claude/
+.aider*
+.agents/
+.antigravitycli/
+.hidden.ai_agent_do_not_care/
+.stfolder/
+.stignore
+server_start_time.json
+*.lock
+!package-lock.json
+*.log
+.DS_Store
+.git.hidden/
+serviceAccountKey*.json

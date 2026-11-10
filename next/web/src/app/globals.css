@@ -1,0 +1,450 @@
+/* Tailwind, WITHOUT Preflight.
+   ----------------------------------------------------------------------------
+   Preflight is Tailwind's own base reset, and this site does not want one: every
+   page below is styled by hand in legacy-home.css, legacy-album.css and the
+   legacy /style.css, and dropping a second reset on top of them would quietly
+   restyle the whole site. Importing the layers by hand and leaving
+   "tailwindcss/preflight.css" out is the documented way to take the theme and
+   the utilities without the reset.
+
+   The utilities land in their own cascade layer, which ranks BELOW unlayered
+   CSS — so where a Tailwind class and a hand-written rule ever meet on the same
+   element, the hand-written rule still wins. New components get Tailwind; the
+   pages that already exist cannot be disturbed by it. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* The palette shadcn/ui and 21st.dev components compile against (bg-primary,
+   text-muted-foreground, border-border …), pointed at this site's own colours.
+   These are deliberately --color-* names: the bare --primary and --accent below
+   are load-bearing for thousands of lines of legacy CSS and are left alone. */
+@theme {
+    --color-background: #f5f5f5;
+    --color-foreground: #121212;
+    --color-card: #ffffff;
+    --color-card-foreground: #121212;
+    --color-popover: #ffffff;
+    --color-popover-foreground: #121212;
+    --color-primary: #b00909;
+    --color-primary-foreground: #ffffff;
+    --color-secondary: #f1f1f2;
+    --color-secondary-foreground: #121212;
+    --color-muted: #f1f1f2;
+    --color-muted-foreground: #555555;
+    --color-accent: #f1f1f2;
+    --color-accent-foreground: #121212;
+    --color-destructive: #dc2626;
+    --color-destructive-foreground: #ffffff;
+    --color-border: #e5e5e6;
+    --color-input: #e5e5e6;
+    --color-ring: #b00909;
+    --radius: 0.75rem;
+}
+
+/* Design tokens carried over from the legacy /style.css so migrated pages look identical. */
+:root {
+  --primary: #ffffff;
+  --accent: #b00909;
+  --accent-glow: rgba(230, 0, 0, 0.4);
+  --accent-dark: #b30000;
+  --text-dark: #121212;
+  --text-light: #555555;
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  --page-bg: #f5f5f5;
+}
+
+/* Layered, so Tailwind utilities (a later layer) can override it; unlayered it zeroed them all. */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.22) transparent;
+}
+
+body {
+  font-family: "Prompt", "Outfit", system-ui, sans-serif;
+  color: var(--text-dark);
+  background: var(--page-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+img {
+  max-width: 100%;
+}
+
+/* Custom scrollbar, matching the legacy site: a floating pill inset from the edge by a transparent
+   border, so inside rounded containers it never paints into the corner radius. */
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.22);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.34);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---- Page transitions ----
+   Movement along the X axis only; nothing fades.
+   - Going deeper (album, sub-folder): the new page slides in from the right over the old one, which
+     eases 30% to the left underneath it.
+   - Going back up: the pages push to the right together.
+   - Main tabs: the pages push along X by tab order.
+   Navigations with no direction do not animate. Full page loads to or from legacy pages get the same
+   slides from /nav-motion.js in browsers with cross-document view transitions. */
+@view-transition {
+  navigation: auto;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-old(.slide-forward) {
+  animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both nav-out-left;
+}
+::view-transition-new(.slide-forward) {
+  animation: 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both nav-in-right;
+}
+::view-transition-old(.slide-back) {
+  animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both nav-out-right;
+}
+::view-transition-new(.slide-back) {
+  animation: 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both nav-in-left;
+}
+::view-transition-old(.push-forward) {
+  animation: 360ms cubic-bezier(0.65, 0, 0.35, 1) both nav-push-out-left;
+}
+::view-transition-new(.push-forward) {
+  animation: 360ms cubic-bezier(0.65, 0, 0.35, 1) both nav-push-in-right;
+}
+::view-transition-old(.push-back) {
+  animation: 360ms cubic-bezier(0.65, 0, 0.35, 1) both nav-push-out-right;
+}
+::view-transition-new(.push-back) {
+  animation: 360ms cubic-bezier(0.65, 0, 0.35, 1) both nav-push-in-left;
+}
+@keyframes nav-out-left {
+  to {
+    transform: translateX(-30%);
+  }
+}
+@keyframes nav-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes nav-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes nav-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes nav-push-out-left {
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes nav-push-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes nav-push-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes nav-push-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Spinning loader icon (lucide Loader2). */
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Native React photos pages wear the legacy page CSS scoped to a wrapper (see
+   scripts/build-legacy-photos.mjs). The wrapper stands in for <body>, so it fills the screen. */
+.lp-home,
+.lp-album {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+body:has(> .lp-home, .lp-home) {
+  background: #f5f5f5;
+}
+body:has(.lp-album) {
+  background: #fff;
+}
+
+/* ---- Navigation progress bar (src/components/NavProgress.tsx) ----
+   Starts in the frame of the tap; its own view-transition layer keeps it above sliding pages. */
+.nav-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 2147483000;
+  pointer-events: none;
+  background: #b00909;
+  box-shadow: 0 0 8px rgba(176, 9, 9, 0.5);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  opacity: 0;
+  view-transition-name: nav-progress;
+}
+.nav-progress[data-state="loading"] {
+  opacity: 1;
+  animation: nav-progress-creep 8s cubic-bezier(0.1, 0.7, 0.2, 1) forwards;
+}
+.nav-progress[data-state="done"] {
+  opacity: 0;
+  transform: scaleX(1);
+  transition: transform 0.2s ease-out, opacity 0.25s ease-in 0.15s;
+}
+@keyframes nav-progress-creep {
+  0% {
+    transform: scaleX(0);
+  }
+  4% {
+    transform: scaleX(0.3);
+  }
+  100% {
+    transform: scaleX(0.9);
+  }
+}
+::view-transition-group(nav-progress),
+::view-transition-old(nav-progress),
+::view-transition-new(nav-progress) {
+  animation: none;
+}
+::view-transition-old(nav-progress) {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-progress[data-state="loading"] {
+    animation: none;
+    transform: scaleX(0.6);
+  }
+}
+
+/* ---- Menus: states shared by every menu on the site (MorphMenu, MorphSurface, MorphSheet) ----
+   Row icons are coloured inline (style="color:…"), so these need !important to reach them. */
+
+/* A row that cannot be used is muted as a whole — icon and label together. Before this the label
+   went grey while the icon stayed at full colour, which reads as "half available". */
+[role="menu"] button:disabled i,
+[role="menu"] button:disabled svg {
+  color: rgba(0, 0, 0, 0.28) !important;
+}
+
+/* The accent tone: a menu opened from a solid red button is that same solid red — opaque #b00909,
+   no glass, no blur — because it is the button, grown. Icons sit straight on the red in their usual
+   colours; the ones whose colour IS red (select-all, clear, delete) would vanish into it and go
+   white instead. */
+.morph-accent {
+  background: #b00909;
+  box-shadow: 0 12px 32px rgba(80, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.morph-accent [role^="menuitem"] {
+  color: #fff !important;
+}
+.morph-accent [role^="menuitem"] i[style*="--accent"],
+.morph-accent [role^="menuitem"] i[style*="#b00909"],
+.morph-accent [role^="menuitem"] i[style*="#dc2626"],
+.morph-accent [role^="menuitem"] i:not([style*="color"]) {
+  color: #fff !important;
+}
+.morph-accent [role^="menuitem"]:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+.morph-accent [role^="menuitem"]:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22);
+}
+/* Disabled: label and icon muted together. */
+.morph-accent [role^="menuitem"]:disabled,
+.morph-accent [role^="menuitem"]:disabled i {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+.morph-accent .app-menu-kbd {
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+.morph-accent [role="separator"],
+.morph-accent .bg-black\/10 {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* The viewer tone: glass for controls inside the image viewer. The viewer sits on an 88%-black
+   backdrop, so the pane is a thin white tint over its blur and its contents are white — dark text
+   on the light pane only worked where there was something light behind it. */
+/* Only icons WITHOUT a colour of their own go white: each action keeps its colour in every menu. */
+.morph-viewer [role^="menuitem"],
+.morph-viewer [role^="menuitem"] i:not([style*="color"]),
+.morph-viewer-trigger,
+.morph-viewer-trigger i {
+  color: rgba(255, 255, 255, 0.95) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.morph-viewer [role^="menuitem"][aria-checked="true"],
+.morph-viewer [role^="menuitem"].font-semibold,
+.morph-viewer [role^="menuitem"].font-semibold i {
+  color: #ff9d9d !important;
+}
+.morph-viewer [role^="menuitem"]:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+.morph-viewer [role^="menuitem"]:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+.morph-viewer [role^="menuitem"]:disabled,
+.morph-viewer [role^="menuitem"]:disabled i {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* A destructive row stays red on the dark and red panes too, icon included — lightened so it reads. */
+.morph-viewer [role^="menuitem"][data-danger],
+.morph-viewer [role^="menuitem"][data-danger] i {
+  color: #ff8a8a !important;
+}
+.morph-accent [role^="menuitem"][data-danger],
+.morph-accent [role^="menuitem"][data-danger] i {
+  color: #ffd6d6 !important;
+}
+
+/* Disabled wins over danger: a delete that cannot be used is as muted as every other such row. */
+.morph-accent [role^="menuitem"][data-danger]:disabled,
+.morph-accent [role^="menuitem"][data-danger]:disabled i {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+.morph-viewer [role^="menuitem"][data-danger]:disabled,
+.morph-viewer [role^="menuitem"][data-danger]:disabled i {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* The liquid-glass sheen's distortion (see liquid-glass.tsx). Precise pointers only: on a touch
+   screen the CPU-rendered SVG filter was re-run on every frame of every menu morph. The sheen
+   gradient itself stays. */
+.glass-sheen {
+  filter: url("#container-glass");
+}
+@media (hover: none), (pointer: coarse) {
+  .glass-sheen {
+    filter: none;
+  }
+}
+
+/* ---- Collapsing page header (see lib/photos/collapsingHeader.ts) ----
+   The header scrolls away until a 56px strip is left, then sticks; its text fades out on the way,
+   and the back and ☰ buttons are carried down so they hold still and end up centred in the strip.
+   Opacity and transform only. .hdr-sda: driven by the scroll position itself (scroll-driven
+   animations, compositor thread). .hdr-js: driven by --hp (0 → 1) written once per frame. */
+@keyframes hdr-fade {
+  to { opacity: 0; }
+}
+@keyframes hdr-move {
+  to { transform: translateY(var(--hdr-dy, 0px)); }
+}
+.hdr-sda :is(
+  .photos-header .album-crumbs,
+  .photos-header .share-line,
+  .photos-header .title-container,
+  .photos-header #aMeta,
+  .photos-header .album-status,
+  .photos-header .header-title-wrap > div,
+  .photos-header .header-actions
+) {
+  animation: hdr-fade linear both;
+  animation-timeline: scroll(root);
+  /* The text is gone by a little past halfway, before the strip it would crowd arrives. */
+  animation-range: 0 calc(var(--hdr-range, 100px) * 0.55);
+}
+.hdr-sda :is(
+  .photos-header #backBtn,
+  .photos-header .photos-back-link,
+  .photos-header #uploadBtn,
+  .photos-header #albumMenuBtn
+) {
+  animation: hdr-move linear both;
+  animation-timeline: scroll(root);
+  animation-range: 0 var(--hdr-range, 100px);
+}
+.hdr-js :is(
+  .photos-header .album-crumbs,
+  .photos-header .share-line,
+  .photos-header .title-container,
+  .photos-header #aMeta,
+  .photos-header .album-status,
+  .photos-header .header-title-wrap > div,
+  .photos-header .header-actions
+) {
+  opacity: calc(1 - min(1, var(--hp, 0) * 1.8));
+}
+.hdr-js :is(
+  .photos-header #backBtn,
+  .photos-header .photos-back-link,
+  .photos-header #uploadBtn,
+  .photos-header #albumMenuBtn
+) {
+  transform: translateY(calc(var(--hp, 0) * var(--hdr-dy, 0px)));
+}
+/* Faded-out controls take no taps. */
+.hdr-collapsing.is-collapsed :is(
+  .photos-header .album-crumbs,
+  .photos-header .share-line,
+  .photos-header .title-container,
+  .photos-header #aMeta,
+  .photos-header .album-status,
+  .photos-header .header-title-wrap > div,
+  .photos-header .header-actions
+) {
+  pointer-events: none;
+}

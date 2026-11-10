@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>ลิงก์ที่แชร์ - NEXT9</title>
+    <link rel="icon" type="image/webp" href="https://cdn.yumistack.net/next9/logo01.webp">
+    <script>
+        // Short share links (/s/?t=…) open the regular album viewer in share mode.
+        (function () {
+            var p = new URLSearchParams(location.search);
+            var t = p.get('t') || '';
+            var a = p.get('a');
+            location.replace('/photos/album/?share=' + encodeURIComponent(t) + (a ? '&a=' + encodeURIComponent(a) : ''));
+        })();
+    </script>
+    <style>
+        body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f5f5f5; font-family: 'Prompt', system-ui, sans-serif; color: #6b7280; }
+        .spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid #e5e7eb; border-top-color: #b00909; animation: s .8s linear infinite; margin: 0 auto 12px; }
+        @keyframes s { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div><div class="spin"></div>กำลังเปิดลิงก์…</div>
+</body>
+</html>

@@ -1,0 +1,205 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+enum UserRole {
+  SMOKER
+  FAMILY
+  ADMIN
+}
+
+enum SmokingType {
+  CIGARETTE
+  POD
+}
+
+enum BadgeCategory {
+  STREAK
+  HEALTH
+  QUIZ
+  MILESTONE
+}
+
+model User {
+  id                String      @id @default(uuid())
+  displayId         String      @unique @default(dbgenerated("floor(random() * 9000 + 1000)::text"))
+  phoneNumber       String?     @unique
+  passwordHash      String?
+  role              UserRole    @default(SMOKER)
+  displayName       String
+  smokingType       SmokingType @default(CIGARETTE)
+  cigarettesPerDay  Int?
+  pricePerPack      Float?
+  cigarettesPerPack Int         @default(20)
+  quitDate          DateTime?
+  emergencyContact  String?
+  fcmToken          String?
+  followedSmokers   User[]      @relation("FollowersToSmokers")
+  followers         User[]      @relation("FollowersToSmokers")
+  dailyLogs         DailyLog[]
+  earnedBadges      UserBadge[]
+  sentCheers        Cheer[]     @relation("SentCheers")
+  receivedCheers    Cheer[]     @relation("ReceivedCheers")
+  quizResults       QuizResult[]
+  chatMessages      ChatMessage[] @relation("UserMessages")
+  actionLogs        UserActionLog[]
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  lastNotificationSentAt  DateTime?
+  notificationDayIndex    Int       @default(0)
+  xp                Int         @default(0)
+  isDeleted         Boolean     @default(false)
+  surveyResponse    SurveyResponse?
+  followerSurvey    FollowerSurveyResponse?
+}
+
+model UserActionLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String
+  details   String
+  metadata  String?  // JSON string or simple text
+  createdAt DateTime @default(now())
+}
+
+model DailyLog {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logDate          DateTime @default(now()) @db.Date
+  cigarettesSmoked Int      @default(0)
+  cravingCount     Int      @default(0)
+  mood             String?
+  notes            String?
+  articlesRead     Int      @default(0)
+  gamesPlayed      Int      @default(0)
+  soundsListened   Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  @@unique([userId, logDate])
+}
+
+model Badge {
+  id            String        @id @default(uuid())
+  name          String        @unique
+  description   String
+  iconName      String
+  category      BadgeCategory
+  criteriaDays  Int?
+  criteriaValue Int?
+  earnedBy      UserBadge[]
+  createdAt     DateTime      @default(now())
+}
+
+model UserBadge {
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeId  String
+  badge    Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  earnedAt DateTime @default(now())
+
+  @@unique([userId, badgeId])
+}
+
+model Cheer {
+  id         String   @id @default(uuid())
+  senderId   String
+  sender     User     @relation("SentCheers", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User     @relation("ReceivedCheers", fields: [receiverId], references: [id], onDelete: Cascade)
+  message    String   @default("💪 Keep going!")
+  createdAt  DateTime @default(now())
+}
+
+model QuizResult {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quizId      String
+  score       Int
+  maxScore    Int
+  completedAt DateTime @default(now())
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation("UserMessages", fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  alias     String?
+  isDeleted Boolean  @default(false)
+  isEdited  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+enum SoundCategory {
+  ENCOURAGEMENT
+  UI
+}
+
+model Sound {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  url         String
+  defaultUrl  String?
+  isSystem    Boolean       @default(false)
+  duration    Int           // Duration in seconds
+  category    SoundCategory @default(UI)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model SurveyResponse {
+  id               String   @id @default(uuid())
+  displayId        String   @unique
+  userId           String?  @unique
+  user             User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ageGroup         String
+  gender           String
+  occupation       String?
+  smokingType      String
+  frequency        String
+  cravingTime      String?
+  duration         String
+  addictionLevel   String
+  wantedToQuit     String?
+  reasonToQuit     String?
+  previousMethods  String?
+  longestQuit      String?
+  interestedInApp  String?
+  desiredHelp      String?
+  riskScore         Int?
+  riskLevel         String?    // "LOW", "MEDIUM", "HIGH"
+  smokesWithin30Min String?    // "within5", "6to30", "31to60", "after60"
+  cravingIntensity  String?    // "high", "moderate", "low", "none"
+  failedQuitAttempt String?    // "many", "1to2", "never"
+  copingStrategy    String?    // "smokeImmediately", "tryToResist", "findActivity", "callSomeone"
+  hatedCigarette    String?    // "firstMorning", "others"
+  smokesWhenIll     Boolean?
+  smokesMoreMorning Boolean?
+  motivationLevel   String?    // "veryMotivated", "wantToReduce", "unsure", "notInterested"
+  createdAt        DateTime @default(now())
+  isDeleted        Boolean  @default(false)
+}
+
+model FollowerSurveyResponse {
+  id               String   @id @default(uuid())
+  displayId        String   @unique
+  userId           String?  @unique
+  user             User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  relation         String
+  smokingFrequency String
+  concern          String
+  supportMethod    String
+  reward           String?
+  createdAt        DateTime @default(now())
+  isDeleted        Boolean  @default(false)
+}

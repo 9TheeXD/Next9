@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <base href="/viewforms/pinkbook/">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/pinkbook.svg">
+    <title>สรุปผลการตรวจเล่มชมพู | สภานักเรียน</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<!-- Login Modal -->
+<div class="custom-modal-overlay show" id="login-modal">
+    <div class="custom-modal-content login-content">
+        <div class="login-icon">
+            <i class="fa-solid fa-lock"></i>
+        </div>
+        <h3>เข้าสู่ระบบแอดมิน</h3>
+        <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:16px;">กรุณากรอกรหัสผ่านเพื่อเข้าดูสรุปผล</p>
+        <input type="password" id="login-password" placeholder="รหัสผ่าน..." autocomplete="off">
+        <button class="btn btn-primary" style="width:100%; margin-top:8px; padding:12px;" onclick="attemptLogin()">เข้าสู่ระบบ</button>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="custom-modal-overlay" id="edit-modal">
+    <div class="custom-modal-content edit-modal-content">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+            <div>
+                <h3><i class="fa-solid fa-pen-to-square"></i> แก้ไขผลการตรวจ</h3>
+                <p id="edit-modal-room" style="font-weight:600; color:var(--text-main); font-size:1.05rem; margin-top:4px;"></p>
+            </div>
+            <button type="button" class="btn-close-modal" onclick="closeEditModal()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <!-- Section 3: สถานะการตรวจ -->
+        <div class="modal-section-card">
+            <label class="modal-section-label"><i class="fa-solid fa-clipboard-check"></i> สถานะการตรวจ</label>
+            <div class="radio-group-modern" style="margin-top: 8px;">
+                <label class="radio-label">
+                    <input type="radio" name="edit_overall_status" value="เรียบร้อย">
+                    <span class="radio-button status-neat">เรียบร้อย</span>
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="edit_overall_status" value="ไม่เรียบร้อย">
+                    <span class="radio-button status-messy">ไม่เรียบร้อย</span>
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="edit_overall_status" value="ยังไม่ส่ง">
+                    <span class="radio-button status-unsub">ยังไม่ส่ง</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Section 4: รายการที่ไม่เรียบร้อย -->
+        <div class="modal-section-card" id="edit-section4-card" style="display: none;">
+            <label class="modal-section-label"><i class="fa-solid fa-list-check"></i> รายการที่ไม่เรียบร้อย</label>
+            <div id="edit-checklist-container">
+                <!-- Populated dynamically -->
+            </div>
+            <button type="button" class="btn-add-item" onclick="openEditCustomModal()">+ เพิ่มรายการ</button>
+        </div>
+
+        <!-- Section 5: สัปดาห์ที่ยังไม่ส่ง -->
+        <div class="modal-section-card" id="edit-section5-card">
+            <label class="modal-section-label"><i class="fa-solid fa-calendar-xmark"></i> สัปดาห์ที่ยังไม่ส่ง</label>
+            <button type="button" class="btn btn-secondary" style="width:100%; padding: 10px;" onclick="openEditUnsubModal()">
+                <i class="fa-solid fa-hand-pointer"></i> เลือกสัปดาห์ที่ยังไม่ส่ง 
+                <span id="edit-unsub-badge" class="badge" style="display:none; margin-left:8px; background:var(--text-main); color:white; padding:2px 8px; border-radius:12px; font-size:0.8rem;">0</span>
+            </button>
+        </div>
+        
+        <div class="custom-modal-actions" style="margin-top:20px;">
+            <button type="button" class="btn btn-secondary" onclick="closeEditModal()">ยกเลิก</button>
+            <button type="button" class="btn btn-primary" onclick="saveEdit()"><i class="fa-solid fa-floppy-disk"></i> บันทึก</button>
+        </div>
+    </div>
+</div>
+
+<!-- Logs Modal -->
+<div class="custom-modal-overlay" id="logs-modal">
+    <div class="custom-modal-content logs-modal-content">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+            <div>
+                <h3><i class="fa-regular fa-file-lines"></i> ประวัติการบันทึกข้อมูล (Logs)</h3>
+                <p id="logs-modal-room" style="font-weight:600; color:var(--text-muted); font-size:0.95rem; margin-top:4px;"></p>
+            </div>
+            <button type="button" class="btn-close-modal" onclick="closeLogsModal()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <div id="logs-timeline-container" class="timeline-container">
+            <!-- Populated dynamically -->
+        </div>
+
+        <div class="custom-modal-actions" style="margin-top:16px;">
+            <button type="button" class="btn btn-secondary" onclick="closeLogsModal()">ปิด</button>
+        </div>
+    </div>
+</div>
+
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<div class="dashboard-container" id="main-content" style="display:none;">
+    <div class="sidebar">
+        <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h2><i class="fa-regular fa-calendar-check"></i> สัปดาห์การตรวจ</h2>
+                <p>เลือกสัปดาห์เพื่อดูผลการตรวจสอบ</p>
+            </div>
+            <button class="mobile-close-btn" onclick="toggleSidebar()" style="display: none; font-size: 1.5rem; color: var(--text-muted); background: none; border: none; cursor: pointer; padding: 4px;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="sidebar-menu">
+            <div style="margin-bottom: 16px;">
+                <label class="menu-label" style="display:block; margin-bottom:6px;"><i class="fa-solid fa-graduation-cap"></i> ภาคเรียน</label>
+                <div style="display: flex; gap: 6px;">
+                    <button type="button" id="side-pb-term-2" onclick="switchPbTerm('2/2569')" style="flex: 1; padding: 8px 4px; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; background: var(--primary); color: white; transition: all 0.2s;">ภาคเรียนที่ 2</button>
+                    <button type="button" id="side-pb-term-1" onclick="switchPbTerm('1/2569')" style="flex: 1; padding: 8px 4px; border: 1px solid var(--border-color); border-radius: 6px; font-weight: 500; font-size: 0.85rem; cursor: pointer; background: #fff; color: var(--text-main); transition: all 0.2s;">ภาคเรียนที่ 1</button>
+                </div>
+            </div>
+            <h3 class="menu-label">เลือกสัปดาห์ที่ตรวจ</h3>
+            <div id="week-list" class="week-list">
+                <!-- Javascript will populate weeks 1-22 -->
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <button class="btn btn-secondary" onclick="logout()" style="width:100%"><i class="fa-solid fa-arrow-right-from-bracket"></i> ออกจากระบบ</button>
+        </div>
+    </div>
+
+    <div class="main-panel">
+        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <h1 id="current-week-title" style="margin: 0;">กรุณาเลือกสัปดาห์</h1>
+                <div style="display: inline-flex; background: #e2e8f0; padding: 3px; border-radius: 8px; gap: 2px;">
+                    <button type="button" id="pb-btn-term-2" onclick="switchPbTerm('2/2569')" style="padding: 6px 14px; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; background: var(--primary); color: white; transition: all 0.2s;">ภาคเรียนที่ 2/2569</button>
+                    <button type="button" id="pb-btn-term-1" onclick="switchPbTerm('1/2569')" style="padding: 6px 14px; border: none; border-radius: 6px; font-weight: 500; font-size: 0.85rem; cursor: pointer; background: transparent; color: #475569; transition: all 0.2s;">ภาคเรียนที่ 1/2569</button>
+                </div>
+            </div>
+            <button class="mobile-menu-btn" onclick="toggleSidebar()" style="display: none; background: var(--primary); color: white; border: none; padding: 8px 12px; border-radius: 8px; font-size: 1rem; font-family: inherit; font-weight: 500; cursor: pointer;">
+                <i class="fa-regular fa-calendar"></i> เลือกสัปดาห์
+            </button>
+        </div>
+        <div class="panel-content" id="report-content">
+            <!-- Accordions go here -->
+            <div class="empty-state">
+                <p>เลือกสัปดาห์จากเมนู<span class="desktop-text">ด้านซ้าย</span><span class="mobile-text">ด้านบน</span>เพื่อดูสรุปผล</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/forms/pinkbook/shared_form.js?v=3"></script>
+<script src="app.js?v=5"></script>
+</body>
+</html>

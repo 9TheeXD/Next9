@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/inert.svg">
+    <title>สรุปการส่งเล่มตรวจสาย-เฉื่อย | สภานักเรียน</title>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Prompt', sans-serif;
+            background: #f0f0f0;
+            color: #202124;
+            min-height: 100vh;
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            border: 1px solid #dadce0;
+            padding: 24px;
+            margin-bottom: 14px;
+        }
+
+        .header-card {
+            border-top: 10px solid #b00909;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .header-card h1 {
+            font-size: 1.65rem;
+            font-weight: 700;
+            color: #202124;
+        }
+
+        .week-nav {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background: #f8f9fa;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid #dadce0;
+        }
+
+        .week-nav button {
+            background: none;
+            border: none;
+            color: #5f6368;
+            cursor: pointer;
+            padding: 4px 8px;
+            font-size: 16px;
+            transition: color 0.2s;
+        }
+
+        .week-nav button:hover {
+            color: #b00909;
+        }
+
+        .week-nav span {
+            font-weight: 500;
+            font-size: 0.95rem;
+            min-width: 150px;
+            text-align: center;
+            color: #202124;
+        }
+
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            border-radius: 6px;
+            border: 1px solid #dadce0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 500px;
+            background: #fff;
+        }
+
+        th, td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid #dadce0;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #5f6368;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .day-col {
+            font-weight: 600;
+            white-space: nowrap;
+            width: 120px;
+        }
+
+        .status-col {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-label {
+            font-weight: 500;
+            width: 70px;
+            color: #202124;
+        }
+
+        .status-value {
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .text-success { color: #1e8e3e; }
+        .text-danger { color: #d93025; }
+        .text-warning { color: #f29900; }
+        .text-muted { color: #5f6368; font-weight: normal; }
+
+        .btn-edit {
+            background: #b00909;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-family: 'Prompt', sans-serif;
+            transition: background 0.2s;
+        }
+
+        .btn-edit:hover { background: #8a0707; }
+
+        .btn-create {
+            background: #b00909;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-family: 'Prompt', sans-serif;
+        }
+
+        .btn-create:hover { background: #8a0707; }
+
+        .img-preview {
+            width: 48px;
+            height: 48px;
+            object-fit: cover;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid #dadce0;
+        }
+
+        /* Lightbox Styles (Exact from album) */
+        .photos-lightbox {position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.95);z-index:2000;display:none;opacity:0;transition:opacity .3s;align-items:center;justify-content:center;touch-action:none}
+        .photos-lightbox.active{display:flex;opacity:1}
+        .photos-lightbox-close{position:absolute;top:20px;right:20px;background:none;border:none;color:white;font-size:2rem;cursor:pointer;z-index:10;width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.15);border-radius:50%}
+        .photos-lightbox-img{max-width:100%;max-height:100%;object-fit:contain;transition:transform 0.3s cubic-bezier(0.4, 0, 1, 1), opacity 0.3s ease;transform-origin:center;will-change:transform,opacity;pointer-events:auto;cursor:grab}
+        .photos-lightbox-img:active{cursor:grabbing}
+        .photos-lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:white;font-size:1.5rem;width:40px;height:40px;border-radius:50%;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+        .photos-lightbox-prev{left:20px}
+        .photos-lightbox-next{right:20px}
+        .photos-lightbox-counter{position:absolute;top:30px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.8);font-size:.9rem;font-weight:600;font-family:'Prompt',sans-serif;letter-spacing:1px;background:rgba(0,0,0,.4);padding:4px 12px;border-radius:12px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:10}
+        @keyframes customSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .img-spinner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.8);z-index:10;display:flex;align-items:center;justify-content:center;color:white;font-size:3rem;opacity:0;pointer-events:none;transition:opacity 0.4s ease,transform 0.4s ease;text-shadow:0 4px 15px rgba(0,0,0,0.6)}
+        .img-spinner i{animation:customSpin 1.2s cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite !important}
+        .photos-lightbox.loading .img-spinner{opacity:1;transform:translate(-50%,-50%) scale(1)}
+
+        /* Lock Screen */
+        .lock-screen{position:fixed;top:0;left:0;width:100%;height:100%;z-index:5000;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(15,23,42,0.9),rgba(30,41,59,0.95));backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px)}
+        .lock-card{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:24px;padding:40px 36px;max-width:380px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.4)}
+        .lock-card .lock-icon{font-size:3rem;color:rgba(255,255,255,0.6);margin-bottom:16px}
+        .lock-card h2{color:white;font-family:'Prompt',sans-serif;font-size:1.2rem;font-weight:600;margin:0 0 6px}
+        .lock-card p{color:rgba(255,255,255,0.5);font-size:.85rem;margin:0 0 24px}
+        .lock-card input{width:100%;padding:14px 18px;border:1px solid rgba(255,255,255,0.15);border-radius:12px;background:rgba(255,255,255,0.06);color:white;font-family:'Prompt',sans-serif;font-size:1rem;text-align:center;letter-spacing:4px;outline:none;transition:border-color .3s;box-sizing:border-box}
+        .lock-card input:focus{border-color:rgba(255,255,255,0.4)}
+        .lock-card input::placeholder{color:rgba(255,255,255,0.25);letter-spacing:1px}
+        .lock-card .lock-btn{width:100%;padding:14px;border:none;border-radius:12px;background:linear-gradient(135deg,#b00909,#d32f2f);color:white;font-family:'Prompt',sans-serif;font-size:.95rem;font-weight:600;cursor:pointer;margin-top:12px;transition:transform .2s,box-shadow .2s}
+        .lock-card .lock-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(176,9,9,0.4)}
+        .lock-card .lock-error{color:#f87171;font-size:.82rem;margin-top:10px;min-height:20px}
+        @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+        .lock-card.shake{animation:shake .4s ease}
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal {
+            background: #fff;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 500px;
+            padding: 24px;
+            border: 1px solid #dadce0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal h2 {
+            margin-bottom: 16px;
+            color: #b00909;
+            font-size: 1.25rem;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #202124;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .searchable-select {
+            position: relative;
+        }
+        .searchable-select input:focus {
+            border-color: #b00909 !important;
+            box-shadow: 0 0 0 2px rgba(176, 9, 9, 0.12);
+        }
+        .select-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid #dadce0;
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            z-index: 2000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .select-dropdown.open { display: block; }
+        .select-option {
+            padding: 10px 14px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .select-option:hover { background: #fce8e8; }
+        .select-option mark {
+            background: #ffe082;
+            color: inherit;
+            padding: 0;
+            border-radius: 2px;
+        }
+
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .location-group label.header-label {
+            color: #5f6368;
+            border-bottom: 1px dashed #dadce0;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        label.cb-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            font-weight: normal;
+        }
+
+        .cb-item input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #dadce0;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+            position: relative;
+            flex-shrink: 0;
+            margin: 0 8px 0 0;
+            padding: 0;
+            transform: translateY(-1px);
+            transition: all 0.2s;
+            pointer-events: none;
+        }
+
+        .cb-item.selected input[type="checkbox"] {
+            background: #b00909;
+            border-color: #b00909;
+        }
+
+        .cb-item.selected input[type="checkbox"]::after {
+            content: '';
+            position: absolute;
+            left: 5px;
+            top: 1px;
+            width: 5px;
+            height: 10px;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
+        .cb-item label {
+            cursor: pointer;
+            margin-bottom: 0;
+            font-weight: normal;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            border: none;
+            font-family: 'Prompt', sans-serif;
+            font-size: 0.95rem;
+        }
+
+        .btn-cancel {
+            background: #f1f3f4;
+            color: #5f6368;
+            border: 1px solid #dadce0;
+        }
+
+        .btn-save {
+            background: #b00909;
+            color: white;
+        }
+
+        .loading-state {
+            text-align: center;
+            padding: 40px;
+            color: #5f6368;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Lock Screen -->
+<div class="lock-screen" id="lockScreen">
+    <div class="lock-card" id="lockCard">
+        <div class="lock-icon"><i class="fas fa-lock"></i></div>
+        <h2>เข้าสู่ระบบจัดการ</h2>
+        <p>กรุณากรอกรหัสผ่านเพื่อเข้าถึงข้อมูล</p>
+        <input type="password" id="lockPassword" placeholder="รหัสผ่าน" autocomplete="off" maxlength="32" onkeypress="if(event.key==='Enter') submitPassword()">
+        <button class="lock-btn" onclick="submitPassword()">เข้าสู่ระบบ</button>
+        <div class="lock-error" id="lockError"></div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="card header-card">
+        <h1>สรุปการส่งเล่มตรวจสาย-เฉื่อย</h1>
+        <div class="week-nav">
+            <button id="prevWeek">◀</button>
+            <span id="weekDisplay">กำลังโหลด...</span>
+            <button id="nextWeek">▶</button>
+            <button id="refreshBtn" style="margin-left: 12px; background: none; border: 1px solid #dadce0; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #5f6368; font-size: 1rem; transition: background 0.2s;" title="รีเฟรชข้อมูล" onmouseover="this.style.background='#f1f3f4'" onmouseout="this.style.background='none'">↻</button>
+        </div>
+    </div>
+
+    <div class="card" style="padding: 0; overflow: hidden;">
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>วัน/วันที่</th>
+                        <th>สถานะการส่ง</th>
+                        <th style="width: 40px; text-align: center;"></th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr><td colspan="3" class="loading-state">กำลังโหลดข้อมูล...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Daily List Modal -->
+<div class="modal-overlay" id="dailyListModal">
+    <div class="modal">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">
+            <h2 style="margin: 0; color: #b00909; font-size: 1.25rem; border: none; padding: 0;">รายละเอียดการส่ง (<span id="dailyListTitleDate"></span>)</h2>
+            <button onclick="closeDailyListModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #5f6368;">&times;</button>
+        </div>
+        
+        <div id="dailyListContent" style="display: flex; flex-direction: column; gap: 16px;">
+            <!-- list of submissions will be injected here -->
+        </div>
+
+
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal" style="z-index: 1010;">
+    <div class="modal">
+        <h2 id="modalTitle">แก้ไขข้อมูล</h2>
+        <form id="editForm">
+            <input type="hidden" id="editId">
+            <input type="hidden" id="editDateStr">
+            
+            <div class="form-group">
+                <label>ผู้รายงาน</label>
+                <div class="searchable-select" id="edit-inspector-select">
+                    <input type="text" id="editReporter" placeholder="พิมพ์ชื่อผู้รายงาน..." autocomplete="off" required style="width:100%; padding:10px; border:1px solid #dadce0; border-radius:6px; font-family:'Prompt',sans-serif;">
+                    <div class="select-dropdown" id="edit-inspector-dropdown"></div>
+                </div>
+            </div>
+
+            <div class="checkbox-grid">
+                <div class="location-group">
+                    <label class="header-label">ข้างอ.5</label>
+                    <div id="editCbA5"></div>
+                </div>
+                <div class="location-group">
+                    <label class="header-label">หลังโดม</label>
+                    <div id="editCbDome"></div>
+                </div>
+            </div>
+
+            <div class="form-group" style="font-size: 0.85rem; color: #d93025; background: #fce8e8; padding: 10px; border-radius: 4px;">
+                * หากต้องการเปลี่ยนรูปภาพ ต้องไปอัปโหลดใหม่ที่หน้าฟอร์มเท่านั้น
+            </div>
+
+            <div class="modal-actions" style="justify-content: space-between;">
+                <button type="button" class="btn" style="background:#fce8e8; color:#d93025; border:1px solid #fecaca;" id="deleteBtn" onclick="deleteRecord()"><i class="fas fa-trash"></i> ลบรายงาน</button>
+                <div style="display: flex; gap: 12px;">
+                    <button type="button" class="btn btn-cancel" onclick="closeEditModal()">ยกเลิก</button>
+                    <button type="submit" class="btn btn-save" id="saveEditBtn">บันทึกข้อมูล</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Image Zoom Lightbox (Exact from album) -->
+<div class="photos-lightbox" id="lb">
+    <button class="photos-lightbox-close" onclick="closeLB()"><i class="fas fa-times"></i></button>
+    <button style="position:absolute;top:20px;left:20px;width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,.15);color:white;font-size:1.2rem;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;" onclick="toggleZoom()" id="lbZoomBtn"><i class="fas fa-search-plus"></i></button>
+    <button class="photos-lightbox-nav photos-lightbox-prev" onclick="navLB(-1)"><i class="fas fa-chevron-left"></i></button>
+    <button class="photos-lightbox-nav photos-lightbox-next" onclick="navLB(1)"><i class="fas fa-chevron-right"></i></button>
+    <div class="img-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>
+    <img class="photos-lightbox-img" id="lbImg" draggable="false">
+    <div class="photos-lightbox-counter" id="lbCnt"></div>
+</div>
+
+<script>
+    let rawData = [];
+    let currentMonday = getMonday(new Date());
+    let inspectorsList = [];
+    const levels = ['1', '2', '3', '4', '5', '6'];
+    const daysName = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
+
+    function getMonday(d) {
+        const date = new Date(d);
+        const day = date.getDay();
+        const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+        return new Date(date.setDate(diff));
+    }
+
+    function addDays(date, days) {
+        const result = new Date(date);
+        result.setDate(result.getDate() + days);
+        return result;
+    }
+
+    function formatDateForDisplay(date) {
+        return date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+    }
+
+    function formatDateForDB(date) {
+        const d = new Date(date);
+        let month = '' + (d.getMonth() + 1);
+        let day = '' + d.getDate();
+        const year = d.getFullYear();
+        if (month.length < 2) month = '0' + month;
+        if (day.length < 2) day = '0' + day;
+        return [year, month, day].join('-');
+    }
+
+    async function loadData() {
+        try {
+            const res = await fetch('/api/submit-inert/data');
+            rawData = await res.json();
+            renderTable();
+        } catch (e) {
+            document.getElementById('tableBody').innerHTML = `<tr><td colspan="3" class="text-danger" style="text-align: center; padding: 20px;">โหลดข้อมูลล้มเหลว</td></tr>`;
+        }
+    }
+
+    async function loadInspectors() {
+        try {
+            const res = await fetch('/inspectors.json');
+            inspectorsList = await res.json();
+            const select = document.getElementById('editReporter');
+            inspectorsList.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                select.appendChild(opt);
+            });
+        } catch (e) {}
+    }
+
+    // Combine all classes from multiple records of the same day
+    function analyzeCombinedStatus(records) {
+        if (!records || records.length === 0) return { a5: 'ยังไม่ส่ง', dome: 'ยังไม่ส่ง', a5Color: 'text-danger', domeColor: 'text-danger', allComplete: false };
+        
+        let combinedClasses = [];
+        records.forEach(r => {
+            if (r.classes) combinedClasses = combinedClasses.concat(r.classes);
+        });
+        
+        // Remove duplicates
+        combinedClasses = [...new Set(combinedClasses)];
+
+        const a5Missing = [];
+        const domeMissing = [];
+
+        levels.forEach(l => {
+            if (!combinedClasses.includes(`ข้างอ.5 ม.${l}`)) a5Missing.push(l);
+            if (!combinedClasses.includes(`หลังโดม ม.${l}`)) domeMissing.push(l);
+        });
+
+        const allComplete = (a5Missing.length === 0 && domeMissing.length === 0);
+
+        return {
+            a5: a5Missing.length === 0 ? 'ครบ' : `ขาด ${a5Missing.join(', ')}`,
+            a5Color: a5Missing.length === 0 ? 'text-success' : 'text-danger',
+            dome: domeMissing.length === 0 ? 'ครบ' : `ขาด ${domeMissing.join(', ')}`,
+            domeColor: domeMissing.length === 0 ? 'text-success' : 'text-danger',
+            allComplete
+        };
+    }
+
+    function renderTable() {
+        const friday = addDays(currentMonday, 4);
+        document.getElementById('weekDisplay').textContent = `${formatDateForDisplay(currentMonday)} - ${formatDateForDisplay(friday)}`;
+
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+
+        for (let i = 0; i < 5; i++) {
+            const currentDayDate = addDays(currentMonday, i);
+            const dateStr = formatDateForDB(currentDayDate);
+            
+            // Get all records for this day
+            const dailyRecords = rawData.filter(d => d.date_str === dateStr);
+
+            const tr = document.createElement('tr');
+            tr.style.cursor = "pointer";
+            tr.onclick = () => openDailyListModal(dateStr, currentDayDate);
+            
+            const status = analyzeCombinedStatus(dailyRecords);
+            const dayColColor = dailyRecords.length > 0 ? (status.allComplete ? 'text-success' : 'text-danger') : 'text-danger';
+            
+            const dayHtml = `<td class="day-col ${dayColColor}">${daysName[i]} <div style="font-size:0.8rem; font-weight:normal; margin-top:4px; color:#5f6368;">${formatDateForDisplay(currentDayDate)}</div></td>`;
+
+            let statusHtml = '';
+            if (dailyRecords.length > 0) {
+                const reporters = [...new Set(dailyRecords.map(r => r.reporter))].join(', ');
+                statusHtml = `
+                    <td>
+                        <div class="status-col">
+                            <div class="status-row">
+                                <span class="status-label">ข้างอ.5:</span>
+                                <span class="status-value ${status.a5Color}">${status.a5}</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">หลังโดม:</span>
+                                <span class="status-value ${status.domeColor}">${status.dome}</span>
+                            </div>
+                            <div style="font-size:0.8rem; color:#5f6368; margin-top:4px;">ผู้ส่ง: ${reporters}</div>
+                        </div>
+                    </td>
+                `;
+            } else {
+                statusHtml = `<td><span class="status-value text-danger">ยังไม่ส่ง</span></td>`;
+            }
+
+            const arrowHtml = `<td style="text-align: center; color: #5f6368; font-weight: bold; font-size: 18px;">&gt;</td>`;
+
+            tr.innerHTML = dayHtml + statusHtml + arrowHtml;
+            tr.addEventListener("mouseover", () => tr.style.background = "#f8f9fa");
+            tr.addEventListener("mouseout", () => tr.style.background = "transparent");
+            tbody.appendChild(tr);
+        }
+    }
+
+    document.getElementById('prevWeek').addEventListener('click', () => {
+        currentMonday = addDays(currentMonday, -7);
+        renderTable();
+    });
+
+    document.getElementById('nextWeek').addEventListener('click', () => {
+        currentMonday = addDays(currentMonday, 7);
+        renderTable();
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('refreshBtn');
+        btn.style.transform = 'rotate(360deg)';
+        btn.style.transition = 'transform 0.5s ease';
+        await loadData();
+        setTimeout(() => {
+            btn.style.transition = 'none';
+            btn.style.transform = 'rotate(0deg)';
+        }, 500);
+    });
+
+    // Daily List Modal Logic
+    const dailyListModal = document.getElementById('dailyListModal');
+    
+    window.openDailyListModal = function(dateStr, displayDateObj) {
+        document.getElementById('dailyListTitleDate').textContent = formatDateForDisplay(displayDateObj);
+        const content = document.getElementById('dailyListContent');
+        content.innerHTML = '';
+        
+        const records = rawData.filter(d => d.date_str === dateStr);
+        
+        // Populate global imgs array for Lightbox
+        imgs = records.map(r => 'https://cdn.yumistack.net/' + r.image_key).filter(k => !k.endsWith('undefined') && !k.endsWith('admin_override') && k !== 'https://cdn.yumistack.net/');
+
+        const hasOverride = records.some(r => r.is_admin_override);
+
+        const headerDiv = document.createElement('div');
+        headerDiv.style.marginBottom = "16px";
+        headerDiv.innerHTML = `
+            <button onclick="toggleAdminOverride('${dateStr}')" style="width: 100%; padding: 10px; background: ${hasOverride ? '#fef7f7' : '#fff'}; color: ${hasOverride ? '#b00909' : '#5f6368'}; border: 1px solid ${hasOverride ? '#b00909' : '#dadce0'}; border-radius: 6px; font-family: 'Prompt'; font-weight: 500; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;">
+                <i class="fas ${hasOverride ? 'fa-check-circle' : 'fa-check'}"></i> ${hasOverride ? 'ทำเครื่องหมายว่าครบแล้ว (กดเพื่อยกเลิก)' : 'ทำเครื่องหมายว่าครบแล้ว'}
+            </button>
+        `;
+        content.appendChild(headerDiv);
+
+        if (records.length === 0) {
+            const emptyDiv = document.createElement('div');
+            emptyDiv.style = "text-align: center; color: #5f6368; padding: 20px;";
+            emptyDiv.textContent = "ไม่มีข้อมูลการส่งของวันนี้";
+            content.appendChild(emptyDiv);
+        } else {
+            records.forEach((r, idx) => {
+                if (r.is_admin_override) return; // Skip showing override record in list
+
+                // Determine missing for this specific record
+                const a5Has = [];
+                const domeHas = [];
+                r.classes.forEach(c => {
+                    if (c.startsWith("ข้างอ.5")) a5Has.push(c.replace("ข้างอ.5 ", ""));
+                    if (c.startsWith("หลังโดม")) domeHas.push(c.replace("หลังโดม ", ""));
+                });
+
+                const div = document.createElement('div');
+                div.style.border = "1px solid #dadce0";
+                div.style.borderRadius = "8px";
+                div.style.padding = "16px";
+                div.style.display = "flex";
+                div.style.justifyContent = "space-between";
+                div.style.alignItems = "flex-start";
+                div.style.gap = "12px";
+
+                div.innerHTML = `
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; color: #202124; margin-bottom: 8px;">${r.reporter}</div>
+                        <div style="font-size: 0.85rem; color: #5f6368; margin-bottom: 4px;"><b>ข้างอ.5:</b> ${a5Has.length > 0 ? a5Has.join(', ') : '-'}</div>
+                        <div style="font-size: 0.85rem; color: #5f6368; margin-bottom: 12px;"><b>หลังโดม:</b> ${domeHas.length > 0 ? domeHas.join(', ') : '-'}</div>
+                        <button class="btn-edit" onclick='openEditModal(${JSON.stringify(r)})'>แก้ไขฟอร์มนี้</button>
+                    </div>
+                    <div>
+                        <img src="https://cdn.yumistack.net/${r.image_key}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 6px; border: 1px solid #dadce0; cursor: pointer;" alt="Proof" onclick="openLB(${idx})">
+                    </div>
+                `;
+                content.appendChild(div);
+            });
+        }
+        
+        dailyListModal.style.display = 'flex';
+    }
+
+    window.toggleAdminOverride = async function(dateStr) {
+        if (!confirm("ยืนยันปรับสถานะของวันนี้?")) return;
+        try {
+            const res = await fetch('/api/submit-inert/admin-override', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date_str: dateStr })
+            });
+            const data = await res.json();
+            if (data.success) {
+                await loadData();
+                openDailyListModal(dateStr, new Date(dateStr)); // refresh modal
+            } else {
+                alert("เกิดข้อผิดพลาด: " + data.message);
+            }
+        } catch (e) {
+            alert("Error: " + e.message);
+        }
+    };
+
+    window.closeDailyListModal = function() {
+        dailyListModal.style.display = 'none';
+    }
+
+
+
+    // Edit Modal Logic
+    const editModal = document.getElementById('editModal');
+    const a5Container = document.getElementById('editCbA5');
+    const domeContainer = document.getElementById('editCbDome');
+    
+    const editReporterInput = document.getElementById('editReporter');
+    const editDropdown = document.getElementById('edit-inspector-dropdown');
+
+    function renderEditDropdown(filterText = "") {
+        editDropdown.innerHTML = "";
+        let matchCount = 0;
+        const lowerFilter = filterText.toLowerCase();
+
+        for (let name of inspectorsList) {
+            if (name.toLowerCase().includes(lowerFilter)) {
+                const div = document.createElement("div");
+                div.className = "select-option";
+                
+                if (filterText) {
+                    const regex = new RegExp(`(${filterText})`, "gi");
+                    div.innerHTML = name.replace(regex, "<mark>$1</mark>");
+                } else {
+                    div.textContent = name;
+                }
+                
+                div.onclick = () => {
+                    editReporterInput.value = name;
+                    editDropdown.classList.remove("open");
+                };
+                editDropdown.appendChild(div);
+                matchCount++;
+            }
+        }
+        if (matchCount === 0) {
+            const div = document.createElement("div");
+            div.className = "select-option";
+            div.textContent = "สามารถพิมพ์ชื่ออื่นๆ ได้เลย";
+            div.style.color = "#9aa0a6";
+            editDropdown.appendChild(div);
+        }
+    }
+
+    editReporterInput.addEventListener('focus', () => {
+        renderEditDropdown(editReporterInput.value);
+        editDropdown.classList.add("open");
+    });
+
+    editReporterInput.addEventListener('input', (e) => {
+        renderEditDropdown(e.target.value);
+        editDropdown.classList.add("open");
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!document.getElementById('edit-inspector-select').contains(e.target)) {
+            editDropdown.classList.remove("open");
+        }
+    });
+
+    // Checkbox helper
+    function createModalCheckbox(parent, id, value, labelText) {
+        const div = document.createElement('label');
+        div.className = 'cb-item';
+        
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = id;
+        input.value = value;
+        
+        const label = document.createElement('span');
+        label.textContent = labelText;
+        
+        div.appendChild(input);
+        div.appendChild(label);
+        
+        input.addEventListener('change', (e) => {
+            if (e.target.checked) div.classList.add('selected');
+            else div.classList.remove('selected');
+        });
+        
+        parent.appendChild(div);
+    }
+
+    levels.forEach(l => {
+        createModalCheckbox(a5Container, `edit_a5_${l}`, `ข้างอ.5 ม.${l}`, `ม.${l}`);
+        createModalCheckbox(domeContainer, `edit_dome_${l}`, `หลังโดม ม.${l}`, `ม.${l}`);
+    });
+
+    function clearEditModal() {
+        document.getElementById('editId').value = '';
+        document.getElementById('editDateStr').value = '';
+        document.getElementById('editReporter').value = inspectorsList[0] || '';
+        document.querySelectorAll('.cb-item input').forEach(cb => {
+            cb.checked = false;
+            cb.parentElement.classList.remove('selected');
+        });
+    }
+
+    window.openEditModal = function(record) {
+        clearEditModal();
+        document.getElementById('modalTitle').textContent = `แก้ไขข้อมูลของ ${record.reporter}`;
+        document.getElementById('editId').value = record.id;
+        document.getElementById('editDateStr').value = record.date_str;
+        document.getElementById('editReporter').value = record.reporter;
+        
+        record.classes.forEach(c => {
+            const cb = document.querySelector(`.cb-item input[value="${c}"]`);
+            if(cb) {
+                cb.checked = true;
+                cb.parentElement.classList.add('selected');
+            }
+        });
+        
+        editModal.style.display = 'flex';
+    }
+
+    window.closeEditModal = function() {
+        editModal.style.display = 'none';
+    }
+
+    document.getElementById('editForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const saveBtn = document.getElementById('saveEditBtn');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'กำลังบันทึก...';
+
+        const id = document.getElementById('editId').value;
+        const reporter = document.getElementById('editReporter').value.trim();
+        const checked = Array.from(document.querySelectorAll('.cb-item input:checked')).map(cb => cb.value);
+
+        if (!reporter) {
+            alert("กรุณากรอกชื่อผู้รายงาน");
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'บันทึกข้อมูล';
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('id', id);
+        formData.append('reporter', reporter);
+        formData.append('classes', JSON.stringify(checked));
+
+        try {
+            const res = await fetch('/api/submit-inert/submit', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if(data.success) {
+                closeEditModal();
+                closeDailyListModal();
+                await loadData();
+            } else {
+                alert("เกิดข้อผิดพลาด: " + data.message);
+            }
+        } catch (err) {
+            alert("Error: " + err.message);
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'บันทึกข้อมูล';
+        }
+    });
+
+    window.deleteRecord = async function() {
+        const id = document.getElementById('editId').value;
+        if (!confirm("คุณแน่ใจหรือไม่ที่จะลบรายงานนี้? การกระทำนี้ไม่สามารถย้อนกลับได้")) return;
+        
+        const deleteBtn = document.getElementById('deleteBtn');
+        deleteBtn.disabled = true;
+        deleteBtn.textContent = 'กำลังลบ...';
+
+        try {
+            const res = await fetch('/api/submit-inert/delete?id=' + encodeURIComponent(id), {
+                method: 'DELETE'
+            });
+            const data = await res.json();
+            if (data.success) {
+                closeEditModal();
+                await loadData(); // refresh table
+                closeDailyListModal(); // close list to prevent stale data
+            } else {
+                throw new Error(data.message || 'Delete failed');
+            }
+        } catch (err) {
+            alert("Error: " + err.message);
+        } finally {
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = '<i class="fas fa-trash"></i> ลบรายงาน';
+        }
+    };
+
+    // Lock Screen Logic
+    window.submitPassword = function() {
+        const input = document.getElementById('lockPassword');
+        const err = document.getElementById('lockError');
+        const card = document.getElementById('lockCard');
+        if (input.value === 'next9') {
+            localStorage.setItem('next9_viewforms_auth', 'true');
+            unlockScreen();
+        } else {
+            err.textContent = 'รหัสผ่านไม่ถูกต้อง';
+            input.value = '';
+            card.classList.remove('shake');
+            void card.offsetWidth; // trigger reflow
+            card.classList.add('shake');
+        }
+    };
+
+    function unlockScreen() {
+        document.getElementById('lockScreen').style.opacity = '0';
+        setTimeout(() => {
+            document.getElementById('lockScreen').style.display = 'none';
+        }, 300);
+        
+        // Initialize data after unlocking
+        loadInspectors();
+        loadData();
+    }
+
+    // Check Session
+    if (localStorage.getItem('next9_viewforms_auth') === 'true') {
+        document.getElementById('lockScreen').style.display = 'none';
+        loadInspectors();
+        loadData();
+    } else {
+        // Prevent initial load until unlocked
+        document.getElementById('lockScreen').style.transition = "opacity 0.3s ease";
+    }
+
+
+    // --- Lightbox Logic (Exact from album) ---
+    let imgs = [];
+    let lbIdx = -1;
+    let lbZoom = 1;
+    let isPanning = false, startPanX = 0, startPanY = 0, lbPanX = 0, lbPanY = 0, initialDist = 0;
+
+    function $(id) { return document.getElementById(id); }
+
+    window.openLB = function(i, slideDir = 0) {
+        if (!imgs[i]) return;
+        lbIdx = i;
+        $('lb').classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        lbZoom = 1; lbPanX = 0; lbPanY = 0;
+        const btn = $('lbZoomBtn');
+        if(btn) btn.innerHTML = '<i class="fas fa-search-plus"></i>';
+        
+        const img = $('lbImg');
+        
+        if (slideDir !== 0) {
+            img.style.transition = 'none';
+            img.style.transform = `translate(${slideDir * 100}vw, 0)`;
+            img.style.opacity = '0';
+            void img.offsetWidth;
+            img.style.transition = 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.4s ease';
+            img.style.transform = `translate(0, 0)`;
+            img.style.opacity = '1';
+        } else {
+            updateZoom(false);
+            img.style.opacity = '1';
+        }
+
+        img.src = imgs[i]; 
+        $('lbCnt').textContent = (i+1)+' / '+imgs.length; 
+        $('lb').classList.add('loading');
+        
+        // Remove loading state once image loads
+        img.onload = () => $('lb').classList.remove('loading');
+    };
+
+    window.closeLB = function(){ 
+        $('lb').classList.remove('active','loading'); 
+        document.body.style.overflow = ''; 
+        lbIdx = -1; 
+        $('lbImg').style.opacity = '0';
+        resetZoom();
+    };
+
+    window.navLB = function(d){ 
+        if (imgs.length <= 1) return;
+        let n = lbIdx + d; 
+        if(n < 0) n = imgs.length - 1; 
+        if(n >= imgs.length) n = 0;
+        
+        const img = $('lbImg');
+        img.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 1, 1), opacity 0.3s ease';
+        img.style.transform = `translate(${d * -50}vw, 0)`;
+        img.style.opacity = '0';
+        
+        setTimeout(() => {
+            openLB(n, d);
+        }, 250);
+    };
+
+    document.addEventListener('keydown', e => { 
+        if(lbIdx === -1) return; 
+        if(e.key === 'Escape') closeLB(); 
+        if(e.key === 'ArrowLeft') navLB(-1); 
+        if(e.key === 'ArrowRight') navLB(1); 
+    });
+
+    $('lb').addEventListener('click', e => { 
+        if(e.target === e.currentTarget || e.target.classList.contains('photos-lightbox-close')) closeLB(); 
+    });
+
+    window.toggleZoom = function() {
+        if(lbZoom > 1) {
+            resetZoom();
+        } else {
+            lbZoom = 2;
+            $('lbZoomBtn').innerHTML = '<i class="fas fa-search-minus"></i>';
+        }
+        updateZoom(true);
+    };
+
+    function resetZoom() {
+        lbZoom = 1; lbPanX = 0; lbPanY = 0;
+        const btn = $('lbZoomBtn');
+        if(btn) btn.innerHTML = '<i class="fas fa-search-plus"></i>';
+        updateZoom(false);
+    }
+
+    function updateZoom(animate) {
+        const img = $('lbImg');
+        img.style.transition = animate ? 'transform 0.3s cubic-bezier(0.4, 0, 1, 1)' : 'none';
+        img.style.transform = `translate(${lbPanX}px, ${lbPanY}px) scale(${lbZoom})`;
+    }
+
+    // Pinch to zoom & Pan on Image only
+    const lbImgEl = $('lbImg');
+    lbImgEl.addEventListener('touchstart', e => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            initialDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        } else if (e.touches.length === 1 && lbZoom > 1) {
+            isPanning = true;
+            startPanX = e.touches[0].clientX - lbPanX;
+            startPanY = e.touches[0].clientY - lbPanY;
+        }
+    }, {passive: false});
+
+    lbImgEl.addEventListener('touchmove', e => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            const scale = dist / initialDist;
+            let newZoom = lbZoom * scale;
+            newZoom = Math.max(1, Math.min(newZoom, 4));
+            if(newZoom !== lbZoom) {
+                lbZoom = newZoom;
+                updateZoom(false);
+                const btn = $('lbZoomBtn');
+                if(btn) btn.innerHTML = lbZoom > 1 ? '<i class="fas fa-search-minus"></i>' : '<i class="fas fa-search-plus"></i>';
+            }
+            initialDist = dist;
+        } else if (e.touches.length === 1 && isPanning && lbZoom > 1) {
+            e.preventDefault();
+            lbPanX = e.touches[0].clientX - startPanX;
+            lbPanY = e.touches[0].clientY - startPanY;
+            updateZoom(false);
+        }
+    }, {passive: false});
+
+    lbImgEl.addEventListener('touchend', e => {
+        isPanning = false;
+        if (lbZoom <= 1) resetZoom();
+    });
+
+    // Mouse Pan
+    lbImgEl.addEventListener('mousedown', e => {
+        if(lbZoom > 1) {
+            e.preventDefault();
+            isPanning = true;
+            startPanX = e.clientX - lbPanX;
+            startPanY = e.clientY - lbPanY;
+        }
+    });
+    window.addEventListener('mousemove', e => {
+        if(isPanning) {
+            lbPanX = e.clientX - startPanX;
+            lbPanY = e.clientY - startPanY;
+            updateZoom(false);
+        }
+    });
+    window.addEventListener('mouseup', () => isPanning = false);
+
+</script>
+</body>
+</html>

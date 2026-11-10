@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <base href="/forms/building/">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/building.svg">
+    <title>แบบฟอร์มตรวจอาคาร | สภานักเรียน</title>
+    <meta name="description" content="แบบฟอร์มตรวจอาคาร สภานักเรียนโรงเรียนสิรินธร จังหวัดสุรินทร์">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/forms/building/style.css?v=6">
+</head>
+<body>
+
+<div class="form-container">
+
+    <!-- ==================== PAGE 1: Basic Info ==================== -->
+    <div id="page1" class="form-page active">
+        <div class="form-card header-card">
+            <h1>แบบฟอร์มตรวจอาคาร</h1>
+            <p>สภานักเรียน โรงเรียนสิรินธร จังหวัดสุรินทร์</p>
+        </div>
+
+        <div class="form-card">
+            <h2>ข้อมูลเบื้องต้น</h2>
+
+            <!-- Date picker -->
+            <div class="form-group" id="grp-date">
+                <label>วันที่ <span class="required">*</span></label>
+                <input type="date" id="form-date">
+                <div class="error-msg">กรุณาเลือกวันที่</div>
+            </div>
+
+            <!-- Inspector 1 -->
+            <div class="form-group" id="grp-inspector1">
+                <label>ชื่อผู้ตรวจคนที่ 1 <span class="required">*</span></label>
+                <div class="searchable-select" id="inspector-select-1">
+                    <input type="text" id="inspector-input-1" placeholder="พิมพ์ค้นหาชื่อ..." autocomplete="off">
+                    <div class="select-dropdown" id="inspector-dropdown-1"></div>
+                </div>
+                <div class="error-msg">กรุณาเลือกชื่อผู้ตรวจอย่างน้อย 1 คน</div>
+            </div>
+
+            <!-- Inspector 2 -->
+            <div class="form-group" id="grp-inspector2">
+                <label>ชื่อผู้ตรวจคนที่ 2 (ตัวเลือก)</label>
+                <div class="searchable-select" id="inspector-select-2">
+                    <input type="text" id="inspector-input-2" placeholder="พิมพ์ค้นหาชื่อ..." autocomplete="off">
+                    <div class="select-dropdown" id="inspector-dropdown-2"></div>
+                </div>
+            </div>
+
+            <!-- Inspector 3 -->
+            <div class="form-group" id="grp-inspector3">
+                <label>ชื่อผู้ตรวจคนที่ 3 (ตัวเลือก)</label>
+                <div class="searchable-select" id="inspector-select-3">
+                    <input type="text" id="inspector-input-3" placeholder="พิมพ์ค้นหาชื่อ..." autocomplete="off">
+                    <div class="select-dropdown" id="inspector-dropdown-3"></div>
+                </div>
+            </div>
+
+            <!-- Building selection -->
+            <div class="form-group" id="grp-building">
+                <label>อาคาร <span class="required">*</span></label>
+                <div class="radio-group" id="building-radios">
+                    <!-- Rendered dynamically via JS for secure textContent handling -->
+                </div>
+                <div class="error-msg">กรุณาเลือกอาคาร</div>
+            </div>
+        </div>
+
+        <div class="form-nav">
+            <span></span>
+            <button class="btn btn-primary" id="btn-next">ถัดไป</button>
+        </div>
+    </div>
+
+    <!-- ==================== PAGE 2: Room Inspection ==================== -->
+    <div id="page2" class="form-page">
+        <div class="form-card header-card">
+            <h1>แบบฟอร์มตรวจอาคาร</h1>
+            <p id="page2-subtitle">สภานักเรียน โรงเรียนสิรินธร จังหวัดสุรินทร์</p>
+        </div>
+
+        <div class="form-card">
+            <h2 id="building-title">ตรวจอาคาร</h2>
+            <p class="subtitle" id="building-info"></p>
+        </div>
+
+
+
+        <!-- Room cards container, populated dynamically -->
+        <div id="room-cards"></div>
+
+        <div class="form-nav">
+            <button class="btn btn-secondary" id="btn-back">← ย้อนกลับ</button>
+            <button class="btn btn-primary" id="btn-submit">ส่งแบบฟอร์ม</button>
+        </div>
+    </div>
+
+</div>
+
+<!-- Photo Options Modal -->
+<div class="modal-overlay" id="photo-options-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+    <div style="background: white; border-radius: 12px; width: 90%; max-width: 400px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); padding: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="margin: 0; font-family: 'Prompt', sans-serif; font-size: 1.1rem; color: #202124;">เพิ่มรูปภาพ</h3>
+            <button onclick="closePhotoModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #5f6368; line-height: 1;">&times;</button>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div onclick="triggerCamera()" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 16px; border: 1px solid #dadce0; border-radius: 8px; background: #fafafa; cursor: pointer; transition: all 0.2s; color: #5f6368; font-size: 0.95rem; gap: 10px; font-family: 'Prompt', sans-serif;" onmouseover="this.style.background='#fef7f7'; this.style.borderColor='#b00909'; this.style.color='#b00909'" onmouseout="this.style.background='#fafafa'; this.style.borderColor='#dadce0'; this.style.color='#5f6368'">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width: 32px; height: 32px;"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                เปิดกล้อง
+            </div>
+            <div onclick="triggerGallery()" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 16px; border: 1px solid #dadce0; border-radius: 8px; background: #fafafa; cursor: pointer; transition: all 0.2s; color: #5f6368; font-size: 0.95rem; gap: 10px; font-family: 'Prompt', sans-serif;" onmouseover="this.style.background='#fef7f7'; this.style.borderColor='#b00909'; this.style.color='#b00909'" onmouseout="this.style.background='#fafafa'; this.style.borderColor='#dadce0'; this.style.color='#5f6368'">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width: 32px; height: 32px;"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                เลือกรูปภาพ
+            </div>
+        </div>
+    </div>
+</div>
+
+<input type="file" id="global-camera-input" accept="image/*" capture="environment" style="display: none;" onchange="handleGlobalPhotoSelect(this)">
+<input type="file" id="global-gallery-input" accept="image/*" multiple style="display: none;" onchange="handleGlobalPhotoSelect(this)">
+
+<!-- Photo Grid Modal -->
+<div class="modal-overlay" id="photo-grid-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+    <div style="background: white; border-radius: 12px; width: 90%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+        <div style="padding: 16px 24px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0; font-family: 'Prompt', sans-serif; font-size: 1.1rem; color: #202124;">ภาพที่อัปโหลด</h3>
+            <button onclick="closePhotoGridModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #5f6368; line-height: 1;">&times;</button>
+        </div>
+        <div style="padding: 24px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px;" id="photo-grid-container">
+            <!-- Images go here -->
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal-overlay" id="confirm-delete-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center;">
+    <div style="background: white; border-radius: 12px; width: 90%; max-width: 320px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); padding: 24px; text-align: center;">
+        <svg fill="none" stroke="#d32f2f" stroke-width="2" viewBox="0 0 24 24" style="width: 48px; height: 48px; margin-bottom: 16px; margin-left: auto; margin-right: auto;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        <h3 style="margin: 0 0 10px 0; font-family: 'Prompt', sans-serif; font-size: 1.1rem; color: #202124;">ยืนยันการลบรูปภาพ</h3>
+        <p style="color: #5f6368; font-size: 0.95rem; margin-bottom: 24px;">คุณแน่ใจหรือไม่ที่จะลบรูปภาพนี้?</p>
+        <div style="display: flex; gap: 12px; justify-content: center;">
+            <button onclick="closeConfirmDeleteModal()" style="padding: 10px 20px; border: 1px solid #dadce0; background: white; border-radius: 6px; cursor: pointer; font-family: 'Prompt', sans-serif; color: #5f6368; font-size: 0.95rem;">ยกเลิก</button>
+            <button id="btn-confirm-delete" style="padding: 10px 20px; border: none; background: #d32f2f; color: white; border-radius: 6px; cursor: pointer; font-family: 'Prompt', sans-serif; font-size: 0.95rem;">ลบรูปภาพ</button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Back Modal -->
+<div class="modal-overlay" id="confirm-back-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center;">
+    <div style="background: white; border-radius: 12px; width: 90%; max-width: 320px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); padding: 24px; text-align: center;">
+        <svg fill="none" stroke="#f57c00" stroke-width="2" viewBox="0 0 24 24" style="width: 48px; height: 48px; margin-bottom: 16px; margin-left: auto; margin-right: auto;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        <h3 style="margin: 0 0 10px 0; font-family: 'Prompt', sans-serif; font-size: 1.1rem; color: #202124;">ยืนยันการย้อนกลับ</h3>
+        <p style="color: #5f6368; font-size: 0.95rem; margin-bottom: 24px;">คุณต้องการย้อนกลับใช่หรือไม่?<br>ข้อมูลที่ยังไม่ถูกบันทึกจะสูญหาย</p>
+        <div style="display: flex; gap: 12px; justify-content: center;">
+            <button onclick="document.getElementById('confirm-back-modal').style.display='none'" style="padding: 10px 20px; border: 1px solid #dadce0; background: white; border-radius: 6px; cursor: pointer; font-family: 'Prompt', sans-serif; color: #5f6368; font-size: 0.95rem;">ยกเลิก</button>
+            <button id="btn-confirm-back" style="padding: 10px 20px; border: none; background: #f57c00; color: white; border-radius: 6px; cursor: pointer; font-family: 'Prompt', sans-serif; font-size: 0.95rem;">ย้อนกลับ</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast-container"></div>
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loading"><div class="spinner"></div></div>
+
+<!-- Image Zoom Lightbox (Exact from album) -->
+<div class="photos-lightbox" id="lb">
+    <button class="photos-lightbox-close" onclick="closeLB()"><i class="fas fa-times"></i></button>
+    <button style="position:absolute;top:20px;left:20px;width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,.15);color:white;font-size:1.2rem;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;" onclick="toggleZoom()" id="lbZoomBtn"><i class="fas fa-search-plus"></i></button>
+    <button class="photos-lightbox-nav photos-lightbox-prev" onclick="navLB(-1)"><i class="fas fa-chevron-left"></i></button>
+    <button class="photos-lightbox-nav photos-lightbox-next" onclick="navLB(1)"><i class="fas fa-chevron-right"></i></button>
+    <div class="img-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>
+    <img class="photos-lightbox-img" id="lbImg" draggable="false">
+    <div class="photos-lightbox-counter" id="lbCnt"></div>
+</div>
+
+<!-- Upload Progress Toast -->
+<div id="uploadOverlay" style="display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #323232; color: white; padding: 12px 24px; border-radius: 8px; z-index: 10000; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-family: 'Prompt', sans-serif; gap: 12px;">
+    <div class="spinner" style="width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; margin: 0; display: inline-block;"></div>
+    <span id="uploadStatusText" style="font-size: 0.95rem;">กำลังอัปโหลดภาพ...</span>
+</div>
+
+<script src="/forms/building/app.js?v=25"></script>
+</body>
+</html>

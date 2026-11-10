@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#bg)"/>
+  <!-- Clipboard with check — building inspection -->
+  <rect x="19" y="12" width="26" height="34" rx="4" fill="white" opacity="0.2"/>
+  <rect x="21" y="14" width="22" height="30" rx="3" fill="white" opacity="0.9"/>
+  <!-- Clipboard clip -->
+  <rect x="27" y="10" width="10" height="6" rx="2" fill="white"/>
+  <!-- Check lines -->
+  <line x1="26" y1="26" x2="38" y2="26" stroke="#6366f1" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+  <line x1="26" y1="31" x2="35" y2="31" stroke="#6366f1" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+  <line x1="26" y1="36" x2="33" y2="36" stroke="#6366f1" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+  <!-- Checkmark circle -->
+  <circle cx="46" cy="40" r="10" fill="#22c55e"/>
+  <polyline points="41,40 44.5,43.5 51,37" stroke="white" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

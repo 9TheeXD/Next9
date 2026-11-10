@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#bg)"/>
+  <!-- Person silhouette -->
+  <circle cx="32" cy="22" r="8" fill="white" opacity="0.9"/>
+  <path d="M18 48c0-10 6-16 14-16s14 6 14 16" fill="white" opacity="0.85"/>
+  <!-- Small people in back -->
+  <circle cx="16" cy="28" r="4.5" fill="white" opacity="0.25"/>
+  <path d="M8 46c0-6 3.5-10 8-10s8 4 8 10" fill="white" opacity="0.2"/>
+  <circle cx="48" cy="28" r="4.5" fill="white" opacity="0.25"/>
+  <path d="M40 46c0-6 3.5-10 8-10s8 4 8 10" fill="white" opacity="0.2"/>
+</svg>

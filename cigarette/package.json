@@ -1,0 +1,21 @@
+{
+  "name": "cigarette",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "check_logs.js",
+  "scripts": {
+    "build:mobile": "cd mobile-app && npx tsc --noEmit && npx expo export --platform web && node scripts/generate-sw.js",
+    "build:admin": "cd admin-web && npx prisma generate && next build",
+    "build": "npm run build:admin && npm run build:mobile",
+    "deploy:mobile": "cd mobile-app && npx tsc --noEmit && sudo npx expo export --platform web && sudo node scripts/generate-sw.js",
+    "deploy:admin": "cd admin-web && npx prisma generate && sudo docker build -t ciga-next9-img . && sudo docker rm -f ciga-next9 && sudo docker run -d --name ciga-next9 --restart unless-stopped --network host --env-file .env.local -v /home/cmp/sdh-council/cigarette/admin-web/persistent-sounds:/app/public/sounds ciga-next9-img",
+    "restart:admin": "sudo docker restart ciga-next9",
+    "db:up": "cd admin-web && sudo docker-compose up -d",
+    "db:down": "cd admin-web && sudo docker-compose down",
+    "db:restart": "sudo docker restart nextbreath-db",
+    "deploy": "npm run deploy:admin && npm run deploy:mobile"
+  }
+}

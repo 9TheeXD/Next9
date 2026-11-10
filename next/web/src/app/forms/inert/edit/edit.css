@@ -1,0 +1,94 @@
+.edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.edit-head .t-card-title {
+  margin: 0;
+}
+.edit-terms {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #f1eeed;
+}
+.edit-terms button {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.edit-terms button.is-on {
+  background: #0f9d58;
+  color: #fff;
+}
+.edit-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: -6px 0 14px;
+  font-size: 0.88rem;
+  color: #0f9d58 !important;
+  font-weight: 600;
+}
+.edit-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.edit-tabs .inert-field {
+  margin: 0;
+}
+.edit-col {
+  align-items: center;
+}
+.edit-letter {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #0f9d58;
+  color: #fff;
+  font-family: "Outfit", sans-serif;
+  font-weight: 700;
+}
+.edit-col-inputs {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.edit-col-actions {
+  display: flex;
+  gap: 4px;
+}
+.edit-col-actions .t-icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.edit-bar .t-input {
+  flex: 1;
+}
+@media (max-width: 640px) {
+  .edit-tabs,
+  .edit-col-inputs {
+    grid-template-columns: 1fr;
+  }
+  .edit-col {
+    flex-wrap: wrap;
+  }
+  .edit-col-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

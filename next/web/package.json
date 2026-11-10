@@ -1,0 +1,38 @@
+{
+  "name": "nextnext9-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev-all.mjs",
+    "dev:next": "next dev -p 8071 -H 127.0.0.1",
+    "dev:legacy": "node scripts/legacy-static.mjs",
+    "build": "next build",
+    "start": "node scripts/start-all.mjs",
+    "start:next": "next start -p 8093 -H 127.0.0.1",
+    "lint": "eslint",
+    "rebuild": "sudo docker build -t next9-web . && sudo docker rm -f next9-web && sudo docker run -d --name next9-web --restart unless-stopped --network host -e LEGACY_ROOT=/site -v $(pwd)/..:/site:ro next9-web",
+    "restart": "sudo docker restart next9-web"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.3.3",
+    "@tailwindcss/postcss": "^4.3.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "fflate": "^0.8.2",
+    "lucide-react": "^1.46.0",
+    "motion": "^13.4.0",
+    "next": "16.3.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.5",
+    "typescript": "^5"
+  }
+}

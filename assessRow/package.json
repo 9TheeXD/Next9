@@ -1,0 +1,30 @@
+{
+  "name": "assessrow-init",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "deploy": "sudo docker build -t assessrow . && sudo docker rm -f assessrow-app && sudo docker run -d --name assessrow-app --restart unless-stopped -p 7076:3000 -v $(pwd)/data:/app/data assessrow",
+    "rebuild": "sudo docker build -t assessrow . && sudo docker rm -f assessrow-app && sudo docker run -d --name assessrow-app --restart unless-stopped -p 7076:3000 -v $(pwd)/data:/app/data assessrow",
+    "restart": "sudo docker restart assessrow-app",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "docx": "^9.7.1",
+    "jose": "^6.2.3",
+    "lucide-react": "^1.16.0",
+    "next": "16.2.6",
+    "next-auth": "^4.24.14",
+    "node-cron": "^4.6.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "recharts": "^3.8.1"
+  },
+  "devDependencies": {
+    "eslint": "^9",
+    "eslint-config-next": "16.2.6"
+  }
+}

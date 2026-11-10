@@ -1,0 +1,32 @@
+.aider*
+.env
+
+# secrets
+service-account.json
+lineBot/sdh-next9-chatbot-48c3f65957fa.json
+
+# real user/student data (DBs, submissions, profile photos) — never belongs in git
+data/
+member/profile/
+students.json
+inspectors.json
+toilet_config.json
+toilet_submissions.json
+
+# backups — large binaries, likely contain the same data/secrets above
+*.tar.gz
+*.tar.gz.backup
+
+# build artifacts / runtime-generated / tool-local, not source
+node_modules/
+server_start_time.json
+.stfolder/
+.stignore
+.antigravitycli/
+.hidden.ai_agent_do_not_care/
+
+# Local dev stand-in for R2 (NEXT9_DEV_READONLY=1); never sync or ship it
+.dev-r2
+
+# local dev copy of data/
+data-dev/

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/toilet.svg">
+    <title>จัดการแบบฟอร์มห้องน้ำ - สภานักเรียน</title>
+    <link rel="stylesheet" href="/style.css?v=2">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Login Gate -->
+    <div id="loginGate" class="toilet-login-page">
+        <div class="toilet-login-card">
+            <div style="font-size:2.5rem;margin-bottom:16px;">🔐</div>
+            <h2>เข้าสู่ระบบจัดการ</h2>
+            <p class="toilet-login-sub">สำหรับสมาชิกพรรค NEXT9</p>
+            <input type="password" class="toilet-login-input" id="passwordInput" placeholder="รหัสผ่าน" onkeydown="if(event.key==='Enter')doLogin()">
+            <button class="toilet-login-btn" onclick="doLogin()"><i class="fas fa-sign-in-alt"></i> เข้าสู่ระบบ</button>
+            <div class="toilet-login-error" id="loginError"></div>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="toilet-dashboard" style="display:none;">
+        <header class="toilet-dash-header">
+            <h1><i class="fas fa-clipboard-list"></i> จัดการแบบฟอร์มห้องน้ำ</h1>
+            <p id="dashSub">แสดงแบบฟอร์มที่ยังไม่ได้ปิด</p>
+            <div class="toilet-dash-tabs">
+                <button class="toilet-dash-tab active" id="tabOpen" onclick="switchTab('open')">รอดำเนินการ</button>
+                <button class="toilet-dash-tab" id="tabClosed" onclick="switchTab('closed')">ประวัติ</button>
+            </div>
+        </header>
+
+        <div class="toilet-dash-content">
+            <!-- Room filters -->
+            <div class="toilet-dash-filters" id="roomFilters"></div>
+            <!-- Submissions list -->
+            <div id="submissionsList"></div>
+        </div>
+    </div>
+
+    <div class="toilet-toast" id="toast"></div>
+
+    <script>
+        let password = '';
+        let allSubmissions = [];
+        let rooms = [];
+        let currentTab = 'open';
+        let filterRoom = '';
+
+        function showToast(msg, type) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'toilet-toast ' + type + ' show';
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        async function doLogin() {
+            const pw = document.getElementById('passwordInput').value;
+            if (!pw) return;
+            try {
+                const res = await fetch('/api/toilet/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pw })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    password = pw;
+                    localStorage.setItem('toilet_pw', pw);
+                    document.getElementById('loginGate').style.display = 'none';
+                    document.getElementById('dashboard').style.display = 'block';
+                    loadData();
+                } else {
+                    document.getElementById('loginError').textContent = 'รหัสผ่านไม่ถูกต้อง';
+                }
+            } catch (e) {
+                document.getElementById('loginError').textContent = 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์';
+            }
+        }
+
+        async function loadData() {
+            try {
+                const [subRes, cfgRes] = await Promise.all([
+                    fetch('/api/toilet/submissions' + (filterRoom ? '?roomId=' + filterRoom : ''), {
+                        headers: { 'Authorization': password }
+                    }),
+                    fetch('/api/toilet/config')
+                ]);
+                allSubmissions = await subRes.json();
+                const cfg = await cfgRes.json();
+                rooms = cfg.rooms || [];
+                buildFilters();
+                renderList();
+            } catch (e) {
+                showToast('โหลดข้อมูลไม่สำเร็จ', 'error');
+            }
+        }
+
+        function buildFilters() {
+            const container = document.getElementById('roomFilters');
+            let html = `<button class="toilet-dash-filter-btn ${!filterRoom ? 'active' : ''}" onclick="setFilter('')">ทั้งหมด</button>`;
+            rooms.forEach(r => {
+                html += `<button class="toilet-dash-filter-btn ${filterRoom === r.id ? 'active' : ''}" onclick="setFilter('${r.id}')">${r.name}</button>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function setFilter(roomId) {
+            filterRoom = roomId;
+            const url = new URL(window.location);
+            if (roomId) url.searchParams.set('id', roomId);
+            else url.searchParams.delete('id');
+            window.history.replaceState({}, '', url);
+            loadData();
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.getElementById('tabOpen').classList.toggle('active', tab === 'open');
+            document.getElementById('tabClosed').classList.toggle('active', tab === 'closed');
+            document.getElementById('dashSub').textContent = tab === 'open' ? 'แสดงแบบฟอร์มที่ยังไม่ได้ปิด' : 'ประวัติแบบฟอร์มที่ปิดแล้ว';
+            renderList();
+        }
+
+        function formatTime(ts) {
+            const d = new Date(ts);
+            const pad = n => String(n).padStart(2, '0');
+            return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        function renderList() {
+            const list = document.getElementById('submissionsList');
+            const filtered = allSubmissions.filter(s => currentTab === 'open' ? !s.closed : s.closed);
+
+            if (filtered.length === 0) {
+                list.innerHTML = `
+                    <div class="toilet-empty-state">
+                        <div><i class="fas fa-${currentTab === 'open' ? 'inbox' : 'archive'}"></i></div>
+                        <p>${currentTab === 'open' ? 'ไม่มีแบบฟอร์มที่รอดำเนินการ' : 'ยังไม่มีประวัติ'}</p>
+                    </div>`;
+                return;
+            }
+
+            list.innerHTML = filtered.map((s, i) => `
+                <div class="toilet-submission-card ${s.closed ? 'closed-card' : ''}" style="animation-delay:${i * 0.05}s">
+                    <div class="toilet-sub-top">
+                        <div class="toilet-sub-room"><i class="fas fa-restroom" style="color:var(--accent);margin-right:6px;"></i>${s.roomName || s.roomId}</div>
+                        <div class="toilet-sub-time">${formatTime(s.timestamp)}</div>
+                    </div>
+                    <div class="toilet-sub-info">
+                        <span class="toilet-sub-badge role-badge"><i class="fas fa-user"></i> ${s.role}</span>
+                        <span class="toilet-sub-badge problem-badge"><i class="fas fa-exclamation-triangle"></i> ${s.problem}</span>
+                    </div>
+                    ${!s.closed ? `
+                    <div class="toilet-sub-actions">
+                        <button class="toilet-close-btn" onclick="closeSubmission('${s.id}')">
+                            <i class="fas fa-check-circle"></i> ปิด
+                        </button>
+                    </div>` : `
+                    <div style="font-size:0.8rem;color:#999;text-align:right;">
+                        <i class="fas fa-check"></i> ปิดเมื่อ ${formatTime(s.closedAt)}
+                    </div>`}
+                </div>`).join('');
+        }
+
+        async function closeSubmission(id) {
+            if (!confirm('ต้องการปิดแบบฟอร์มนี้?')) return;
+            try {
+                const res = await fetch('/api/toilet/close', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': password },
+                    body: JSON.stringify({ id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('ปิดแบบฟอร์มสำเร็จ', 'success');
+                    loadData();
+                } else {
+                    showToast('เกิดข้อผิดพลาด', 'error');
+                }
+            } catch (e) {
+                showToast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์', 'error');
+            }
+        }
+
+        // Init
+        (function () {
+            const saved = localStorage.getItem('toilet_pw');
+            filterRoom = new URLSearchParams(window.location.search).get('id') || '';
+            if (saved) {
+                password = saved;
+                document.getElementById('loginGate').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                loadData();
+            }
+        })();
+    </script>
+</body>
+</html>

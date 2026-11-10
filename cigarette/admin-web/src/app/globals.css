@@ -1,0 +1,498 @@
+@import "tailwindcss";
+
+/* ============================================
+   Design System — Smoking Cessation Dashboard
+   ============================================ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border-color);
+  --color-accent: var(--accent);
+  --color-accent-light: var(--accent-light);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-kanit: var(--font-kanit), sans-serif;
+  --font-prompt: var(--font-prompt), sans-serif;
+  --font-sarabun: var(--font-sarabun), sans-serif;
+}
+
+:root {
+  --background: #0b0f1a;
+  --foreground: #e8ecf4;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-hover: rgba(255, 255, 255, 0.08);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --accent: #6c63ff;
+  --accent-light: #a78bfa;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --muted: #6b7280;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans, "Inter", system-ui, sans-serif);
+}
+
+/* ============================================
+   Glassmorphism Card
+   ============================================ */
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px);
+}
+
+/* ============================================
+   Gradient Cards
+   ============================================ */
+
+.gradient-emerald {
+  background: linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%);
+}
+
+.gradient-violet {
+  background: linear-gradient(135deg, #312e81 0%, #3b2f80 50%, #4c1d95 100%);
+}
+
+.gradient-amber {
+  background: linear-gradient(135deg, #78350f 0%, #92400e 50%, #b45309 100%);
+}
+
+.gradient-rose {
+  background: linear-gradient(135deg, #881337 0%, #9f1239 50%, #be123c 100%);
+}
+
+/* ============================================
+   Animated Counter
+   ============================================ */
+
+@keyframes count-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-count-up {
+  animation: count-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ============================================
+   Pulse Glow
+   ============================================ */
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(108, 99, 255, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(108, 99, 255, 0.4);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+/* ============================================
+   Sidebar
+   ============================================ */
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.sidebar-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--foreground);
+}
+
+.sidebar-link.active {
+  background: rgba(108, 99, 255, 0.15);
+  color: #a78bfa;
+}
+
+/* ============================================
+   Chart Containers
+   ============================================ */
+
+.chart-container {
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+}
+
+/* Recharts tooltip override */
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
+
+/* ============================================
+   Scrollbar
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ============================================
+   Shimmer Loading
+   ============================================ */
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+/* ============================================
+   Time Range Selector
+   ============================================ */
+
+.time-range-selector {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.time-range-btn {
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.time-range-btn:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.time-range-btn.active {
+  background: rgba(108, 99, 255, 0.2);
+  color: #a78bfa;
+  font-weight: 600;
+}
+
+/* ============================================
+   Overview Page Animations
+   ============================================ */
+
+@keyframes overview-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.overview-enter {
+  animation: overview-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.overview-enter > * {
+  opacity: 0;
+  animation: overview-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.overview-enter > *:nth-child(1) { animation-delay: 0.05s; }
+.overview-enter > *:nth-child(2) { animation-delay: 0.1s; }
+.overview-enter > *:nth-child(3) { animation-delay: 0.15s; }
+.overview-enter > *:nth-child(4) { animation-delay: 0.2s; }
+.overview-enter > *:nth-child(5) { animation-delay: 0.25s; }
+
+/* ============================================
+   Tab Navigation
+   ============================================ */
+
+.tab-nav {
+  display: flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tab-btn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  transition: all 0.2s ease;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tab-btn:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tab-btn.active {
+  background: rgba(108, 99, 255, 0.2);
+  color: #a78bfa;
+  font-weight: 600;
+}
+
+/* ============================================
+   Modal Overlay
+   ============================================ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.modal-card {
+  background: #1a1f2e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* ============================================
+   Data Table
+   ============================================ */
+
+.data-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.data-table {
+  width: 100%;
+  text-align: left;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  border-collapse: collapse;
+}
+
+.data-table thead {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.data-table th {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s;
+}
+
+.data-table th:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.data-table th.sorted {
+  color: #a78bfa;
+}
+
+.data-table tbody tr {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.15s;
+  cursor: pointer;
+}
+
+.data-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.data-table td {
+  padding: 12px 16px;
+  white-space: nowrap;
+}
+
+/* ============================================
+   Status Badge
+   ============================================ */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-badge.smoke-free {
+  background: rgba(52, 211, 153, 0.1);
+  color: #34d399;
+}
+
+.status-badge.reducing {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+}
+
+.status-badge.struggling {
+  background: rgba(248, 113, 113, 0.1);
+  color: #f87171;
+}
+
+.status-badge.no-data {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ============================================
+   Landing Page Styles
+   ============================================ */
+
+.font-kanit {
+  font-family: var(--font-kanit), sans-serif;
+}
+.font-prompt {
+  font-family: var(--font-prompt), sans-serif;
+}
+.font-sarabun {
+  font-family: var(--font-sarabun), sans-serif;
+}
+
+.text-gradient {
+  background: linear-gradient(to right, #10b981, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-outline {
+  -webkit-text-stroke: 2px rgba(255, 255, 255, 0.1);
+  color: transparent;
+}
+
+.text-glow {
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.5), 0 0 40px rgba(255, 255, 255, 0.3);
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in-left 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes bg-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-bg-shift {
+  background-size: 200% 200%;
+  animation: bg-shift 15s ease infinite;
+}

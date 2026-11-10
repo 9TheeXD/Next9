@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/inert.svg">
+    <title>สรุปรายชื่อสาย - เฉื่อย | สภานักเรียน</title>
+    <!-- Use Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- docx for Word export -->
+    <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+</head>
+<body>
+    <div id="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <h1>สรุปข้อมูลสาย - เฉื่อย</h1>
+                <p>ดูและส่งออกข้อมูลนักเรียนที่มาสายหรือมีรายการผิดระเบียบ</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="app-main">
+            <!-- Filter Options -->
+            <section class="filters-section" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <div class="filter-group" id="term-filter-group">
+                    <button class="filter-btn term-btn active" data-term="2">ภาคเรียนที่ 2/2569</button>
+                    <button class="filter-btn term-btn" data-term="1">ภาคเรียนที่ 1/2569</button>
+                </div>
+                <div class="filter-group" id="type-filter-group">
+                    <button class="filter-btn type-btn active" data-type="all">รวมทั้งหมด</button>
+                    <button class="filter-btn type-btn" data-type="junior">ม.ต้น</button>
+                    <button class="filter-btn type-btn" data-type="high">ม.ปลาย</button>
+                </div>
+            </section>
+
+            <!-- Data Display -->
+            <section class="data-section">
+                <div class="table-container">
+                    <table id="data-table">
+                        <thead>
+                            <tr>
+                                <th>วันที่</th>
+                                <th>รหัสประจำตัว</th>
+                                <th>ชื่อ-สกุล</th>
+                                <th>ชั้น</th>
+                                <th>เลขที่</th>
+                                <th>รายการผิดระเบียบ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body">
+                            <!-- Rows will be injected here via JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="loading-spinner" class="loading-spinner">
+                    <div class="spinner"></div>
+                    <span>กำลังโหลดข้อมูล...</span>
+                </div>
+            </section>
+
+            <!-- Actions -->
+            <section class="action-section">
+                <button id="btn-refresh" class="btn-secondary large-btn" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    รีเฟรชข้อมูล
+                </button>
+                <button id="btn-export-modal" class="btn-primary large-btn" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    ส่งออกสรุป
+                </button>
+            </section>
+        </main>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="export-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>ส่งออกข้อมูลสรุป</h2>
+                <button id="btn-close-modal" class="btn-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="export-form">
+                    <div class="form-group">
+                        <label>ช่วงเดือนที่ต้องการส่งออก:</label>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <select id="export-month-start" required style="flex: 1;">
+                                <option value="all">ทั้งหมด</option>
+                                <option value="01">มกราคม</option>
+                                <option value="02">กุมภาพันธ์</option>
+                                <option value="03">มีนาคม</option>
+                                <option value="04">เมษายน</option>
+                                <option value="05">พฤษภาคม</option>
+                                <option value="06">มิถุนายน</option>
+                                <option value="07">กรกฎาคม</option>
+                                <option value="08">สิงหาคม</option>
+                                <option value="09">กันยายน</option>
+                                <option value="10">ตุลาคม</option>
+                                <option value="11">พฤศจิกายน</option>
+                                <option value="12">ธันวาคม</option>
+                            </select>
+                            <span>ถึง</span>
+                            <select id="export-month-end" required style="flex: 1;">
+                                <option value="all">ทั้งหมด</option>
+                                <option value="01">มกราคม</option>
+                                <option value="02">กุมภาพันธ์</option>
+                                <option value="03">มีนาคม</option>
+                                <option value="04">เมษายน</option>
+                                <option value="05">พฤษภาคม</option>
+                                <option value="06">มิถุนายน</option>
+                                <option value="07">กรกฎาคม</option>
+                                <option value="08">สิงหาคม</option>
+                                <option value="09">กันยายน</option>
+                                <option value="10">ตุลาคม</option>
+                                <option value="11">พฤศจิกายน</option>
+                                <option value="12">ธันวาคม</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>ภาคเรียนที่:</label>
+                        <input type="text" id="export-semester" placeholder="เช่น 1, 2" required>
+                    </div>
+                    <div class="form-group">
+                        <label>ปีการศึกษา:</label>
+                        <input type="text" id="export-year" placeholder="เช่น 2569" required>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button type="button" id="btn-cancel-modal" class="btn-secondary">ยกเลิก</button>
+                        <button type="submit" class="btn-primary">ยืนยันส่งออก</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Container for printable HTML (hidden from normal view) -->
+    <div id="print-container" class="hidden-print"></div>
+
+    <script src="app.js?v=2"></script>
+    <script src="export.js?v=2"></script>
+
+    <!-- Fullpage Loader Overlay -->
+    <div id="fullpage-loader" class="fullpage-overlay hidden">
+        <div class="spinner"></div>
+        <h2 id="fullpage-loader-title">กำลังประมวลผล...</h2>
+        <p id="fullpage-loader-desc">โปรดรอสักครู่ ระบบกำลังสร้างไฟล์เอกสาร</p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,169 @@
+/* Folder tiles, album menu, folder picker, share dialogs and drag & drop — ported unchanged from the
+   legacy photos/folders.js stylesheet. */
+.pf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.pf-tile{position:relative;display:flex;flex-direction:column;background:#fff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:transform .18s ease,box-shadow .18s ease,border-color .18s;outline:none;text-align:left}
+.pf-tile:hover{box-shadow:0 8px 22px rgba(0,0,0,.10);border-color:#d1d5db;transform:translateY(-2px)}
+.pf-tile:focus-visible{box-shadow:0 0 0 3px rgba(176,9,9,.35)}
+.pf-tile.is-pinned{border-color:rgba(176,9,9,.4)}
+.pf-tile.is-disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+.pf-tile.pf-pressing,.pf-pressing{transform:scale(.96)!important;transition:transform .45s ease!important}
+.pf-cover{position:relative;aspect-ratio:16/10;background:#e5e7eb;overflow:hidden}
+.pf-cover img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;-webkit-user-drag:none}
+.pf-cover-empty,.pf-cover-locked{display:grid;place-items:center;font-size:1.7rem}
+.pf-cover-empty{background:linear-gradient(135deg,#fdeaea,#f8d3d3);color:#b00909}
+.pf-cover-locked{background:#374151;color:#f59e0b}
+.pf-tile-body{padding:9px 11px 10px;min-width:0}
+.pf-tile-name{display:flex;align-items:center;gap:6px;font-weight:600;font-size:.88rem;color:#111827;min-width:0;line-height:1.35}
+.pf-tile-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-pin{color:#b00909;font-size:.7rem;transform:rotate(35deg);flex-shrink:0}
+.pf-lock{color:#f59e0b;font-size:.7rem;flex-shrink:0}
+.pf-tile-meta{font-size:.74rem;color:#6b7280;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-more{position:absolute;top:6px;right:6px;width:32px;height:32px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;display:grid;place-items:center;opacity:0;transition:opacity .15s,background .15s}
+.pf-more:hover{background:rgba(0,0,0,.75)}
+.pf-tile:hover .pf-more,.pf-tile:focus-within .pf-more{opacity:1}
+@media (hover:none){.pf-more{opacity:1}}
+.pf-skel{cursor:default;pointer-events:none}
+.pf-skel .pf-cover,.pf-skel-line{background:linear-gradient(90deg,#eceef1 25%,#f6f7f9 37%,#eceef1 63%);background-size:400% 100%;animation:pfShimmer 1.3s ease infinite}
+.pf-skel-line{height:10px;border-radius:5px;margin:5px 0}
+.pf-skel-line.short{width:55%}
+@keyframes pfShimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+
+.pf-menu-backdrop{position:fixed;inset:0;z-index:99980;display:none}
+.pf-menu-backdrop.show{display:block}
+.pf-menu-backdrop.dim{background:rgba(15,23,42,.45)}
+.pf-menu{position:fixed;z-index:99981;min-width:230px;max-width:290px;background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.22),0 0 0 1px rgba(0,0,0,.05);padding:6px;display:none;font-family:'Prompt',sans-serif}
+/* Opening and closing are animated by Motion (MorphSurface / MorphSheet), not by keyframes here. */
+.pf-menu.show{display:block}
+/* Never taller than the screen: a long menu scrolls inside itself instead of running off the edge. */
+.pf-menu{max-height:min(70vh,430px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+/* The thumb sits inside a transparent border so it never paints over the menu's rounded corner. */
+.pf-menu,.pf-picker-body,.pf-links{scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.2) transparent}
+.pf-menu::-webkit-scrollbar,.pf-picker-body::-webkit-scrollbar,.pf-links::-webkit-scrollbar,.pf-share-body::-webkit-scrollbar{width:9px}
+.pf-menu::-webkit-scrollbar-track,.pf-picker-body::-webkit-scrollbar-track,.pf-links::-webkit-scrollbar-track,.pf-share-body::-webkit-scrollbar-track{background:transparent;margin:6px 0}
+.pf-menu::-webkit-scrollbar-thumb,.pf-picker-body::-webkit-scrollbar-thumb,.pf-links::-webkit-scrollbar-thumb,.pf-share-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.2);border:3px solid transparent;background-clip:padding-box;border-radius:999px}
+.pf-menu::-webkit-scrollbar-thumb:hover,.pf-picker-body::-webkit-scrollbar-thumb:hover,.pf-links::-webkit-scrollbar-thumb:hover,.pf-share-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.34);background-clip:padding-box}
+.pf-menu-backdrop.closing{opacity:0;transition:opacity .17s ease-in}
+.pf-menu-head{display:none}
+.pf-menu button{display:flex;align-items:center;gap:12px;width:100%;min-height:40px;padding:8px 12px;border:0;border-radius:9px;background:none;font:inherit;font-size:.9rem;color:#1f2937;cursor:pointer;text-align:left}
+.pf-menu button i{width:18px;text-align:center;color:#6b7280}
+.pf-menu button:hover,.pf-menu button:focus-visible{background:#f3f4f6;outline:none}
+.pf-menu button.danger,.pf-menu button.danger i{color:#dc2626}
+.pf-menu-sep{height:1px;background:#e5e7eb;margin:5px 8px}
+.pf-menu.sheet{left:0!important;right:0;bottom:0;top:auto!important;min-width:0;max-width:none;border-radius:18px 18px 0 0;padding:6px 10px calc(12px + env(safe-area-inset-bottom))}
+.pf-menu.sheet{max-height:min(72vh,540px)}
+.pf-menu.sheet button{min-height:50px;font-size:.95rem}
+.pf-menu.sheet .pf-menu-head{display:block;padding:4px 8px 10px;border-bottom:1px solid #f0f0f0;margin-bottom:4px}
+.pf-menu-grip{width:40px;height:4px;border-radius:2px;background:#d1d5db;margin:2px auto 10px}
+.pf-menu-title{font-weight:600;font-size:.98rem;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-menu-sub{font-size:.78rem;color:#6b7280}
+
+.pf-picker-overlay{position:fixed;inset:0;z-index:99990;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;transition:opacity .18s;font-family:'Prompt',sans-serif}
+.pf-picker-overlay.show{opacity:1}
+.pf-picker{width:min(900px,100%);height:min(660px,100%);background:#f5f5f5;border-radius:20px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.35);transform:translateY(12px) scale(.98);transition:transform .2s ease}
+.pf-picker-overlay.show .pf-picker{transform:none}
+.pf-picker-head{background:linear-gradient(135deg,#b00909 0%,#9a0707 50%,#7a0606 100%);color:#fff;padding:14px 18px;display:flex;flex-direction:column;gap:10px}
+.pf-picker-top{display:flex;align-items:center;gap:10px}
+.pf-picker-title{flex:1;min-width:0;font-weight:600;font-size:1.02rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-icon-btn{width:38px;height:38px;flex-shrink:0;border-radius:50%;border:0;background:rgba(255,255,255,.15);color:#fff;cursor:pointer;display:grid;place-items:center;font-size:1rem}
+.pf-icon-btn:hover{background:rgba(255,255,255,.28)}
+.pf-crumbs{display:flex;align-items:center;gap:4px;overflow-x:auto;scrollbar-width:none;white-space:nowrap}
+.pf-crumbs::-webkit-scrollbar{display:none}
+.pf-crumbs button{border:0;background:rgba(255,255,255,.12);color:rgba(255,255,255,.88);font:inherit;font-size:.82rem;padding:5px 10px;border-radius:8px;cursor:pointer;flex-shrink:0;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.pf-crumbs button:hover{background:rgba(255,255,255,.24);color:#fff}
+.pf-crumbs button.current{background:#fff;color:#b00909;font-weight:600}
+.pf-crumb-sep{font-size:.6rem;color:rgba(255,255,255,.55)}
+.pf-picker-tools{display:flex;gap:8px}
+.pf-search{flex:1;position:relative;display:flex}
+.pf-search i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.65);font-size:.8rem;pointer-events:none}
+.pf-search input{flex:1;min-width:0;height:40px;border:0;border-radius:10px;background:rgba(255,255,255,.16);color:#fff;font:inherit;font-size:.88rem;padding:0 12px 0 34px;outline:none}
+.pf-search input::placeholder{color:rgba(255,255,255,.7)}
+.pf-search input:focus{background:rgba(255,255,255,.24)}
+.pf-btn{height:40px;padding:0 16px;border-radius:10px;border:0;font:inherit;font-size:.88rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
+.pf-btn-glass{background:rgba(255,255,255,.16);color:#fff}
+.pf-btn-glass:hover{background:rgba(255,255,255,.28)}
+.pf-btn-ghost{background:#f3f4f6;color:#374151}
+.pf-btn-ghost:hover{background:#e5e7eb}
+.pf-btn-primary{background:#b00909;color:#fff}
+.pf-btn-primary:hover{background:#930707}
+.pf-btn-primary:disabled{background:#d1d5db;color:#fff;cursor:not-allowed}
+.pf-picker-body{flex:1;overflow-y:auto;padding:16px 18px;overscroll-behavior:contain}
+.pf-empty{grid-column:1/-1;text-align:center;color:#6b7280;padding:48px 12px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.pf-empty i{font-size:2.2rem;color:#d1d5db}
+.pf-empty small{color:#9ca3af}
+.pf-picker-foot{display:flex;align-items:center;gap:12px;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #e5e7eb}
+.pf-target{flex:1;min-width:0;font-size:.85rem;color:#4b5563;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-target i{color:#b00909;margin-right:4px}
+.pf-actions{display:flex;gap:8px}
+@media (max-width:640px){
+ .pf-picker-overlay{padding:0;align-items:flex-end}
+ .pf-picker{height:92vh;height:92dvh;border-radius:18px 18px 0 0}
+ .pf-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ .pf-picker-tools .pf-btn span{display:none}
+ .pf-picker-foot{flex-direction:column;align-items:stretch;gap:10px}
+ .pf-actions .pf-btn{flex:1}
+}
+.pf-dark{background:#f3f4f6!important;color:#374151!important}
+.pf-dark:hover{background:#e5e7eb!important}
+.pf-share-overlay{position:fixed;inset:0;z-index:99985;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:24px;font-family:'Prompt',sans-serif;animation:pfFade .15s ease-out}
+@keyframes pfFade{from{opacity:0}to{opacity:1}}
+.pf-share{width:min(520px,100%);max-height:min(720px,100%);background:#fff;border-radius:20px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.pf-share-head{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid #f0f0f0}
+.pf-share-ico{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:1.2rem;flex-shrink:0}
+.pf-share-ico.is-album{background:#fdeaea;color:#b00909}
+.pf-share-ico.is-file{background:#e0f2fe;color:#0369a1}
+.pf-share-heading{flex:1;min-width:0}
+.pf-share-title{font-weight:600;font-size:1.02rem;color:#111827}
+.pf-share-name{font-size:.82rem;color:#6b7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-share-body{padding:16px 18px 18px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.pf-scope{display:flex;gap:12px;padding:12px 14px;border-radius:12px;background:#f8fafc;border:1px solid #e5e7eb;font-size:.86rem;color:#374151}
+.pf-scope>i{color:#b00909;margin-top:3px}
+.pf-scope b{display:block;font-weight:600}
+.pf-scope small{display:block;color:#9ca3af;margin-top:2px}
+.pf-share-warn{padding:10px 12px;border-radius:10px;background:#fffbeb;color:#92400e;font-size:.82rem}
+.pf-switch-row{display:flex;align-items:center;gap:12px;cursor:pointer}
+.pf-switch-row span{flex:1;font-size:.88rem;color:#111827}
+.pf-switch-row small{display:block;font-size:.74rem;color:#9ca3af}
+.pf-switch-row input{position:absolute;opacity:0;pointer-events:none}
+.pf-switch{width:42px;height:24px;border-radius:12px;background:#d1d5db;position:relative;flex-shrink:0;transition:background .2s}
+.pf-switch::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
+.pf-switch-row input:checked+.pf-switch{background:#b00909}
+.pf-switch-row input:checked+.pf-switch::after{transform:translateX(18px)}
+.pf-switch-row input:focus-visible+.pf-switch{box-shadow:0 0 0 3px rgba(176,9,9,.3)}
+.pf-field-label{font-size:.84rem;font-weight:600;color:#374151;margin-top:4px}
+.pf-share-hint{font-size:.76rem;color:#6b7280;margin-top:-4px}
+.pf-chips{display:flex;flex-wrap:wrap;gap:6px}
+.pf-chip{height:34px;padding:0 12px;border-radius:999px;border:1px solid #e5e7eb;background:#fff;font:inherit;font-size:.82rem;color:#374151;cursor:pointer}
+.pf-chip.active{background:#b00909;border-color:#b00909;color:#fff}
+.pf-share-create{height:44px;margin-top:4px}
+.pf-links-head{font-size:.84rem;font-weight:600;color:#374151;margin-top:6px;padding-top:12px;border-top:1px solid #f0f0f0}
+.pf-links{display:flex;flex-direction:column;gap:8px}
+.pf-links-empty{font-size:.84rem;color:#9ca3af;text-align:center;padding:10px}
+.pf-link{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px}
+.pf-link.is-new{border-color:#b00909;background:#fff7f7}
+.pf-link.is-expired{opacity:.55}
+.pf-link-main{flex:1;min-width:0}
+.pf-link-url{font-size:.84rem;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,monospace}
+.pf-link-meta{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:.72rem;color:#6b7280;margin-top:2px}
+.pf-mini{width:36px;height:36px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;color:#4b5563;cursor:pointer;flex-shrink:0}
+.pf-mini:hover{background:#f3f4f6}
+.pf-mini.pf-danger:hover{color:#dc2626;border-color:#fecaca;background:#fef2f2}
+@media (max-width:640px){.pf-share-overlay{padding:0;align-items:flex-end}.pf-share{border-radius:18px 18px 0 0;max-height:92vh}}
+.pf-drag-ghost{position:fixed;top:-100px;left:-100px;padding:8px 14px;border-radius:999px;background:#b00909;color:#fff;font:600 .85rem 'Prompt',sans-serif;white-space:nowrap;box-shadow:0 8px 20px rgba(0,0,0,.25)}
+.pf-dragging{opacity:.45}
+.pf-drop-over{outline:3px solid #b00909!important;outline-offset:2px;background-color:rgba(176,9,9,.06)!important;transform:scale(1.02)}
+.pf-undo{margin-left:10px;padding:3px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.6);background:transparent;color:#fff;font:600 .82rem 'Prompt',sans-serif;cursor:pointer}
+.pf-undo:hover{background:rgba(255,255,255,.18)}
+
+/* Share link permission (RolePicker in ShareDialogs.tsx): two cards side by side. */
+.pf-role{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0 14px}
+.pf-role-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;border:1.5px solid #e5e7eb;border-radius:12px;background:#fff;cursor:pointer;text-align:left;font-family:'Prompt',sans-serif;color:#1f2937;transition:border-color .12s,background .12s}
+.pf-role-card i{font-size:1.05rem;color:#6b7280;margin-bottom:2px}
+.pf-role-card b{font-size:.9rem}
+.pf-role-card small{font-size:.72rem;color:#6b7280;line-height:1.4}
+.pf-role-card:hover:not(:disabled){border-color:#fca5a5}
+.pf-role-card.active{border-color:var(--accent,#b00909);background:rgba(176,9,9,.06)}
+.pf-role-card.active i{color:var(--accent,#b00909)}
+.pf-role-card.is-editor.active{border-color:#d97706;background:rgba(217,119,6,.07)}
+.pf-role-card.is-editor.active i{color:#d97706}
+.pf-role-card:disabled{opacity:.5;cursor:not-allowed}
+.pf-link-editor{color:#b45309;font-weight:600}
