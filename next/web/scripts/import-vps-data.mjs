@@ -14,7 +14,8 @@
 //   node scripts/import-vps-data.mjs --out ./next9.db
 //   turso db create next9 --from-file ./next9.db
 //
-// Running it again replaces the rows (INSERT OR REPLACE), so it is safe to repeat before the switch.
+// Running it again replaces the rows (INSERT OR REPLACE). For the final import add --reset, which
+// empties every table first so nothing created while testing remains.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,6 +44,13 @@ if (toTurso) {
   console.log(`[import] -> ${OUT}`);
 }
 
+// --reset: empty every table first, so rows created while testing the new site do not survive the
+// final import (INSERT OR REPLACE alone keeps them).
+if (args.includes("--reset")) {
+  const tables = (await dest.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_litestream%'")).rows.map((r) => r.name);
+  await dest.batch(["PRAGMA foreign_keys = OFF", ...tables.map((t) => `DELETE FROM "${t}"`)], "write");
+  console.log(`[import] --reset: emptied ${tables.length} tables`);
+}
 await dest.executeMultiple(SCHEMA_SQL);
 for (const sql of ["ALTER TABLE images ADD COLUMN upload_run TEXT"]) {
   try { await dest.execute(sql); } catch {}

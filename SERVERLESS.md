@@ -222,6 +222,22 @@ copy มาจาก `DARWINZY/ShiftManager` (main ล่าสุด `40e5ebd`)
   ให้บอกสมาชิกเปลี่ยนไปใช้ลิงก์ `/duty/` แล้วค่อยปิด GitHub Pages
 - แก้ ShiftManager ต่อจากนี้ให้แก้ใน `ShiftManager/` ของ repo นี้
 
+## 8.5 วันย้ายจริง: import ข้อมูลล่าสุดทับอีกรอบ
+
+ระหว่างทดสอบ DB บน Turso/Supabase ถูกเขียนไปแล้ว วันย้ายให้ปิดการเขียนบน VPS แล้ว import ใหม่ด้วย
+`--reset` (ล้างทุกตารางก่อน token เดิมใช้ต่อได้):
+
+```bash
+cd ~/next9-serverless && git pull
+cd next/web && export $(cat ~/next9-secrets/turso-next9.env | xargs)
+node scripts/import-vps-data.mjs --turso --reset --from /home/cmp/sdh-council/next/data --root /home/cmp/sdh-council/next
+cd ../../assessRow && export $(cat ~/next9-secrets/turso-assess.env | xargs)
+node scripts/import-vps-data.mjs --turso --reset --from /home/cmp/sdh-council/assessRow/data/assess.db
+```
+
+Postgres (Next Breath): ใน Supabase SQL editor รัน `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`
+แล้ว `pg_dump` / `psql` ใหม่ตามข้อ 2.3 จากนั้น Redeploy ทุก project เพื่อล้าง cache ใน memory
+
 ## 9. ปิด VPS
 
 เมื่อทุกอย่างบนโดเมนจริงใช้ได้ ให้หยุด container เดิม:

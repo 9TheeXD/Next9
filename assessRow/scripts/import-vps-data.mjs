@@ -22,6 +22,13 @@ const dest = args.includes('--turso')
   : createClient({ url: 'file:' + OUT });
 const src = createClient({ url: 'file:' + FROM });
 
+// --reset: empty every table first, so rows created while testing the new site do not survive the
+// final import (INSERT OR REPLACE alone keeps them).
+if (args.includes("--reset")) {
+  const tables = (await dest.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_litestream%'")).rows.map((r) => r.name);
+  await dest.batch(["PRAGMA foreign_keys = OFF", ...tables.map((t) => `DELETE FROM "${t}"`)], "write");
+  console.log(`[import] --reset: emptied ${tables.length} tables`);
+}
 await dest.executeMultiple(SCHEMA_SQL);
 try { await dest.execute('ALTER TABLE admin_audit ADD COLUMN restored_at TEXT'); } catch {}
 const tables = (await src.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")).rows.map((r) => r.name);
