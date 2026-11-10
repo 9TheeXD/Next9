@@ -8,7 +8,7 @@ const ALL = SECTIONS.flatMap((s) => s.items);
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 
 function absolute(href: string) {
-  return new URL(href, typeof window === "undefined" ? "https://next9.yumistack.net" : location.href).href;
+  return new URL(href, typeof window === "undefined" ? "https://next9-web.vercel.app" : location.href).href;
 }
 
 function greeting(now: Date) {
@@ -187,7 +187,7 @@ export function LinksHub() {
             )}
             <div className="l-grid">
               {s.items.map((it) => {
-                const url = new URL(it.href, "https://next9.yumistack.net");
+                const url = new URL(it.href, "https://next9-web.vercel.app");
                 const body = (
                   <>
                     <span className="l-card-top">

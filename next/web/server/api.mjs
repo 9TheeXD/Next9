@@ -56,7 +56,7 @@ const R2_ACCESS_KEY = config.R2_ACCESS_KEY
 const R2_SECRET_KEY = config.R2_SECRET_KEY
 const R2_BUCKET = config.R2_BUCKET || "assets"
 // Public address of the site, used in link previews (Open Graph URLs).
-const SITE_ORIGIN = (config.SITE_ORIGIN || "https://next9.yumistack.net").replace(/\/+$/, "")
+const SITE_ORIGIN = (config.SITE_ORIGIN || "https://next9-web.vercel.app").replace(/\/+$/, "")
 const TOILET_PASSWORD = config.TOILET_PASSWORD || "next9"
 const PHOTOS_PASSWORD = config.PHOTOS_PASSWORD || "next9"
 // Must be a fixed secret: serverless instances come and go, and a per-instance random secret would

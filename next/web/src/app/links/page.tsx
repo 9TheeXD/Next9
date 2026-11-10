@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
   openGraph: {
     type: "website",
-    url: "https://next9.yumistack.net/links/",
+    url: "https://next9-web.vercel.app/links/",
     title: "NEXT9 · ศูนย์รวมระบบภายใน",
     description: "ลิงก์ระบบทั้งหมดสำหรับสมาชิกสภานักเรียน",
     images: ["https://cdn.yumistack.net/next9/logo01.webp"],

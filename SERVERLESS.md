@@ -124,7 +124,7 @@ WHERE url LIKE 'https://ciga-next9.yumistack.net/api/sounds/%';
 
 ## 3. Cloudflare R2: CORS
 
-ตรวจแล้ว (2026-11-10): bucket `assets` อนุญาต GET และ PUT จาก `https://next9.yumistack.net` อยู่แล้ว
+ตรวจแล้ว (2026-11-10): bucket `assets` อนุญาต GET และ PUT จาก `https://next9-web.vercel.app` อยู่แล้ว
 หลังย้ายโดเมนจึงไม่ต้องทำอะไร
 
 ถ้าจะทดสอบอัปโหลดรูปหรือดาวน์โหลด ZIP ผ่านโดเมน vercel.app ก่อนย้ายโดเมน ให้เพิ่ม origin นั้น:
@@ -158,7 +158,7 @@ Vercel → Add New → Project → import `9TheeXD/Next9` ทำ 4 ครั้�
 - `INERT_*`, `STUDENTS_SHEET_ID`, `BUILDING_SHEET_ID`: ค่าเดิม
 - `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`: จาก `next/lineBot/.env`
 - `DIALOGFLOW_CREDENTIALS_JSON`: เนื้อหาไฟล์ `next/lineBot/sdh-next9-chatbot-*.json`
-- `SITE_ORIGIN=https://next9.yumistack.net`
+- `SITE_ORIGIN=https://next9-web.vercel.app`
 - `CRON_SECRET`: สุ่มยาวๆ
 
 **assess-row** (`assessRow/.env.example`)
@@ -189,7 +189,7 @@ Vercel project → Settings → Domains → เพิ่มโดเมนเด
 
 - **assess-row**: login Google ใช้ได้เฉพาะโดเมนที่อยู่ใน Google Cloud Console → APIs & Services →
   Credentials → OAuth client → Authorized redirect URIs
-  - โดเมนจริง `https://assess-row-next9.yumistack.net/api/auth/callback/google` (เดิมมีอยู่แล้ว)
+  - โดเมนจริง `https://assess-row-sdh.vercel.app/api/auth/callback/google` (เดิมมีอยู่แล้ว)
   - ทดสอบบน vercel.app: เพิ่ม `https://assess-row-sdh.vercel.app/api/auth/callback/google`
     (ถ้าไม่เพิ่ม Google ตอบ `Error 400: redirect_uri_mismatch`)
   - `NEXTAUTH_URL` ใน Vercel ต้องตรงกับโดเมนที่ใช้อยู่ ย้ายโดเมนแล้วเปลี่ยนกลับเป็นโดเมนจริงแล้ว Redeploy
@@ -197,7 +197,7 @@ Vercel project → Settings → Domains → เพิ่มโดเมนเด
 ## 6. LINE bot
 
 LINE Developers → channel → Messaging API → Webhook URL:
-`https://next9.yumistack.net/api/line/webhook` → Verify → เปิด Use webhook
+`https://next9-web.vercel.app/api/line/webhook` → Verify → เปิด Use webhook
 
 ## 7. ตั้งเวลาแจ้งเตือน Next Breath
 
@@ -212,11 +212,11 @@ cron ของ `next9` (รายวัน 03:00 น.) และ `assess-row` (b
 ## 8. ShiftManager (ระบบลงเวร)
 
 copy มาจาก `DARWINZY/ShiftManager` (main ล่าสุด `40e5ebd`) อยู่ที่ `ShiftManager/` ใน repo นี้
-และเว็บ next9 เปิดให้ที่ **`https://next9.yumistack.net/duty/`** (build script copy เข้า `public/duty/`)
+และเว็บ next9 เปิดให้ที่ **`https://next9-web.vercel.app/duty/`** (build script copy เข้า `public/duty/`)
 
 - เปิดจาก next9 รูปเวรส่งเข้า API ของ origin เดียวกัน และส่งตรงเข้า R2 ผ่าน `duty-upload-url` แล้วตามด้วย `duty-commit` ได้ทุกขนาด
 - `js/config.js`: `PHOTOS_ORIGIN` เลือกเอง เปิดจาก next9 / `*.vercel.app` / localhost ใช้ origin เดียวกัน
-  เปิดจากที่อื่น (GitHub Pages เดิม) ยิงไป `https://next9.yumistack.net`
+  เปิดจากที่อื่น (GitHub Pages เดิม) ยิงไป `https://next9-web.vercel.app`
 - Google Apps Script (`ShiftManager/apps-script/Code.gs`) ยังเหมือนเดิม ไม่ต้อง deploy ใหม่
 - GitHub Pages เดิมใช้ต่อได้ช่วงเปลี่ยนผ่าน แต่ส่งรูปได้ไม่เกินราว 4.5MB ต่อครั้ง
   ให้บอกสมาชิกเปลี่ยนไปใช้ลิงก์ `/duty/` แล้วค่อยปิด GitHub Pages

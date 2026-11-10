@@ -14,7 +14,7 @@ const CONFIG = {
 
   // เว็บ /photos (NEXT9) — รูปเวรจะถูกเก็บเข้าอัลบั้ม "เวรประจำวัน" ด้วย
   // เปิดจากเว็บ next9 เอง (/duty/) = ใช้ origin เดียวกัน; เปิดจากที่อื่น (GitHub Pages) = ยิงไป next9
-  PHOTOS_ORIGIN: /(^|\.)next9\.yumistack\.net$|\.vercel\.app$|^localhost$|^127\./.test(location.hostname) ? "" : "https://next9.yumistack.net",
+  PHOTOS_ORIGIN: /(^|\.)next9\.yumistack\.net$|\.vercel\.app$|^localhost$|^127\./.test(location.hostname) ? "" : "https://next9-web.vercel.app",
   PHOTOS_ROOT_ALBUM: "เวรประจำวัน",
 
   // รูปที่ส่งเข้า Google Drive ถูกย่อก่อนส่ง (Apps Script รับ payload ได้จำกัด)

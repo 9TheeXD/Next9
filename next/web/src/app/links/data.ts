@@ -2,7 +2,7 @@
 export type LinkItem = { href: string; title: string; text: string; icon: string; lock?: string; external?: boolean };
 export type LinkSection = { key: string; title: string; text: string; icon: string; items: LinkItem[]; restricted?: boolean };
 
-const ASSESS = "https://assess-row-next9.yumistack.net";
+const ASSESS = "https://assess-row-sdh.vercel.app";
 
 export const SECTIONS: LinkSection[] = [
   {
