@@ -58,3 +58,7 @@ serviceAccountKey*.json
 # local dev stand-ins
 .dev-r2/
 data-dev/
+
+# local secrets
+turso-*.env
+*.db

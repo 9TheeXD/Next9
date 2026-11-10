@@ -7,16 +7,16 @@ branch `serverless` เตรียมโค้ดทุกระบบให้
 
 | ระบบ | Vercel project (Root Directory) | ฐานข้อมูล | โดเมน (เดิม) |
 |---|---|---|---|
-| เว็บหลัก + API + LINE bot | `next/web` | Turso `next9` (Tokyo) | next9.yumistack.net |
-| ประเมินแถว | `assessRow` | Turso `assess` (Tokyo) | assess-row-next9.yumistack.net |
+| เว็บหลัก + API + LINE bot | `next/web` | Turso `next9` (Singapore) | next9.yumistack.net |
+| ประเมินแถว | `assessRow` | Turso `assess` (Singapore) | assess-row-next9.yumistack.net |
 | Next Breath admin + API | `cigarette/admin-web` | Supabase Postgres (Singapore) | ciga-next9.yumistack.net |
 | Next Breath แอป (web) | `cigarette/mobile-app` | – (เรียก API ของ admin-web) | app-ciga-next9.yumistack.net |
 
 ไฟล์ (รูป วิดีโอ เสียง สมาชิก) อยู่ใน R2 bucket `assets` เหมือนเดิม ส่วน `ShiftManager` อยู่ repo แยก (ดูหัวข้อ 8)
 
-region: function ของ `next/web` และ `assessRow` ตั้งไว้ที่ Tokyo (`hnd1` ใน `vercel.json`) ให้อยู่ที่เดียวกับ Turso
-หน้าหนึ่งยิง query หลายครั้ง ถ้า function กับ DB อยู่ห่างกัน ทุก query จะช้าตามระยะ ส่วน `cigarette/admin-web`
-ตั้งไว้ที่ Singapore (`sin1`) คู่กับ Supabase ถ้าเลือก region DB อื่น ให้แก้ `regions` ใน `vercel.json` ให้ตรงกัน
+region: function ทุกตัวตั้งไว้ที่ Singapore (`sin1` ใน `vercel.json`) ที่เดียวกับ Turso (`aws-ap-southeast-1`)
+และ Supabase หน้าหนึ่งยิง query หลายครั้ง ถ้า function กับ DB อยู่ห่างกัน ทุก query จะช้าตามระยะ
+ถ้าย้าย DB ไป region อื่น ให้แก้ `regions` ใน `vercel.json` ให้ตรงกัน
 
 ## สิ่งที่เปลี่ยนไปจาก VPS
 
@@ -54,7 +54,7 @@ region: function ของ `next/web` และ `assessRow` ตั้งไว�
 
 1. **Vercel** (Hobby) ล็อกอินด้วย GitHub ที่เข้าถึง repo `9TheeXD/Next9` ได้
 2. **Turso** ติดตั้ง CLI: `curl -sSfL https://get.tur.so/install.sh | bash` แล้ว `turso auth signup`
-   เลือก location ของ group เป็น Tokyo (`aws-ap-northeast-1`) หรือที่ใกล้ไทยที่สุดที่มีให้เลือก
+   แล้วสร้าง group ที่ Singapore: `turso group create default --location aws-ap-southeast-1`
 3. **Supabase** สร้าง project region Singapore (Southeast Asia) จด database password ไว้
 4. **cron-job.org** สมัครฟรี (ใช้ตอนท้าย)
 
@@ -64,16 +64,21 @@ region: function ของ `next/web` และ `assessRow` ตั้งไว�
 
 ### 2.1 เว็บหลัก (Turso `next9`)
 
-บน VPS (หรือเครื่องที่มี `next/data` ล่าสุด):
+script อยู่ใน branch `serverless` เท่านั้น บน VPS ให้เปิด branch นี้เป็นโฟลเดอร์แยกด้วย `git worktree`
+อย่า checkout ในโฟลเดอร์ production
 
 ```bash
-cd next/web
+git -C /home/cmp/sdh-council worktree add ~/next9-serverless serverless
+cd ~/next9-serverless/next/web
 npm ci
-node scripts/import-vps-data.mjs --from ../data --root .. --out ./next9.db
-turso db create next9 --from-file ./next9.db
-turso db show next9 --url          # -> TURSO_DATABASE_URL
-turso db tokens create next9       # -> TURSO_AUTH_TOKEN
+turso db create next9 --group default
+export TURSO_DATABASE_URL=$(turso db show next9 --url)
+export TURSO_AUTH_TOKEN=$(turso db tokens create next9)
+node scripts/import-vps-data.mjs --turso --from /home/cmp/sdh-council/next/data --root /home/cmp/sdh-council/next
 ```
+
+(`--turso` เขียนเข้า Turso ตรงๆ ถ้าเครื่องมี `sqlite3` จะใช้วิธี `--out ./next9.db` แล้วตามด้วย
+`turso db create next9 --from-file ./next9.db` แทนก็ได้)
 
 script จะรวม `building.db`, `photos.db`, `pinkbook.db` และไฟล์ JSON ทั้งหมด
 (`toilet_*.json`, `students.json`, `inspectors.json`, `data/*_config.json`, `submit_inert.json`)
@@ -82,15 +87,15 @@ script จะรวม `building.db`, `photos.db`, `pinkbook.db` และไฟ
 ### 2.2 ประเมินแถว (Turso `assess`)
 
 ```bash
-cd assessRow
+cd ~/next9-serverless/assessRow
 npm ci
-node scripts/import-vps-data.mjs --from data/assess.db --out ./assess-turso.db
-turso db create assess --from-file ./assess-turso.db
-turso db show assess --url
-turso db tokens create assess
+turso db create assess --group default
+export TURSO_DATABASE_URL=$(turso db show assess --url)
+export TURSO_AUTH_TOKEN=$(turso db tokens create assess)
+node scripts/import-vps-data.mjs --turso --from /home/cmp/sdh-council/assessRow/data/assess.db
 ```
 
-(ไฟล์ใหม่เหลือราว 11MB จากเดิม 144MB เพราะตาราง `trend_cache` เก่ากับพื้นที่ว่างไม่ถูก copy)
+(ข้อมูลเหลือราว 11MB จากไฟล์เดิม 144MB เพราะตาราง `trend_cache` เก่ากับพื้นที่ว่างไม่ถูก copy)
 
 ### 2.3 Next Breath (Supabase Postgres)
 
@@ -210,10 +215,15 @@ cron ของ `next9` (รายวัน 03:00 น.) และ `assess-row` (b
 
 ## 8. ShiftManager
 
-ใน repo ของ ShiftManager (`DARWINZY/ShiftManager`) มี branch `serverless` ในเครื่อง (ยังไม่ push)
-แก้ `js/api.js` ให้ส่งรูปเวรตรงเข้า R2 (`duty-upload-url`, `duty-commit`) แทนการส่งก้อนเดียว
-ถ้าเซิร์ฟเวอร์ยังเป็น VPS เดิมจะ fallback เป็นแบบเก่าอัตโนมัติ จึง merge และ push ได้ก่อนย้ายเลย
-ถ้าไม่ทำ ShiftManager ยังส่งได้เฉพาะเมื่อรูปรวมต่อครั้งไม่เกินราว 4MB
+ตัวเว็บรันบน GitHub Pages อยู่แล้ว ไม่ต้องย้าย แต่ตอนเช็กอินเวร มันส่งรูปไปที่ API ของ next9
+(`https://next9.yumistack.net/api/photos/duty-upload`) ซึ่งจะย้ายมาอยู่บน Vercel
+`duty-upload` แบบเดิมยังใช้ได้ แต่ Vercel รับได้ไม่เกินราว 4.5MB ต่อครั้ง (รวมทุกรูปที่ส่งพร้อมกัน)
+รูปต้นฉบับจากมือถือหลายรูปจะเกิน
+
+ถ้าอยากให้ส่งรูปใหญ่ได้เหมือนเดิม ต้องแก้ `js/api.js` ของ ShiftManager ให้ส่งตรงเข้า R2
+(`duty-upload-url` แล้วตามด้วย `duty-commit`) ผมเตรียมไว้ใน branch `serverless` ของ repo ShiftManager
+ในเครื่อง ยังไม่ push ใช้ได้ทั้งกับ VPS เดิมและ serverless จึง merge ได้ทุกเมื่อ
+ถ้าไม่แก้ ทางเลือกคือให้ ShiftManager ย่อรูปก่อนส่ง (มีฟังก์ชัน `resizeImage` อยู่แล้ว)
 
 ## 9. ปิด VPS
 
