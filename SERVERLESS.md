@@ -122,25 +122,15 @@ UPDATE "Sound" SET url = replace(url, 'https://ciga-next9.yumistack.net/api/soun
 WHERE url LIKE 'https://ciga-next9.yumistack.net/api/sounds/%';
 ```
 
-## 3. Cloudflare R2: เปิด CORS ให้อัปโหลดตรง
+## 3. Cloudflare R2: CORS
 
-Cloudflare → R2 → bucket `assets` → Settings → CORS Policy:
+ตรวจแล้ว (2026-11-10): bucket `assets` อนุญาต GET และ PUT จาก `https://next9.yumistack.net` อยู่แล้ว
+หลังย้ายโดเมนจึงไม่ต้องทำอะไร
 
-```json
-[
-  {
-    "AllowedOrigins": ["https://next9.yumistack.net"],
-    "AllowedMethods": ["PUT", "GET", "HEAD"],
-    "AllowedHeaders": ["Content-Type"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3600
-  }
-]
-```
-
-(ShiftManager เปิดจาก `/duty/` ของ next9 แล้ว ใช้ origin เดียวกัน)
-ถ้าจะทดสอบผ่านโดเมน `*.vercel.app` ก่อน ให้เพิ่มโดเมนนั้นด้วย
-R2 API token เดิม (`R2_ACCESS_KEY`/`R2_SECRET_KEY`) ต้องมีสิทธิ์ Object Read & Write ซึ่งเดิมก็ใช้เขียนอยู่แล้ว
+ถ้าจะทดสอบอัปโหลดรูปหรือดาวน์โหลด ZIP ผ่านโดเมน vercel.app ก่อนย้ายโดเมน ให้เพิ่ม origin นั้น:
+Cloudflare → R2 → bucket `assets` → Settings → CORS Policy → เพิ่ม `https://next9-web.vercel.app`
+ใน `AllowedOrigins` (`AllowedMethods`: `GET`, `PUT`, `HEAD`; `AllowedHeaders`: `Content-Type`)
+ถ้าไม่เพิ่ม การส่งไฟล์ไป R2 จาก vercel.app จะโดนปฏิเสธ (403) ส่วนการดูรูปปกติใช้ได้
 
 ## 4. สร้าง Vercel projects
 
@@ -197,9 +187,12 @@ Vercel → Add New → Project → import `9TheeXD/Next9` ทำ 4 ครั้�
 Vercel project → Settings → Domains → เพิ่มโดเมนเดิม แล้วแก้ DNS ตามที่ Vercel บอก
 (ส่วนใหญ่เป็น CNAME ไป `cname.vercel-dns.com`) ถ้า DNS อยู่ที่ Cloudflare ให้ปิด proxy (เมฆสีเทา) ของ record นั้น
 
-- **assess-row**: ใน Google Cloud Console → OAuth client ให้ redirect URI
-  `https://assess-row-next9.yumistack.net/api/auth/callback/google` อยู่ในรายการ (เดิมมีอยู่แล้ว)
-  ถ้าทดสอบด้วยโดเมน vercel.app ต้องเพิ่มของโดเมนนั้นด้วย และตั้ง `NEXTAUTH_URL` ให้ตรงกับโดเมนที่ใช้
+- **assess-row**: login Google ใช้ได้เฉพาะโดเมนที่อยู่ใน Google Cloud Console → APIs & Services →
+  Credentials → OAuth client → Authorized redirect URIs
+  - โดเมนจริง `https://assess-row-next9.yumistack.net/api/auth/callback/google` (เดิมมีอยู่แล้ว)
+  - ทดสอบบน vercel.app: เพิ่ม `https://assess-row-sdh.vercel.app/api/auth/callback/google`
+    (ถ้าไม่เพิ่ม Google ตอบ `Error 400: redirect_uri_mismatch`)
+  - `NEXTAUTH_URL` ใน Vercel ต้องตรงกับโดเมนที่ใช้อยู่ ย้ายโดเมนแล้วเปลี่ยนกลับเป็นโดเมนจริงแล้ว Redeploy
 
 ## 6. LINE bot
 
