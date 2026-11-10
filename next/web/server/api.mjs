@@ -622,11 +622,14 @@ async function serializeAlbums(req, albums, byId) {
         }
         return []
     }
-    const out = []
-    for (const a of albums) {
+    // Folder totals first, one album at a time: they come from one shared query and a memo that is
+    // filled while it recurses, so working them out in parallel could read a half-finished total.
+    // After that, albums are worked out in parallel (each needs its own cover query).
+    for (const a of albums) await totalsOf(a)
+    const out = (await mapAsync(albums, async a => {
         if (a.parent_id) {
             const parent = byId.get(a.parent_id)
-            if (!parent || parent.name.startsWith('[DELETED] ') || await findLockGate(req, parent, byId)) continue
+            if (!parent || parent.name.startsWith('[DELETED] ') || await findLockGate(req, parent, byId)) return null
         }
         const gate = await findLockGate(req, a, byId)
         const c = counts.get(a.id)
@@ -636,7 +639,7 @@ async function serializeAlbums(req, albums, byId) {
             covers = await coversOf(a)
             if (!covers.length) covers = await borrowedCovers(a)
         }
-        out.push({
+        return ({
             id: a.id,
             name: a.name,
             parent_id: a.parent_id || null,
@@ -658,7 +661,7 @@ async function serializeAlbums(req, albums, byId) {
             cover_preview: covers[0] ? covers[0].preview_b64 : null,
             cover_images: covers.map(x => ({ id: x.id, preview_b64: x.preview_b64, file_type: x.file_type }))
         })
-    }
+    })).filter(Boolean)
     return out
 }
 
@@ -676,7 +679,16 @@ sharp.concurrency(1); // Set to 1 because we use TaskQueue to parallelize at the
 const buildingDb = openDb("building")
 const photosDb = openDb("photos")
 const pinkbookDb = openDb("pinkbook")
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
+// photos data version: goes up on every change to images or albums (triggers). Read-only photo
+// endpoints that the pages poll are answered from memory while it is unchanged (see cachedGet), so a
+// poll costs one row read instead of counting the whole images table. Turso bills rows read.
+const DATA_VERSION_SQL = [
+    "CREATE TABLE IF NOT EXISTS data_versions (name TEXT PRIMARY KEY, v INTEGER NOT NULL)",
+    "INSERT OR IGNORE INTO data_versions (name, v) VALUES ('photos', 0)",
+    ...["images", "albums"].flatMap(t => ["INSERT", "UPDATE", "DELETE"].map(op =>
+        `CREATE TRIGGER IF NOT EXISTS trg_dv_${t}_${op.toLowerCase()} AFTER ${op} ON ${t} BEGIN UPDATE data_versions SET v = v + 1 WHERE name = 'photos'; END`)),
+]
 let schemaReady = null
 export function ensureSchema() {
     if (!schemaReady) {
@@ -689,6 +701,7 @@ export function ensureSchema() {
             // Columns added after the first schema; ignore "duplicate column" on databases that have them.
             for (const sql of [
                 "ALTER TABLE images ADD COLUMN upload_run TEXT",
+                ...DATA_VERSION_SQL,
             ]) { try { await db.exec(sql) } catch (e) {} }
             await kvSet("schema_version", SCHEMA_VERSION)
         })().catch(e => { schemaReady = null; throw e })
@@ -1973,6 +1986,64 @@ export async function sharePreview(token) {
 }
 
 
+// ---- Response cache for polled photo endpoints ----
+// Answers repeat GETs from memory while the photos data version is unchanged. The key holds
+// everything that changes what a request may see (password, album tokens, share token, cookies).
+// Status replies that still show photos processing are not stored: the status endpoint is also what
+// restarts stuck processing (kickStaleProcessing), so it must keep running while there is work.
+const CACHED_GET = [
+    /^\/api\/photos\/albums$/,
+    /^\/api\/photos\/albums\/[^/]+\/(images|status|all-images)$/,
+    /^\/api\/photos\/timeline$/,
+]
+const responseCache = new Map()
+const RESPONSE_CACHE_MAX = 300
+async function photosVersion() {
+    try {
+        const r = await appDb.prepare("SELECT v FROM data_versions WHERE name = 'photos'").get()
+        return r ? r.v : null
+    } catch (e) { return null }
+}
+async function cachedGet(req, res) {
+    const urlPath = req.url.split("?")[0]
+    if (!CACHED_GET.some(re => re.test(urlPath))) return false
+    const v = await photosVersion()
+    if (v === null) return false
+    const h = req.headers
+    const key = [req.url, h.authorization || "", h["x-album-token"] || "", h["x-share-token"] || "", h.cookie || ""].join("\n")
+    const hit = responseCache.get(key)
+    if (hit && hit.v === v) {
+        responseCache.delete(key); responseCache.set(key, hit)
+        const etag = hit.headers.etag || hit.headers.ETag
+        if (etag && h["if-none-match"] === etag) { res.writeHead(304, { ETag: etag, "Cache-Control": "no-cache" }); res.end(); return true }
+        res.writeHead(hit.status, hit.headers)
+        res.end(hit.body)
+        return true
+    }
+    // Miss: let the route answer, and keep a copy of a plain 200 reply.
+    let status = 200, headers = {}
+    const writeHead = res.writeHead.bind(res), end = res.end.bind(res)
+    res.writeHead = (code, ...rest) => {
+        status = code
+        const hdrs = rest.find(x => x && typeof x === "object")
+        if (hdrs) headers = { ...hdrs }
+        return writeHead(code, ...rest)
+    }
+    res.end = (body, ...rest) => {
+        if (status === 200 && body != null && (typeof body === "string" || Buffer.isBuffer(body))) {
+            const text = String(body)
+            let keep = true
+            if (urlPath.endsWith("/status")) { try { keep = !(JSON.parse(text).processing > 0) } catch (e) { keep = false } }
+            if (keep) {
+                responseCache.set(key, { v, status, headers, body: text })
+                while (responseCache.size > RESPONSE_CACHE_MAX) responseCache.delete(responseCache.keys().next().value)
+            }
+        }
+        return end(body, ...rest)
+    }
+    return false
+}
+
 // The whole API as one Node (req, res) handler. Mounted at /api/* by src/pages/api/[...path].ts.
 export async function handleApi(req, res) {
     // อนุญาต CORS
@@ -1984,6 +2055,8 @@ export async function handleApi(req, res) {
         res.writeHead(200)
         return res.end()
     }
+
+    if (req.method === "GET" && await cachedGet(req, res)) return
 
     async function getPinkbookConfigSync() {
         try {

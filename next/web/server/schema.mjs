@@ -193,6 +193,9 @@ CREATE TABLE IF NOT EXISTS rate_limits (key TEXT PRIMARY KEY, count INTEGER NOT 
 -- Photo upload batches ("<session>:<block>" from X-Upload-Order): order anchor and cancel state.
 CREATE TABLE IF NOT EXISTS upload_runs (run_key TEXT PRIMARY KEY, anchor_t INTEGER NOT NULL, anchor_base INTEGER NOT NULL, cancelled TEXT, at INTEGER NOT NULL);
 
+-- photos data version (see DATA_VERSION_SQL in api.mjs; the triggers are created there).
+CREATE TABLE IF NOT EXISTS data_versions (name TEXT PRIMARY KEY, v INTEGER NOT NULL);
+
 -- LINE bot conversation state per LINE user (was an in-memory Map in lineBot/index.js).
 CREATE TABLE IF NOT EXISTS line_sessions (user_id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS line_queue (user_id TEXT NOT NULL, message_id TEXT NOT NULL, type TEXT NOT NULL, seq INTEGER NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (user_id, message_id));

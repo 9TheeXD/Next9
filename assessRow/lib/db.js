@@ -276,6 +276,8 @@ let dbInstance = null;
 function getDb() {
   if (dbInstance) return dbInstance;
   let url = process.env.TURSO_DATABASE_URL;
+  // On Vercel there is no writable disk: a missing URL is a configuration error, not a local file.
+  if (!url && process.env.VERCEL) throw new Error('TURSO_DATABASE_URL is not set in this Vercel environment');
   if (!url) {
     const dir = path.join(process.cwd(), 'data');
     fs.mkdirSync(dir, { recursive: true });
