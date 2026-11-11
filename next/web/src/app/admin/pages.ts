@@ -8,7 +8,9 @@ export type Field =
   | { type: "bool"; key: string; label: string; help?: string }
   | { type: "lines"; key: string; label: string; help?: string; placeholder?: string }
   | { type: "select"; key: string; label: string; help?: string; options: { value: string; label: string }[] }
-  | { type: "list"; key: string; label: string; help?: string; fields: Field[]; title?: string; newItem: Record<string, any> };
+  // Shown as cards (or rows) you drag to reorder; a card opens its fields in a side panel. title and
+  // subtitle name the keys shown on the card.
+  | { type: "list"; key: string; label: string; help?: string; fields: Field[]; title?: string; subtitle?: string; layout?: "cards" | "rows"; itemName?: string; newItem: Record<string, any> };
 
 export type Source = { kind: "settings"; name: string } | { kind: "doc"; name: string };
 
@@ -30,12 +32,17 @@ export type PageDef = {
   icon: string;
   intro?: string;
   parts?: Part[];
-  custom?: "dashboard" | "passwords" | "secrets" | "students" | "handover";
+  custom?: "dashboard" | "passwords" | "secrets" | "classes" | "handover" | "terms" | "assess_lock" | "assess_time" | "assess_people" | "assess_accounts";
+  // The page this one edits: shown live beside the editor on wide screens, reloaded after each save.
+  preview?: string;
   links?: { href: string; label: string; icon?: string }[];
 };
 
 const S = (name: string): Source => ({ kind: "settings", name });
 const D = (name: string): Source => ({ kind: "doc", name });
+
+const COLS = "ABCDEFGHIJKLMNOP".split("").map((c) => ({ value: c, label: c }));
+const COLS_OPT = [{ value: "", label: "ไม่มี" }, ...COLS];
 
 const ICON_HELP = "ชื่อไอคอน Font Awesome เช่น fas fa-users (ค้นหาได้ที่ fontawesome.com/icons)";
 
@@ -55,6 +62,79 @@ export const PAGES: PageDef[] = [
   { id: "dashboard", group: "ภาพรวม", title: "ภาพรวมและสถานะ", icon: "fas fa-gauge", custom: "dashboard" },
   { id: "handover", group: "ภาพรวม", title: "ส่งต่อรุ่นถัดไป", icon: "fas fa-people-arrows", custom: "handover" },
 
+  // ---------------- Shared data (every system) ----------------
+  {
+    id: "terms",
+    group: "ข้อมูลกลาง (ใช้ทุกระบบ)",
+    title: "ภาคเรียน",
+    icon: "fas fa-calendar-days",
+    custom: "terms",
+    intro:
+      "ตั้งวันเปิด-ปิดภาคเรียนที่นี่ที่เดียว ทุกระบบใช้ร่วมกัน: แบบฟอร์มและหน้าสรุปทั้งหมด การนับสัปดาห์ของเล่มชมพู และระบบประเมินหน้าเสาธง ภาคเรียนปัจจุบันเปลี่ยนเองตามวันที่",
+  },
+  {
+    id: "classes",
+    group: "ข้อมูลกลาง (ใช้ทุกระบบ)",
+    title: "นักเรียนและห้องเรียน",
+    icon: "fas fa-user-graduate",
+    custom: "classes",
+    intro:
+      "ระดับชั้น ห้อง และกลุ่ม ก/ข ของทุกระบบ นับจากรายชื่อนักเรียนใน Google Sheet อัตโนมัติ (ไม่ต้องพิมพ์เอง) ขึ้นปีการศึกษาใหม่: เปลี่ยน Sheet → ดูตัวอย่าง → ดึงรายชื่อใหม่",
+    parts: [
+      {
+        source: S("students_import"),
+        title: "ตั้งค่าวิธีอ่าน Sheet รายชื่อนักเรียน",
+        help: "แชร์ไฟล์ให้อีเมล service account (หน้าคีย์เชื่อมต่อ) เป็น Viewer",
+        fields: [
+          { type: "text", key: "sheet_id", label: "Google Sheet รายชื่อนักเรียน (ID หรือลิงก์)" },
+          { type: "lines", key: "tabs", label: "แท็บที่อ่าน (ว่าง = อ่านทุกแท็บ)", placeholder: "ชื่อแท็บ แล้วกด Enter" },
+          {
+            type: "select",
+            key: "mode",
+            label: "รูปแบบของ Sheet",
+            options: [
+              { value: "header", label: "มีแถวหัวห้อง แล้วตามด้วยรายชื่อ" },
+              { value: "columns", label: "ทุกแถวมีคอลัมน์ชั้น/ห้อง" },
+            ],
+          },
+          {
+            type: "text",
+            key: "header_pattern",
+            label: "รูปแบบแถวหัวห้อง",
+            help: "ใช้ {ชั้น} {ห้อง} {สาย} แทนส่วนที่เปลี่ยน เช่น มัธยมศึกษาปีที่ {ชั้น}/{ห้อง} {สาย} (สาย = กลุ่ม ก/ข)",
+          },
+          { type: "select", key: "header_column", label: "คอลัมน์ของแถวหัวห้อง", options: COLS },
+          { type: "select", key: "col_number", label: "คอลัมน์เลขที่", options: COLS, help: "แถวที่คอลัมน์นี้ไม่ใช่ตัวเลขจะถูกข้าม" },
+          { type: "select", key: "col_student_id", label: "คอลัมน์เลขประจำตัว", options: COLS },
+          { type: "select", key: "col_prefix", label: "คอลัมน์คำนำหน้า", options: COLS_OPT },
+          { type: "select", key: "col_first_name", label: "คอลัมน์ชื่อ", options: COLS_OPT },
+          { type: "select", key: "col_last_name", label: "คอลัมน์นามสกุล", options: COLS_OPT },
+          { type: "select", key: "col_full_name", label: "คอลัมน์ชื่อเต็ม (ถ้าชื่อ-สกุลอยู่ช่องเดียว)", options: COLS_OPT },
+          { type: "select", key: "col_grade", label: "คอลัมน์ชั้น (แบบทุกแถวมีชั้น)", options: COLS_OPT },
+          { type: "select", key: "col_room", label: "คอลัมน์ห้อง (แบบทุกแถวมีชั้น)", options: COLS_OPT },
+          { type: "select", key: "col_track", label: "คอลัมน์กลุ่ม ก/ข (แบบทุกแถวมีชั้น)", options: COLS_OPT },
+          { type: "number", key: "min_id_length", label: "เลขประจำตัวยาวอย่างน้อย (ตัวอักษร)" },
+        ],
+        fromForm: (f: any) => ({ ...f, sheet_id: sheetIdOf(f.sheet_id) }),
+      },
+    ],
+  },
+  {
+    id: "inspectors",
+    group: "ข้อมูลกลาง (ใช้ทุกระบบ)",
+    title: "รายชื่อผู้ตรวจ",
+    icon: "fas fa-user-check",
+    intro: "รายชื่อที่ให้เลือกในแบบฟอร์มตรวจอาคาร สาย-เฉื่อย ส่งเล่ม และเล่มชมพู",
+    parts: [
+      {
+        source: D("inspectors"),
+        fields: [{ type: "lines", key: "names", label: "รายชื่อ", placeholder: "ชื่อ-นามสกุล แล้วกด Enter (วางหลายบรรทัดได้)" }],
+        toForm: (v: any) => ({ names: Array.isArray(v) ? v : [] }),
+        fromForm: (f: any) => f.names,
+      },
+    ],
+  },
+
   // ---------------- Website ----------------
   {
     id: "site",
@@ -62,6 +142,7 @@ export const PAGES: PageDef[] = [
     title: "ข้อมูลหลักของเว็บ",
     icon: "fas fa-globe",
     intro: "ชื่อพรรค/สภา โลโก้ สีหลัก เมนู และช่องทางติดต่อ ใช้ทุกหน้าของเว็บ",
+    preview: "/",
     parts: [
       {
         source: S("site"),
@@ -73,12 +154,13 @@ export const PAGES: PageDef[] = [
           { type: "image", key: "logo", label: "โลโก้", help: "รูปสี่เหลี่ยมจัตุรัส พื้นใส (PNG/WebP) อย่างน้อย 256×256" },
           { type: "color", key: "theme_color", label: "สีหลักของเว็บ" },
           { type: "url", key: "problem_form_url", label: "ลิงก์ฟอร์มแจ้งปัญหา", help: "เช่น Google Form ที่ใช้รับเรื่อง" },
-          { type: "list", key: "nav", label: "เมนูด้านบน", fields: navItem, title: "label", newItem: { label: "", href: "/" } },
+          { type: "list", key: "nav", label: "เมนูด้านบน", fields: navItem, title: "label", subtitle: "href", layout: "rows", newItem: { label: "", href: "/" } },
           {
             type: "list",
             key: "social",
             label: "ช่องทางโซเชียล",
             title: "label",
+            subtitle: "href",
             newItem: { label: "", href: "", icon: "fab fa-facebook-f" },
             fields: [
               { type: "text", key: "label", label: "ชื่อ", placeholder: "Facebook" },
@@ -95,6 +177,7 @@ export const PAGES: PageDef[] = [
     group: "เว็บไซต์",
     title: "หน้าแรก",
     icon: "fas fa-house",
+    preview: "/",
     links: [{ href: "/", label: "เปิดหน้าแรก" }],
     parts: [
       {
@@ -115,7 +198,7 @@ export const PAGES: PageDef[] = [
           { type: "text", key: "eyebrow", label: "ข้อความเล็กเหนือหัวข้อ" },
           { type: "text", key: "title", label: "หัวข้อใหญ่" },
           { type: "text", key: "title_highlight", label: "ส่วนที่เน้นสีของหัวข้อ" },
-          { type: "list", key: "quick", label: "การ์ดทางลัด", fields: card4, title: "title", newItem: { title: "", text: "", icon: "fas fa-star", href: "/" } },
+          { type: "list", key: "quick", label: "การ์ดทางลัด", fields: card4, title: "title", subtitle: "text", newItem: { title: "", text: "", icon: "fas fa-star", href: "/" } },
           { type: "text", key: "policy_title", label: "หัวข้อส่วนนโยบาย" },
           { type: "text", key: "policy_text", label: "คำอธิบายส่วนนโยบาย" },
           { type: "number", key: "policy_count", label: "จำนวนนโยบายที่แสดงบนหน้าแรก" },
@@ -130,6 +213,7 @@ export const PAGES: PageDef[] = [
     group: "เว็บไซต์",
     title: "นโยบาย",
     icon: "fas fa-list-check",
+    preview: "/policy/",
     links: [{ href: "/policy/", label: "เปิดหน้านโยบาย" }],
     parts: [
       {
@@ -143,6 +227,8 @@ export const PAGES: PageDef[] = [
             key: "items",
             label: "นโยบาย",
             title: "title",
+            subtitle: "summary",
+            itemName: "นโยบาย",
             newItem: { tag: "", title: "", icon: "fas fa-star", summary: "", text: "", points: [], note: "" },
             fields: [
               { type: "text", key: "title", label: "ชื่อนโยบาย" },
@@ -163,6 +249,7 @@ export const PAGES: PageDef[] = [
     group: "เว็บไซต์",
     title: "หน้าเกี่ยวกับ",
     icon: "fas fa-circle-info",
+    preview: "/about/",
     links: [{ href: "/about/", label: "เปิดหน้าเกี่ยวกับ" }],
     parts: [
       {
@@ -196,6 +283,7 @@ export const PAGES: PageDef[] = [
     group: "เว็บไซต์",
     title: "หน้าแจ้งปัญหา",
     icon: "fas fa-comment-dots",
+    preview: "/problem/",
     intro: "ลิงก์ฟอร์มแจ้งปัญหาตั้งที่หน้า \"ข้อมูลหลักของเว็บ\"",
     links: [{ href: "/problem/", label: "เปิดหน้าแจ้งปัญหา" }],
     parts: [
@@ -211,6 +299,7 @@ export const PAGES: PageDef[] = [
             key: "steps",
             label: "ขั้นตอน",
             title: "title",
+            subtitle: "text",
             newItem: { title: "", text: "", icon: "fas fa-check" },
             fields: [
               { type: "text", key: "title", label: "หัวข้อ" },
@@ -228,6 +317,7 @@ export const PAGES: PageDef[] = [
     group: "เว็บไซต์",
     title: "สมาชิก (โครงสร้าง)",
     icon: "fas fa-sitemap",
+    preview: "/member/",
     intro:
       "ฝ่าย งาน และคณะกรรมการบริหาร ส่วนรายชื่อ รูป และตำแหน่งของแต่ละคนแก้ที่หน้าแก้ไขข้อมูลสมาชิก ตำแหน่งของสมาชิกอ้างถึงฝ่ายด้วย \"รหัส\" (key) จึงไม่ควรเปลี่ยนรหัสของฝ่ายหรืองานที่มีคนอยู่แล้ว",
     links: [
@@ -246,6 +336,8 @@ export const PAGES: PageDef[] = [
             key: "exec",
             label: "คณะกรรมการบริหาร (คนแรกแสดงใหญ่ที่สุด)",
             title: "caption",
+            subtitle: "unit",
+            layout: "rows",
             newItem: { unit: "", caption: "" },
             fields: [
               { type: "text", key: "caption", label: "ชื่อตำแหน่งที่แสดง" },
@@ -257,6 +349,8 @@ export const PAGES: PageDef[] = [
             key: "depts",
             label: "ฝ่าย",
             title: "name",
+            subtitle: "tagline",
+            itemName: "ฝ่าย",
             newItem: { key: "", data_dept: "", name: "", short: "", tagline: "", units: [{ key: "head", name: "หัวหน้าฝ่าย" }] },
             fields: [
               { type: "text", key: "name", label: "ชื่อฝ่าย" },
@@ -269,6 +363,7 @@ export const PAGES: PageDef[] = [
                 key: "units",
                 label: "งานในฝ่าย",
                 title: "name",
+                layout: "rows",
                 newItem: { key: "", name: "" },
                 fields: [
                   { type: "text", key: "name", label: "ชื่องาน" },
@@ -290,6 +385,7 @@ export const PAGES: PageDef[] = [
     group: "เว็บไซต์",
     title: "หน้ารวมลิงก์ (/links/)",
     icon: "fas fa-link",
+    preview: "/links/",
     links: [{ href: "/links/", label: "เปิดหน้ารวมลิงก์" }],
     parts: [
       {
@@ -301,6 +397,7 @@ export const PAGES: PageDef[] = [
             key: "sections",
             label: "หมวด",
             title: "title",
+            subtitle: "text",
             newItem: { key: "", title: "", text: "", icon: "fas fa-folder", restricted: false, items: [] },
             fields: [
               { type: "text", key: "title", label: "ชื่อหมวด" },
@@ -313,6 +410,8 @@ export const PAGES: PageDef[] = [
                 key: "items",
                 label: "ลิงก์",
                 title: "title",
+                subtitle: "href",
+                layout: "rows",
                 newItem: { title: "", text: "", icon: "fas fa-link", href: "", lock: "", external: false },
                 fields: [
                   { type: "text", key: "title", label: "ชื่อ" },
@@ -323,37 +422,6 @@ export const PAGES: PageDef[] = [
                   { type: "bool", key: "external", label: "เป็นเว็บภายนอก (เปิดแท็บใหม่)" },
                 ],
               },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-
-  // ---------------- School year ----------------
-  {
-    id: "school",
-    group: "ปีการศึกษา",
-    title: "ปีการศึกษาและห้องเรียน",
-    icon: "fas fa-calendar-days",
-    intro:
-      "เปลี่ยนที่นี่ทุกภาคเรียน: แบบฟอร์มเล่มชมพู สาย-เฉื่อย และหน้าสรุปใช้ปีการศึกษา ภาคเรียน ระดับชั้น และจำนวนห้องจากหน้านี้ (อย่าลืมตั้ง Google Sheet ของภาคเรียนใหม่ในหน้าแบบฟอร์มสาย-เฉื่อย)",
-    parts: [
-      {
-        source: S("school"),
-        fields: [
-          { type: "text", key: "year", label: "ปีการศึกษา (พ.ศ.)", placeholder: "2569" },
-          { type: "select", key: "term", label: "ภาคเรียนปัจจุบัน", options: [{ value: "1", label: "ภาคเรียนที่ 1" }, { value: "2", label: "ภาคเรียนที่ 2" }] },
-          { type: "lines", key: "terms", label: "ภาคเรียนที่ให้เลือกดูในหน้าสรุป (ใหม่สุดก่อน บรรทัดละภาค)", placeholder: "2/2569\n1/2569" },
-          {
-            type: "list",
-            key: "grades",
-            label: "ระดับชั้น",
-            title: "name",
-            newItem: { name: "", rooms: 10 },
-            fields: [
-              { type: "text", key: "name", label: "ชื่อระดับชั้น", placeholder: "ม.1" },
-              { type: "number", key: "rooms", label: "จำนวนห้อง" },
             ],
           },
         ],
@@ -381,13 +449,23 @@ export const PAGES: PageDef[] = [
       },
       {
         source: S("building"),
+        // Rooms used to be typed as "311, 312"; the editor keeps them as a list.
+        toForm: (v: any) => ({
+          ...v,
+          buildings: (v.buildings || []).map((b: any) => ({
+            ...b,
+            floors: (b.floors || []).map((f: any) => ({ ...f, rooms: Array.isArray(f.rooms) ? f.rooms : String(f.rooms || "").split(/[,\s]+/).filter(Boolean) })),
+          })),
+        }),
         fields: [
           {
             type: "list",
             key: "buildings",
             label: "อาคารและห้อง",
             title: "number",
-            newItem: { number: "", floors: [{ floor: "1", rooms: "" }] },
+            subtitle: "floors",
+            itemName: "อาคาร",
+            newItem: { number: "", floors: [{ floor: "1", rooms: [] }] },
             fields: [
               { type: "text", key: "number", label: "เลขอาคาร" },
               {
@@ -395,15 +473,18 @@ export const PAGES: PageDef[] = [
                 key: "floors",
                 label: "ชั้น",
                 title: "floor",
-                newItem: { floor: "", rooms: "" },
+                subtitle: "rooms",
+                layout: "rows",
+                itemName: "ชั้น",
+                newItem: { floor: "", rooms: [] },
                 fields: [
                   { type: "text", key: "floor", label: "ชั้นที่" },
-                  { type: "text", key: "rooms", label: "ห้อง (คั่นด้วย , )", placeholder: "311, 312, 313" },
+                  { type: "lines", key: "rooms", label: "ห้อง", placeholder: "เลขห้อง แล้วกด Enter เช่น 311" },
                 ],
               },
             ],
           },
-          { type: "lines", key: "items_v2", label: "หัวข้อที่ตรวจ (บรรทัดละหัวข้อ)" },
+          { type: "lines", key: "items_v2", label: "หัวข้อที่ตรวจ" },
           { type: "lines", key: "items_v1", label: "หัวข้อที่ตรวจ แบบฟอร์มรุ่นเก่า (classic)" },
           {
             type: "list",
@@ -425,7 +506,7 @@ export const PAGES: PageDef[] = [
     group: "แบบฟอร์ม",
     title: "สาย - เฉื่อย",
     icon: "fas fa-user-clock",
-    intro: "ปีการศึกษาและภาคเรียนปัจจุบันตั้งที่หน้าปีการศึกษา ส่วนคอลัมน์ที่เขียนลงชีทแก้ได้ที่หน้าตั้งค่าแบบฟอร์มเดิม",
+    intro: "Google Sheet ของแต่ละภาคเรียนตั้งที่หน้าภาคเรียน ส่วนคอลัมน์ที่เขียนลงชีทแก้ได้ที่หน้าตั้งค่าแบบฟอร์มเดิม",
     links: [
       { href: "/forms/inert/", label: "เปิดแบบฟอร์ม" },
       { href: "/viewforms/inert/", label: "เปิดหน้าสรุป" },
@@ -434,37 +515,21 @@ export const PAGES: PageDef[] = [
     parts: [
       {
         source: D("inert"),
-        help: "แชร์ไฟล์ Google Sheet ให้อีเมล service account (หน้าคีย์เชื่อมต่อ) เป็น Editor ทุกไฟล์",
         fields: [
-          { type: "text", key: "t1_sheet", label: "Google Sheet ภาคเรียนที่ 1 (ID หรือลิงก์)" },
-          { type: "text", key: "t1_range", label: "ชื่อชีทรวม ภาคเรียนที่ 1", placeholder: "รวม" },
-          { type: "text", key: "t2_sheet", label: "Google Sheet ภาคเรียนที่ 2 (ID หรือลิงก์)" },
-          { type: "text", key: "t2_range", label: "ชื่อชีทรวม ภาคเรียนที่ 2", placeholder: "รวม" },
+          { type: "lines", key: "TYPES", label: "ประเภท" },
+          { type: "lines", key: "VIOLATIONS", label: "รายการผิดระเบียบ" },
           { type: "text", key: "junior", label: "ชื่อชีท ม.ต้น", placeholder: "ม.ต้น" },
           { type: "text", key: "high", label: "ชื่อชีท ม.ปลาย", placeholder: "ม.ปลาย" },
-          { type: "lines", key: "TYPES", label: "ประเภท (บรรทัดละประเภท)" },
-          { type: "lines", key: "VIOLATIONS", label: "รายการผิดระเบียบ (บรรทัดละรายการ)" },
         ],
         toForm: (v: any) => ({
-          t1_sheet: v?.terms?.["1"]?.SHEET_ID || "",
-          t1_range: v?.terms?.["1"]?.SHEET_RANGE || v?.SHEET_RANGE || "",
-          t2_sheet: v?.terms?.["2"]?.SHEET_ID || v?.SHEET_ID || "",
-          t2_range: v?.terms?.["2"]?.SHEET_RANGE || v?.SHEET_RANGE || "",
-          junior: v?.terms?.["2"]?.SHEET_JUNIOR_RANGE || v?.SHEET_JUNIOR_RANGE || "ม.ต้น",
-          high: v?.terms?.["2"]?.SHEET_HIGH_RANGE || v?.SHEET_HIGH_RANGE || "ม.ปลาย",
           TYPES: v?.TYPES || [],
           VIOLATIONS: v?.VIOLATIONS || [],
+          junior: v?.SHEET_JUNIOR_RANGE || "ม.ต้น",
+          high: v?.SHEET_HIGH_RANGE || "ม.ปลาย",
         }),
         fromForm: (f: any, stored: any) => {
-          const term = (id: string, range: string) => ({ SHEET_ID: sheetIdOf(id), SHEET_RANGE: range || "รวม", SHEET_JUNIOR_RANGE: f.junior || "ม.ต้น", SHEET_HIGH_RANGE: f.high || "ม.ปลาย" });
-          return {
-            ...(stored || {}),
-            TYPES: f.TYPES,
-            VIOLATIONS: f.VIOLATIONS,
-            SHEET_JUNIOR_RANGE: f.junior || "ม.ต้น",
-            SHEET_HIGH_RANGE: f.high || "ม.ปลาย",
-            terms: { ...(stored?.terms || {}), "1": term(f.t1_sheet, f.t1_range), "2": term(f.t2_sheet, f.t2_range) },
-          };
+          const terms = Object.fromEntries(Object.entries(stored?.terms || {}).map(([k, t]: [string, any]) => [k, { ...t, SHEET_JUNIOR_RANGE: f.junior || "ม.ต้น", SHEET_HIGH_RANGE: f.high || "ม.ปลาย" }]));
+          return { ...(stored || {}), TYPES: f.TYPES, VIOLATIONS: f.VIOLATIONS, SHEET_JUNIOR_RANGE: f.junior || "ม.ต้น", SHEET_HIGH_RANGE: f.high || "ม.ปลาย", terms };
         },
       },
     ],
@@ -481,7 +546,7 @@ export const PAGES: PageDef[] = [
     parts: [
       {
         source: S("submit_inert"),
-        fields: [{ type: "lines", key: "places", label: "จุดตรวจ (บรรทัดละจุด)", help: "ระดับชั้นมาจากหน้าปีการศึกษา" }],
+        fields: [{ type: "lines", key: "places", label: "จุดตรวจ", help: "ระดับชั้นมาจากหน้านักเรียนและห้องเรียน" }],
       },
     ],
   },
@@ -490,6 +555,7 @@ export const PAGES: PageDef[] = [
     group: "แบบฟอร์ม",
     title: "เล่มชมพู",
     icon: "fas fa-book-bookmark",
+    intro: "ภาคเรียนและสัปดาห์ที่ 1 มาจากหน้าภาคเรียน (สัปดาห์ที่ 1 = สัปดาห์ของวันเปิดเทอม) ห้องและกลุ่ม ก/ข มาจากหน้านักเรียนและห้องเรียน",
     links: [
       { href: "/forms/pinkbook/", label: "เปิดแบบฟอร์ม" },
       { href: "/viewforms/pinkbook/", label: "เปิดหน้าสรุป" },
@@ -498,55 +564,22 @@ export const PAGES: PageDef[] = [
       {
         source: D("pinkbook"),
         fields: [
-          { type: "text", key: "current_term", label: "ภาคเรียนที่บันทึก (เว้นว่าง = ใช้ภาคเรียนปัจจุบันจากหน้าปีการศึกษา)", placeholder: "2/2569" },
-          { type: "lines", key: "terms", label: "ภาคเรียนที่ให้เลือกดูในหน้าสรุป (เว้นว่าง = ใช้จากหน้าปีการศึกษา)" },
-          { type: "date", key: "week_1_start", label: "วันจันทร์ของสัปดาห์ที่ 1", help: "ใช้คำนวณว่าตอนนี้เป็นสัปดาห์ที่เท่าไร ตั้งใหม่ทุกภาคเรียน" },
           {
             type: "list",
             key: "items",
             label: "หัวข้อตรวจ",
             title: "title",
+            layout: "rows",
+            itemName: "หัวข้อ",
             newItem: { title: "", allow_week: false },
             fields: [
               { type: "text", key: "title", label: "หัวข้อ" },
               { type: "bool", key: "allow_week", label: "ระบุสัปดาห์ที่ไม่ส่งได้" },
             ],
           },
-          {
-            type: "list",
-            key: "rooms",
-            label: "ห้องของแต่ละระดับ",
-            help: "ห้องที่แบ่งเล่มเป็นกลุ่ม ก/ข ใส่ในช่อง \"ห้องที่มีกลุ่ม ก/ข\"",
-            title: "grade",
-            newItem: { grade: "", count: 10, sub: "" },
-            fields: [
-              { type: "text", key: "grade", label: "ระดับ (ตัวเลข)", placeholder: "1" },
-              { type: "number", key: "count", label: "จำนวนห้อง" },
-              { type: "text", key: "sub", label: "ห้องที่มีกลุ่ม ก/ข (คั่นด้วย , )", placeholder: "3, 4, 5" },
-            ],
-          },
         ],
-        toForm: (v: any) => ({
-          current_term: v?.current_term || "",
-          terms: v?.terms || [],
-          week_1_start: v?.week_1_start || "",
-          items: (v?.items || []).map((it: any) => (typeof it === "string" ? { title: it, allow_week: false } : it)),
-          rooms: Object.entries(v?.rooms || {}).map(([grade, rooms]: [string, any]) => {
-            const nums = Object.keys(rooms).map(Number).sort((a, b) => a - b);
-            return { grade, count: nums.length ? nums[nums.length - 1] : 0, sub: nums.filter((n) => rooms[n]?.sub).join(", ") };
-          }),
-        }),
-        fromForm: (f: any, stored: any) => {
-          const rooms: Record<string, Record<string, { sub: boolean }>> = {};
-          for (const r of f.rooms || []) {
-            const g = String(r.grade || "").replace(/\D/g, "");
-            if (!g) continue;
-            const sub = new Set(String(r.sub || "").split(/[,\s]+/).filter(Boolean));
-            rooms[g] = {};
-            for (let i = 1; i <= (Number(r.count) || 0); i++) rooms[g][String(i)] = { sub: sub.has(String(i)) };
-          }
-          return { ...(stored || {}), current_term: f.current_term.trim(), terms: f.terms, week_1_start: f.week_1_start, items: f.items, rooms };
-        },
+        toForm: (v: any) => ({ items: (v?.items || []).map((it: any) => (typeof it === "string" ? { title: it, allow_week: false } : it)) }),
+        fromForm: (f: any, stored: any) => ({ ...(stored || {}), items: f.items }),
       },
     ],
   },
@@ -569,80 +602,20 @@ export const PAGES: PageDef[] = [
             key: "rooms",
             label: "ห้องน้ำ",
             title: "name",
+            subtitle: "id",
+            layout: "rows",
             newItem: { id: "", name: "" },
             fields: [
               { type: "text", key: "id", label: "รหัสห้อง (ใช้ใน QR Code ห้ามซ้ำ)" },
               { type: "text", key: "name", label: "ชื่อห้อง" },
             ],
           },
-          { type: "lines", key: "problems", label: "ปัญหาที่ให้เลือก (บรรทัดละข้อ)" },
+          { type: "lines", key: "problems", label: "ปัญหาที่ให้เลือก" },
         ],
       },
-      { source: S("toilet_form"), fields: [{ type: "lines", key: "roles", label: "ผู้แจ้ง (บรรทัดละแบบ)" }] },
+      { source: S("toilet_form"), fields: [{ type: "lines", key: "roles", label: "ผู้แจ้ง" }] },
     ],
   },
-  {
-    id: "inspectors",
-    group: "แบบฟอร์ม",
-    title: "รายชื่อผู้ตรวจ",
-    icon: "fas fa-user-check",
-    intro: "รายชื่อที่ให้เลือกในแบบฟอร์มตรวจอาคาร สาย-เฉื่อย ส่งเล่ม และเล่มชมพู",
-    parts: [
-      {
-        source: D("inspectors"),
-        fields: [{ type: "lines", key: "names", label: "รายชื่อ (บรรทัดละคน)" }],
-        toForm: (v: any) => ({ names: Array.isArray(v) ? v : [] }),
-        fromForm: (f: any) => f.names,
-      },
-    ],
-  },
-  {
-    id: "students",
-    group: "แบบฟอร์ม",
-    title: "รายชื่อนักเรียน",
-    icon: "fas fa-user-graduate",
-    custom: "students",
-    intro:
-      "รายชื่อนักเรียนใช้ค้นหาชื่อในแบบฟอร์มสาย-เฉื่อย ระบบอ่านจาก Google Sheet ตามวิธีที่ตั้งด้านล่าง ขั้นตอน: ตั้งค่า → บันทึก → กด \"ดูตัวอย่าง\" ตรวจว่าแปลงถูก → กด \"ดึงรายชื่อใหม่\" (แชร์ไฟล์ให้อีเมล service account เป็น Viewer)",
-    parts: [
-      {
-        source: S("students_import"),
-        title: "วิธีอ่าน Sheet",
-        fields: [
-          { type: "text", key: "sheet_id", label: "Google Sheet รายชื่อนักเรียน (ID หรือลิงก์)" },
-          { type: "lines", key: "tabs", label: "แท็บที่อ่าน (บรรทัดละชื่อ เว้นว่าง = อ่านทุกแท็บ)" },
-          {
-            type: "select",
-            key: "mode",
-            label: "รูปแบบของ Sheet",
-            options: [
-              { value: "header", label: "มีแถวหัวห้อง (เช่น \"มัธยมศึกษาปีที่ 4/1\") แล้วตามด้วยรายชื่อ" },
-              { value: "columns", label: "ทุกแถวมีคอลัมน์ชั้นและห้องของตัวเอง" },
-            ],
-          },
-          {
-            type: "text",
-            key: "header_pattern",
-            label: "รูปแบบแถวหัวห้อง (แบบมีแถวหัวห้อง)",
-            help: "ใช้ {ชั้น} {ห้อง} {สาย} แทนส่วนที่เปลี่ยน เช่น มัธยมศึกษาปีที่ {ชั้น}/{ห้อง} {สาย} ข้อความอื่นในเซลล์ก่อน/หลังไม่เป็นไร",
-          },
-          { type: "text", key: "header_column", label: "คอลัมน์ของแถวหัวห้อง", placeholder: "A" },
-          { type: "text", key: "col_number", label: "คอลัมน์เลขที่", placeholder: "A", help: "แถวที่คอลัมน์นี้ไม่ใช่ตัวเลขจะถูกข้าม" },
-          { type: "text", key: "col_student_id", label: "คอลัมน์เลขประจำตัว", placeholder: "C" },
-          { type: "text", key: "col_prefix", label: "คอลัมน์คำนำหน้า", placeholder: "D" },
-          { type: "text", key: "col_first_name", label: "คอลัมน์ชื่อ", placeholder: "E" },
-          { type: "text", key: "col_last_name", label: "คอลัมน์นามสกุล", placeholder: "F" },
-          { type: "text", key: "col_full_name", label: "คอลัมน์ชื่อเต็ม (ถ้าชื่อ-สกุลอยู่ช่องเดียว ไม่งั้นเว้นว่าง)" },
-          { type: "text", key: "col_grade", label: "คอลัมน์ชั้น (แบบทุกแถวมีชั้น)", placeholder: "เช่น G (ค่า 4 หรือ ม.4)" },
-          { type: "text", key: "col_room", label: "คอลัมน์ห้อง (แบบทุกแถวมีชั้น)", placeholder: "เช่น H (ค่า 1 หรือ 4/1)" },
-          { type: "text", key: "col_track", label: "คอลัมน์สาย/แผน (แบบทุกแถวมีชั้น ไม่บังคับ)" },
-          { type: "number", key: "min_id_length", label: "เลขประจำตัวต้องยาวอย่างน้อย (ตัวอักษร)" },
-        ],
-        fromForm: (f: any) => ({ ...f, sheet_id: sheetIdOf(f.sheet_id), header_column: String(f.header_column || "").toUpperCase() }),
-      },
-    ],
-  },
-
   // ---------------- Other systems ----------------
   {
     id: "duty",
@@ -669,6 +642,8 @@ export const PAGES: PageDef[] = [
             key: "members",
             label: "สมาชิกที่ลงเวร",
             title: "nickname",
+            subtitle: "position",
+            itemName: "สมาชิก",
             newItem: { id: 0, nickname: "", fullName: "", position: "", cls: "", no: "" },
             fields: [
               { type: "text", key: "nickname", label: "ชื่อเล่น" },
@@ -679,12 +654,13 @@ export const PAGES: PageDef[] = [
               { type: "number", key: "id", label: "รหัส (ตัวเลข ห้ามซ้ำ)" },
             ],
           },
-          { type: "lines", key: "stations", label: "จุดเวร (บรรทัดละจุด)" },
+          { type: "lines", key: "stations", label: "จุดเวร" },
           {
             type: "list",
             key: "statuses",
             label: "สถานะการมา/ลา",
             title: "value",
+            layout: "rows",
             newItem: { value: "", key: "other", short: "", icon: "fa-circle" },
             fields: [
               { type: "text", key: "value", label: "ข้อความ" },
@@ -717,6 +693,42 @@ export const PAGES: PageDef[] = [
     intro:
       "บอทรับรูปจากแชทเข้าคลังภาพ ตั้ง Webhook URL ใน LINE Developers เป็น <ที่อยู่เว็บ>/api/line/webhook และใส่ Channel secret / access token ที่หน้าคีย์เชื่อมต่อ",
     parts: [{ source: S("line"), fields: [{ type: "number", key: "album_limit", label: "จำนวนอัลบั้มล่าสุดที่ให้เลือก (สูงสุด 12)" }] }],
+  },
+
+  // ---------------- Assessment system (assessRow) ----------------
+  {
+    id: "assess_lock",
+    group: "ระบบประเมินหน้าเสาธง",
+    title: "เปิด/ปิดระบบ",
+    icon: "fas fa-power-off",
+    custom: "assess_lock",
+    intro: "ปิดระบบประเมินชั่วคราว (เช่น ช่วงปรับปรุง) พร้อมข้อความที่ผู้ใช้จะเห็น",
+    links: [{ href: "https://assess-row-sdh.vercel.app/", label: "เปิดระบบประเมิน" }],
+  },
+  {
+    id: "assess_time",
+    group: "ระบบประเมินหน้าเสาธง",
+    title: "เวลาและวันประเมิน",
+    icon: "fas fa-clock",
+    custom: "assess_time",
+    intro: "ช่วงเวลาที่กรอกคะแนนได้ วันในสัปดาห์ที่เปิด และวันหยุด/วันชดเชย ภาคเรียนตั้งที่หน้าภาคเรียน",
+  },
+  {
+    id: "assess_people",
+    group: "ระบบประเมินหน้าเสาธง",
+    title: "ผู้ใช้และสิทธิ์",
+    icon: "fas fa-user-lock",
+    custom: "assess_people",
+    intro: "ใครเข้าระบบประเมินได้ในบทบาทไหน: กำหนดเป็นรายคน หรือเป็นกฎตามรูปแบบอีเมล (เช่น อีเมลที่เป็นตัวเลข = นักเรียน)",
+  },
+  {
+    id: "assess_accounts",
+    group: "ระบบประเมินหน้าเสาธง",
+    title: "บัญชีแอดมิน (ชื่อผู้ใช้/รหัสผ่าน)",
+    icon: "fas fa-user-gear",
+    custom: "assess_accounts",
+    intro: "บัญชีสำหรับเข้าหน้า /admin ของระบบประเมินโดยไม่ใช้ Google",
+    links: [{ href: "https://assess-row-sdh.vercel.app/admin/logs", label: "ประวัติการใช้งาน" }],
   },
 
   // ---------------- Security ----------------

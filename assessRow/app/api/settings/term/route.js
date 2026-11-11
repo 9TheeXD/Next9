@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
+import { getServerSession } from '@/lib/session';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 const { getDb } = require('@/lib/db');
 const { getTerms, getCurrentTerm, validateTerm } = require('@/lib/terms');
 const { getLogicalDateString } = require('@/lib/config');
+const { syncEnabled, NEXT9_URL } = require('@/lib/next9Sync');
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +12,7 @@ async function payload(db) {
   const today = getLogicalDateString();
   const terms = await getTerms(db);
   const { term, mode } = await getCurrentTerm(db, today, terms);
-  return { success: true, currentTerm: term ? term.id : null, currentMode: mode, today, terms };
+  return { success: true, currentTerm: term ? term.id : null, currentMode: mode, today, terms, managedBy: syncEnabled() ? NEXT9_URL : null };
 }
 
 export async function GET() {
@@ -49,6 +50,8 @@ export async function POST(request) {
     const db = getDb();
     const bad = (message, status = 400) => NextResponse.json({ success: false, message }, { status });
     const exists = async (id) => (await getTerms(db)).some((t) => t.id === String(id));
+    // Terms come from NEXT9 (lib/next9Sync.js): only "show on the summary page" is set here.
+    if (syncEnabled() && b.action !== 'show') return bad('แก้ภาคเรียนที่หน้าจัดการของ NEXT9');
 
     if (b.term !== undefined) {
       const term = String(b.term);

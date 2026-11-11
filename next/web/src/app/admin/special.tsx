@@ -266,135 +266,6 @@ export function Secrets({ toast, onAuthError }: Props) {
   );
 }
 
-// ---------------- Students ----------------
-// Shown under the "วิธีอ่าน Sheet" settings: preview what the saved settings read, then import.
-export function Students({ toast, onAuthError }: Props) {
-  const [info, setInfo] = useState<any>(null);
-  const [preview, setPreview] = useState<any>(null);
-  const [busy, setBusy] = useState<"" | "preview" | "sync">("");
-  const guard = useGuard(onAuthError, toast);
-
-  const load = useCallback(async () => {
-    try {
-      setInfo(await adminFetch("/api/admin/students"));
-    } catch (e) {
-      guard(e);
-    }
-  }, [guard]);
-
-  useEffect(() => {
-    const t = setTimeout(load, 0);
-    return () => clearTimeout(t);
-  }, [load]);
-
-  async function runPreview() {
-    setBusy("preview");
-    try {
-      setPreview((await adminFetch("/api/admin/students/preview", { method: "POST", body: "{}" })).preview);
-    } catch (e) {
-      guard(e);
-    }
-    setBusy("");
-  }
-
-  async function sync() {
-    setBusy("sync");
-    try {
-      const j = await adminFetch("/api/admin/students/sync", { method: "POST" });
-      toast(`บันทึกรายชื่อแล้ว ${j.count} คน`);
-      await load();
-    } catch (e) {
-      guard(e);
-    }
-    setBusy("");
-  }
-
-  const rooms = preview ? Object.entries(preview.byRoom as Record<string, number>).sort(([a], [b]) => a.localeCompare(b, "th", { numeric: true })) : [];
-  return (
-    <section className="t-card a-part">
-      <h2 className="a-part-title">ดูตัวอย่างและดึงรายชื่อ</h2>
-      <p className="a-help">ดูตัวอย่างใช้ค่าที่บันทึกแล้วด้านบน ยังไม่เปลี่ยนรายชื่อที่ใช้อยู่ กด &quot;ดึงรายชื่อใหม่&quot; เมื่อตัวอย่างถูกต้อง รายชื่อเดิมจะถูกแทนที่ทั้งหมด</p>
-      <div className="a-links">
-        <button type="button" className="t-btn t-btn-sm t-btn-ghost" disabled={!!busy} onClick={runPreview}>
-          <i className={busy === "preview" ? "fas fa-spinner fa-spin" : "fas fa-eye"} aria-hidden /> ดูตัวอย่าง
-        </button>
-        <button type="button" className="t-btn t-btn-sm" disabled={!!busy || (preview && preview.count === 0)} onClick={sync}>
-          <i className={busy === "sync" ? "fas fa-spinner fa-spin" : "fas fa-rotate"} aria-hidden /> ดึงรายชื่อใหม่
-        </button>
-      </div>
-
-      {preview && (
-        <div className="a-checks">
-          <h3>
-            ตัวอย่างจากไฟล์ &quot;{preview.file}&quot;: {preview.count} คน
-            {preview.duplicates > 0 && ` (ซ้ำ ${preview.duplicates} คน ตัดออกแล้ว)`}
-          </h3>
-          {preview.missingTabs.length > 0 && <p className="a-error">ไม่พบแท็บ: {preview.missingTabs.join(", ")} (แท็บที่มี: {preview.allTabs.join(", ")})</p>}
-          <div className="a-table-wrap">
-            <table className="a-table">
-              <thead><tr><th>แท็บ</th><th>อ่านได้</th><th>ข้าม (ข้อมูลไม่ครบ)</th></tr></thead>
-              <tbody>
-                {preview.perTab.map((t: any) => (
-                  <tr key={t.title} className={t.students ? undefined : "is-bad"}><td>{t.title}</td><td>{t.students}</td><td>{t.skipped}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {rooms.length > 0 && (
-            <div className="a-pills">
-              {rooms.map(([r, n]) => (
-                <span key={r} className="t-tag">ม.{r}: {n}</span>
-              ))}
-            </div>
-          )}
-          {preview.sample.length > 0 && (
-            <div className="a-table-wrap">
-              <table className="a-table">
-                <thead><tr><th>เลขประจำตัว</th><th>ชื่อ</th><th>ชั้น/ห้อง</th><th>เลขที่</th><th>สาย</th></tr></thead>
-                <tbody>
-                  {preview.sample.map((s: any) => (
-                    <tr key={s.studentId}><td>{s.studentId}</td><td>{s.name}</td><td>ม.{s.class}/{s.room}</td><td>{s.number}</td><td>{s.classType}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {preview.firstRows && (
-            <details className="a-raw">
-              <summary>ข้อมูลดิบ 12 แถวแรกของแท็บ &quot;{preview.firstRows.title}&quot; (ใช้ดูว่าข้อมูลอยู่คอลัมน์ไหน)</summary>
-              <div className="a-table-wrap">
-                <table className="a-table">
-                  <thead>
-                    <tr><th>#</th>{Array.from({ length: Math.max(0, ...preview.firstRows.rows.map((r: any[]) => r.length)) }, (_, i) => <th key={i}>{String.fromCharCode(65 + i)}</th>)}</tr>
-                  </thead>
-                  <tbody>
-                    {preview.firstRows.rows.map((r: any[], i: number) => (
-                      <tr key={i}><td>{i + 1}</td>{r.map((c, j) => <td key={j}>{String(c)}</td>)}</tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          )}
-        </div>
-      )}
-
-      {info && (
-        <div className="a-checks">
-          <h3>รายชื่อที่ใช้อยู่ตอนนี้: {info.count} คน</h3>
-          <div className="a-pills">
-            {Object.entries(info.byGrade as Record<string, number>)
-              .sort(([a], [b]) => String(a).localeCompare(String(b), "th", { numeric: true }))
-              .map(([g, n]) => (
-                <span key={g} className="t-tag">ม.{g}: {n} คน</span>
-              ))}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
 // ---------------- Handover ----------------
 export function Handover() {
   return (
@@ -411,16 +282,19 @@ export function Handover() {
           <b>สมาชิก:</b> แก้ฝ่าย/งานที่ <a href="#members">สมาชิก (โครงสร้าง)</a> แล้วใส่รายชื่อ รูป ตำแหน่งที่ <a href="/member/editor/" target="_blank">หน้าแก้ไขข้อมูลสมาชิก</a>
         </li>
         <li>
-          <b>ปีการศึกษา:</b> ตั้งปี ภาคเรียน และจำนวนห้องที่ <a href="#school">ปีการศึกษา</a> ทุกภาคเรียน
+          <b>ภาคเรียน:</b> เพิ่มภาคเรียนใหม่และวันเปิด-ปิดที่ <a href="#terms">ภาคเรียน</a> (วันเปิด-ปิดเทอม ใช้ร่วมกันทุกระบบ รวมถึงระบบประเมินหน้าเสาธง)
         </li>
         <li>
-          <b>Google Sheet:</b> สร้างไฟล์ใหม่ของปีการศึกษา แชร์ให้อีเมล service account (ดูที่ <a href="#secrets">คีย์เชื่อมต่อ</a>) เป็น Editor แล้วใส่ ID ที่ <a href="#building">ตรวจอาคาร</a>, <a href="#inert">สาย-เฉื่อย</a>, <a href="#students">รายชื่อนักเรียน</a> (กดดึงรายชื่อใหม่)
+          <b>Google Sheet:</b> สร้างไฟล์ใหม่ของปีการศึกษา แชร์ให้อีเมล service account (ดูที่ <a href="#secrets">คีย์เชื่อมต่อ</a>) เป็น Editor แล้วใส่ ID ที่ <a href="#building">ตรวจอาคาร</a>, <a href="#terms">ภาคเรียน</a> (Sheet สาย-เฉื่อย), <a href="#classes">นักเรียนและห้องเรียน</a> (ดูตัวอย่าง แล้วกดใช้รายชื่อนี้ ห้องและกลุ่ม ก/ข ของทุกระบบอัปเดตตาม)
         </li>
         <li>
           <b>ผู้ตรวจ:</b> ใส่รายชื่อผู้ตรวจรุ่นใหม่ที่ <a href="#inspectors">รายชื่อผู้ตรวจ</a> และสมาชิกที่ลงเวรที่ <a href="#duty">เวรประจำวัน</a>
         </li>
         <li>
-          <b>เล่มชมพู:</b> ตั้งวันจันทร์สัปดาห์ที่ 1 และหัวข้อตรวจที่ <a href="#pinkbook">เล่มชมพู</a>
+          <b>เล่มชมพู:</b> สัปดาห์ที่ 1 นับจากวันเปิดเทอมอัตโนมัติ ปรับหัวข้อตรวจได้ที่ <a href="#pinkbook">เล่มชมพู</a>
+        </li>
+        <li>
+          <b>ระบบประเมินหน้าเสาธง:</b> ตรวจผู้ใช้และสิทธิ์ เวลาและวันประเมินที่หมวด <a href="#assess_people">ระบบประเมินหน้าเสาธง</a>
         </li>
         <li>
           <b>ตรวจสอบ:</b> กลับไปหน้า <a href="#dashboard">ภาพรวม</a> กด &quot;ทดสอบเชื่อมต่อ&quot; ให้ขึ้นเขียวทั้งหมด แล้วดาวน์โหลดไฟล์สำรองเก็บไว้

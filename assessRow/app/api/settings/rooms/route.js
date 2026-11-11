@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
+import { getServerSession } from '@/lib/session';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +21,7 @@ export async function POST(request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session || session.user.role !== 'admin') return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    if (require('@/lib/next9Sync').syncEnabled()) return NextResponse.json({ message: 'จำนวนห้องมาจากรายชื่อนักเรียนในหน้าจัดการ NEXT9' }, { status: 400 });
     const body = await request.json();
     const rooms = normalizeRooms(body.rooms);
     const db = getDb();

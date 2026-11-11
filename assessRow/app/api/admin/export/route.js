@@ -1,4 +1,4 @@
-import { getServerSession } from 'next-auth/next';
+import { getServerSession } from '@/lib/session';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 const { getDb } = require('@/lib/db');
 const { isValidDateFormat } = require('@/lib/config');

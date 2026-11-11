@@ -6,10 +6,11 @@
 // วิธีติดตั้ง / อัปเดต:
 // 1. เปิด Google Sheets → Extensions → Apps Script
 // 2. ลบโค้ดเดิม แล้ว copy โค้ดนี้วางแทน
-// 3. (ไม่บังคับ) Project Settings → Script properties
+// 3. (ไม่บังคับ) ปกติไม่ต้องตั้งอะไร: สคริปต์ใช้ไฟล์ Sheet ที่เปิด Apps Script นี้ขึ้นมา และแท็บชื่อ
+//    "บันทึกเวรประจำวัน" (ไม่มีจะสร้างให้) ถ้าต้องการชี้ไปไฟล์/แท็บอื่น: Project Settings → Script properties
 //      SHEET_ID        = id ของ Google Sheet ที่บันทึกเวร
-//      SHEET_GID       = gid ของแท็บบันทึกเวร (ตัวเลขหลัง #gid= ในลิงก์ ถ้าไม่พบแท็บจะสร้างแท็บใหม่ให้)
-//    แล้วใส่ค่าเดียวกันในเว็บ: หน้าจัดการ (/admin/) → เวรประจำวัน
+//      SHEET_GID       = gid ของแท็บบันทึกเวร (ตัวเลขหลัง #gid= ในลิงก์)
+//    แล้วใส่ Sheet ID และ GID เดียวกันในเว็บ: หน้าจัดการ (/admin/) → เวรประจำวัน
 //      DRIVE_FOLDER_ID = id ของโฟลเดอร์ Drive ที่จะเก็บรูป
 //    ถ้าไม่ใส่ จะสร้าง/ใช้โฟลเดอร์ชื่อ "เวรประจำวัน" ใน My Drive ให้เอง
 // 4. Deploy → Manage deployments → แก้ deployment เดิม → Version: New version → Deploy
@@ -18,10 +19,13 @@
 //    แล้วเอา URL ใหม่ไปใส่ในหน้าจัดการ (/admin/) → เวรประจำวัน → Apps Script Web App URL
 // ─────────────────────────────────────────────────────────────────
 
-// Script properties ก่อน แล้วจึงใช้ค่าเดิมของสภารุ่น 2569 (ไม่ต้องแก้โค้ดเมื่อย้ายไฟล์)
+// ไฟล์ที่บันทึก: Script property SHEET_ID → ไฟล์ที่ผูกกับสคริปต์นี้ → ไฟล์เดิมของสภารุ่น 2569
+// แท็บ: Script property SHEET_GID → แท็บ gid เดิม → แท็บชื่อ "บันทึกเวรประจำวัน" → สร้างใหม่
+// (ไม่ต้องแก้โค้ดเมื่อย้ายไปไฟล์ใหม่)
 const PROPS = PropertiesService.getScriptProperties();
-const SHEET_ID = PROPS.getProperty("SHEET_ID") || "1u3nuYSwHyJOigNMjcDUqYCk3xvsNWi9dQlNURRLve-U";
-const SHEET_GID = Number(PROPS.getProperty("SHEET_GID") || 1803925258);   // แท็บ "บันทึกเวรประจำวัน"
+const LEGACY_SHEET_ID = "1u3nuYSwHyJOigNMjcDUqYCk3xvsNWi9dQlNURRLve-U";
+const SHEET_GID = Number(PROPS.getProperty("SHEET_GID") || 1803925258);
+const SHEET_NAME = "บันทึกเวรประจำวัน";
 const DRIVE_ROOT_NAME = "เวรประจำวัน";
 const TZ = "Asia/Bangkok";
 
@@ -113,10 +117,11 @@ function json(obj) {
 }
 
 function getSheet() {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  let sheet = ss.getSheets().find(s => s.getSheetId() === SHEET_GID);
+  const id = PROPS.getProperty("SHEET_ID");
+  const ss = id ? SpreadsheetApp.openById(id) : (SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(LEGACY_SHEET_ID));
+  let sheet = ss.getSheets().find(s => s.getSheetId() === SHEET_GID) || ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
-    sheet = ss.insertSheet("บันทึกเวรประจำวัน");
+    sheet = ss.insertSheet(SHEET_NAME);
     sheet.appendRow(HEADERS);
   }
   return sheet;

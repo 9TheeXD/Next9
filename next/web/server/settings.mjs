@@ -251,15 +251,14 @@ export const DEFAULTS = {
             },
         ],
     },
-    // The school year: shared by every form that records a term.
-    school: {
-        year: "2569",
-        term: "2",
-        // Terms the summary pages offer, newest first ("2/2569").
-        terms: ["2/2569", "1/2569"],
-        grades: [
-            { name: "ม.1", rooms: 14 }, { name: "ม.2", rooms: 14 }, { name: "ม.3", rooms: 14 },
-            { name: "ม.4", rooms: 16 }, { name: "ม.5", rooms: 16 }, { name: "ม.6", rooms: 16 },
+    // School terms: the one list every system uses (forms, summaries, the pinkbook's week count and
+    // the assessment system). The current term follows the dates unless one is pinned.
+    terms: {
+        mode: "auto",
+        pinned: "",
+        list: [
+            { semester: 2, year: 2569, start: "2026-10-26", end: "2027-03-31" },
+            { semester: 1, year: 2569, start: "2026-05-16", end: "2026-10-10" },
         ],
     },
     building: {
@@ -319,11 +318,97 @@ export const DEFAULTS = {
 }
 
 // Sections anyone may read (the pages need them). The others only through the admin API.
-export const PUBLIC_SECTIONS = new Set(["site", "home", "about", "problem", "policies", "members", "links", "school", "building", "submit_inert", "toilet_form", "duty"])
+export const PUBLIC_SECTIONS = new Set(["site", "home", "about", "problem", "policies", "members", "links", "school", "terms", "building", "submit_inert", "toilet_form", "duty"])
 
 const isPlainObject = (v) => v && typeof v === "object" && !Array.isArray(v)
 
+// ---- School: terms + classes (computed, read-only) ----
+// Grades, rooms and the ก/ข groups of each room come from the student list (admin → นักเรียนและห้องเรียน),
+// so nothing about the classes is typed in twice. Until a list is imported, these are used.
+const FALLBACK_ROOMS = { 1: 14, 2: 14, 3: 14, 4: 16, 5: 16, 6: 16 }
+
+// [{ grade, rooms: [{ room, groups: ["ก","ข"], students }] }] from the student list.
+export function computeClassStructure(students) {
+    const byGrade = new Map()
+    for (const s of students || []) {
+        const g = Number(s.class), r = Number(s.room)
+        if (!g || !r) continue
+        if (!byGrade.has(g)) byGrade.set(g, new Map())
+        const rooms = byGrade.get(g)
+        if (!rooms.has(r)) rooms.set(r, { room: r, groups: new Set(), students: 0 })
+        const room = rooms.get(r)
+        room.students++
+        if (s.classType) room.groups.add(String(s.classType).trim())
+    }
+    return [...byGrade.keys()].sort((a, b) => a - b).map((grade) => ({
+        grade,
+        rooms: [...byGrade.get(grade).values()].sort((a, b) => a.room - b.room)
+            .map((r) => ({ room: r.room, groups: [...r.groups].filter(Boolean).sort((a, b) => a.localeCompare(b, "th")), students: r.students })),
+    }))
+}
+
+export async function getClassStructure() {
+    let saved = await kvGet("class_structure", null, { cacheMs: 30 * 1000 })
+    if (!saved) {
+        const students = await kvGet("students", [])
+        if (Array.isArray(students) && students.length) {
+            saved = { at: Date.now(), grades: computeClassStructure(students) }
+            await kvSet("class_structure", saved)
+        }
+    }
+    if (saved?.grades?.length) return { source: "students", grades: saved.grades }
+    return {
+        source: "fallback",
+        grades: Object.entries(FALLBACK_ROOMS).map(([g, n]) => ({ grade: Number(g), rooms: Array.from({ length: n }, (_, i) => ({ room: i + 1, groups: [], students: 0 })) })),
+    }
+}
+
+export function bangkokToday() {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
+}
+
+// Monday of the week a date falls in (the pinkbook counts weeks from the term's first Monday).
+export function mondayOf(iso) {
+    const d = new Date(iso + "T00:00:00Z")
+    if (isNaN(d)) return ""
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7))
+    return d.toISOString().slice(0, 10)
+}
+
+// Everything the systems need to know about the school year, in one object (public section "school"):
+//   current { id "2/2569", semester, year, start, end }, terms (ids newest first), termList,
+//   year / term (of the current term), grades [{ grade, name "ม.1", rooms (count), roomList }].
+export async function getSchool(today = bangkokToday()) {
+    const t = await getSettings("terms")
+    const termList = (Array.isArray(t.list) ? t.list : [])
+        .filter((x) => x && Number(x.semester) && Number(x.year))
+        .map((x) => ({ id: `${Number(x.semester)}/${Number(x.year)}`, semester: Number(x.semester), year: Number(x.year), start: x.start || "", end: x.end || "" }))
+        .sort((a, b) => (b.start || "").localeCompare(a.start || "") || b.year - a.year || b.semester - a.semester)
+    let current = t.mode === "pinned" ? termList.find((x) => x.id === t.pinned) : null
+    let mode = current ? "pinned" : "auto"
+    if (!current) current = termList.find((x) => x.start <= today && today <= x.end) || termList.find((x) => x.start && x.start <= today) || termList[termList.length - 1] || null
+    const structure = await getClassStructure()
+    const grades = structure.grades.map((g) => ({
+        grade: g.grade,
+        name: `ม.${g.grade}`,
+        rooms: g.rooms.length ? Math.max(...g.rooms.map((r) => r.room)) : 0,
+        roomList: g.rooms,
+    }))
+    return {
+        today,
+        mode,
+        current: current ? { ...current, week1: mondayOf(current.start) } : null,
+        year: current ? String(current.year) : "",
+        term: current ? String(current.semester) : "",
+        terms: termList.map((x) => x.id),
+        termList,
+        classesFrom: structure.source,
+        grades,
+    }
+}
+
 export async function getSettings(section) {
+    if (section === "school") return getSchool()
     const def = DEFAULTS[section]
     if (!def) throw new Error(`unknown settings section: ${section}`)
     const saved = await kvGet(`settings:${section}`, null, { cacheMs: CACHE_MS })

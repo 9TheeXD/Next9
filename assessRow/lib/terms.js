@@ -2,6 +2,7 @@
 // Days outside every term (the break between terms) are not part of the school year: the dashboard
 // asks the evaluation APIs to leave them out (terms=1) and draws each term as its own line.
 const { getDb } = require('./db');
+const { syncFromNext9 } = require('./next9Sync');
 
 const isIsoDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s));
 
@@ -11,6 +12,7 @@ function termName(semester, year) {
 
 // All terms, newest first. `id` is a string because the dashboard keys its chart lines as s<id>.
 async function getTerms(db = getDb()) {
+  await syncFromNext9(db); // terms are edited on the NEXT9 admin page (lib/next9Sync.js)
   return (await db
     .prepare('SELECT id, semester, year, start_date, end_date, show_on_home FROM terms ORDER BY start_date DESC')
     .all())

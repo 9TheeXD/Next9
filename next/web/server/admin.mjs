@@ -24,7 +24,7 @@ import { getCachedToken, httpRequest } from "./google-sheets.js"
 import {
     DEFAULTS, PUBLIC_SECTIONS, PASSWORD_KINDS, getSettings, getManySettings, saveSettings,
     getPasswords, savePasswords, describeSecrets, saveSecrets, getSecret, getServiceAccount,
-    issueAdminToken, verifyAdminToken,
+    issueAdminToken, verifyAdminToken, getSchool,
 } from "./settings.mjs"
 
 // kv documents the forms already had before the admin pages, editable here as they are.
@@ -127,7 +127,7 @@ export async function handleAdminApi(req, res, ctx) {
         if (!b) return json(res, 404, {})
         const floors = {}
         for (const f of b.floors || []) {
-            const rooms = String(f.rooms || "").split(/[,\s]+/).map((r) => r.trim()).filter(Boolean)
+            const rooms = (Array.isArray(f.rooms) ? f.rooms : String(f.rooms || "").split(/[,\s]+/)).map((r) => String(r).trim()).filter(Boolean)
             if (String(f.floor).trim()) floors[String(f.floor).trim()] = rooms
         }
         return json(res, 200, floors, { ...SHORT_CACHE })
@@ -179,6 +179,9 @@ function getMemberByFullName(fullName) { return MEMBERS.find(m => m.fullName ===
 
     try {
         if (req.method === "GET" && path === "/api/admin/me") return json(res, 200, { success: true })
+
+        // Terms + classes as every system sees them (settings.mjs getSchool), uncached.
+        if (req.method === "GET" && path === "/api/admin/school") return json(res, 200, { success: true, school: await getSchool() })
 
         const sectionMatch = path.match(/^\/api\/admin\/settings\/([a-z_]+)$/)
         if (sectionMatch) {
@@ -245,6 +248,29 @@ function getMemberByFullName(fullName) { return MEMBERS.find(m => m.fullName ===
                 byGrade[g] = (byGrade[g] || 0) + 1
             }
             return json(res, 200, { success: true, count: list.length, byGrade, sample: list.slice(0, 5) })
+        }
+
+        // The assessment system (assessRow) is managed from here too: its admin APIs, called with the
+        // secret both projects share (NEXT9_ASSESS_SECRET). See assessRow/lib/session.js.
+        const assessMatch = path.match(/^\/api\/admin\/assess\/((?:settings\/(?:lock|eval-time|term))|(?:admin\/(?:whitelist|email-rules|accounts|overview)))$/)
+        if (assessMatch) {
+            // NEXT9_ASSESS_SECRET, or derived from the R2 key both projects share (assessRow/lib/session.js).
+            const secret = process.env.NEXT9_ASSESS_SECRET || (process.env.R2_SECRET_KEY ? crypto.createHash("sha256").update(`next9-assess-integration:${process.env.R2_SECRET_KEY}`).digest("hex") : "")
+            if (secret.length < 16) return json(res, 503, { success: false, message: "ยังไม่ได้ตั้ง NEXT9_ASSESS_SECRET หรือ R2_SECRET_KEY ใน Vercel" })
+            const base = (process.env.ASSESS_URL || "https://assess-row-sdh.vercel.app").replace(/\/+$/, "")
+            const chunks = []
+            for await (const c of req) chunks.push(c)
+            const r = await fetch(`${base}/api/${assessMatch[1]}${url.search}`, {
+                method: req.method,
+                headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
+                body: ["GET", "HEAD"].includes(req.method) ? undefined : Buffer.concat(chunks),
+                redirect: "manual",
+                signal: AbortSignal.timeout(20000),
+            })
+            const text = await r.text()
+            if (r.status >= 300 && r.status < 400) return json(res, 502, { success: false, message: "ระบบประเมินไม่ยอมรับการเชื่อมต่อ (R2_SECRET_KEY หรือ NEXT9_ASSESS_SECRET ของสอง project ต้องตรงกัน และระบบประเมินต้อง deploy รุ่นล่าสุดแล้ว)" })
+            res.writeHead(r.status, { "Content-Type": r.headers.get("content-type") || "application/json", "Cache-Control": "no-store" })
+            return res.end(text)
         }
 
         if (req.method === "GET" && path === "/api/admin/status") return json(res, 200, { success: true, checks: await statusChecks(url.searchParams.get("deep") === "1") })

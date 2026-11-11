@@ -15,7 +15,7 @@
 // EDITOR_PASSWORD), or node scripts/sync-students.mjs.
 import { getCachedToken, httpRequest } from "./google-sheets.js"
 import { kvSet } from "./kv.mjs"
-import { getSettings, getSecret } from "./settings.mjs"
+import { getSettings, getSecret, computeClassStructure } from "./settings.mjs"
 
 const col = (letter) => {
     const s = String(letter || "").trim().toUpperCase()
@@ -135,11 +135,14 @@ export async function syncStudents({ sheetId, serviceAccount, dryRun = false, se
         const byRoom = {}
         for (const s of unique) byRoom[`${s.class}/${s.room}`] = (byRoom[`${s.class}/${s.room}`] || 0) + 1
         return {
+            structure: computeClassStructure(unique),
             file: sheet.file, allTabs: sheet.titles, missingTabs, perTab, count: unique.length,
             duplicates: all.length - unique.length, byRoom, sample: unique.slice(0, 8), firstRows,
         }
     }
     if (!unique.length) throw new Error("ไม่พบรายชื่อนักเรียนเลย ตรวจการตั้งค่าการอ่าน Sheet (กดดูตัวอย่างก่อน)")
     await kvSet("students", unique)
+    // Grades, rooms and ก/ข groups every system uses (settings.mjs getSchool) follow the new list.
+    await kvSet("class_structure", { at: Date.now(), grades: computeClassStructure(unique) })
     return unique.length
 }

@@ -116,7 +116,13 @@ async function getInertConfigSync() {
     return {};
 }
 
+// No term given (the form's own submissions): the school's current term (admin → ภาคเรียน).
+async function currentSemester() {
+    return (await getSettings("school")).term || "2"
+}
+
 async function getEffectiveInertSheetId(term) {
+    if (!term) term = await currentSemester();
     const cfg = await getInertConfigSync();
     if (term && cfg.terms && cfg.terms[term] && cfg.terms[term].SHEET_ID) {
         return cfg.terms[term].SHEET_ID.trim();
@@ -125,6 +131,7 @@ async function getEffectiveInertSheetId(term) {
 }
 
 async function getEffectiveInertRanges(term) {
+    if (!term) term = await currentSemester();
     const cfg = await getInertConfigSync();
     const tCfg = (term && cfg.terms && cfg.terms[term]) ? cfg.terms[term] : {};
     return {
@@ -2089,13 +2096,20 @@ export async function handleApi(req, res) {
     }
 
     // The pinkbook form's term: its own setting, else the school's current term (admin → ปีการศึกษา).
+    // Term, week 1 and rooms all come from the school settings (admin → ภาคเรียน / นักเรียนและห้องเรียน);
+    // the pinkbook's own settings only hold its checklist items.
     async function schoolTerm() {
         const school = await getSettings("school");
-        return { current: `${school.term}/${school.year}`, terms: Array.isArray(school.terms) && school.terms.length ? school.terms : [`${school.term}/${school.year}`] };
+        const current = school.current ? school.current.id : "";
+        const rooms = {};
+        for (const g of school.grades) {
+            rooms[String(g.grade)] = {};
+            for (const r of g.roomList) rooms[String(g.grade)][String(r.room)] = { sub: r.groups.length > 1 };
+        }
+        return { current, terms: school.terms.length ? school.terms : [current], week1: school.current ? school.current.week1 : "", rooms, fromStudents: school.classesFrom === "students" };
     }
     async function getPinkbookCurrentTerm() {
-        const cfg = await getPinkbookConfigSync();
-        return (cfg.current_term && cfg.current_term.trim()) || (await schoolTerm()).current;
+        return (await schoolTerm()).current;
     }
 
     // Pinkbook API
@@ -2119,11 +2133,12 @@ export async function handleApi(req, res) {
         };
         try {
             const parsed = await kvGet("pinkbook_config", null);
-            if (parsed) {
-                configData = { ...configData, ...parsed };
-                if (!configData.current_term) configData.current_term = st.current;
-                if (!Array.isArray(configData.terms) || configData.terms.length === 0) configData.terms = st.terms;
-            }
+            if (parsed) configData = { ...configData, ...parsed };
+            configData.current_term = st.current;
+            configData.terms = st.terms;
+            if (st.week1) configData.week_1_start = st.week1;
+            // Rooms from the student list; the old saved map only while no list has been imported.
+            if (st.fromStudents || !configData.rooms) configData.rooms = st.rooms;
         } catch (e) {
             console.error("Failed to read pinkbook config:", e);
         }
@@ -3579,7 +3594,7 @@ export async function handleApi(req, res) {
         ;(async () => {
             try {
                 const globalStudentsData = await loadStudents();
-                const term = urlQuery.get("term") || "2";
+                const term = urlQuery.get("term") || await currentSemester();
                 if (!await getEffectiveInertSheetId(term) || !SERVICE_ACCOUNT) {
                     res.writeHead(503)
                     return res.end(JSON.stringify({ success: false, message: "Google Sheets not configured" }))

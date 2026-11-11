@@ -24,7 +24,9 @@ function status(t, today) {
 }
 
 export default function TermsPanel({ term, reload, showToast, ask }) {
-  const { terms, currentTerm, currentMode, today } = term;
+  const { terms, currentTerm, currentMode, today, managedBy } = term;
+  // Terms and rooms are edited on the NEXT9 admin page (lib/next9Sync.js); here they are read-only.
+  const locked = !!managedBy;
   const [form, setForm] = useState(null); // { id?, semester, year, startDate, endDate, showOnHome }
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState('');
@@ -134,6 +136,15 @@ export default function TermsPanel({ term, reload, showToast, ask }) {
 
   return (
     <div className="adm-stack">
+      {locked && (
+        <div className="adm-warn">
+          <AlertTriangle size={18} />
+          <span>
+            ภาคเรียนและจำนวนห้องตั้งที่หน้าจัดการของ NEXT9 ที่เดียว แล้วใช้ร่วมกันทุกระบบ:{' '}
+            <a href={`${managedBy}/admin/#terms`} target="_blank" rel="noopener noreferrer">{managedBy}/admin/</a>
+          </span>
+        </div>
+      )}
       {(!inTerm || !hasFuture) && (
         <div className="adm-warn">
           <AlertTriangle size={18} />
@@ -152,7 +163,7 @@ export default function TermsPanel({ term, reload, showToast, ask }) {
           <b>{current ? current.name : '—'}</b> · {currentMode === 'auto' ? 'เลือกเองตามวันที่ (เปลี่ยนเป็นเทอมใหม่อัตโนมัติเมื่อถึงวันเปิดเทอม)' : 'ตั้งค่าเองไว้ (ไม่เปลี่ยนตามวันที่)'}
         </p>
         <p className="adm-sub">ใช้กำหนดช่วง &quot;1 เดือน&quot; และ &quot;ปีการศึกษา&quot; ของหน้าสรุป</p>
-        {currentMode !== 'auto' && (
+        {currentMode !== 'auto' && !locked && (
           <div className="adm-row adm-actions">
             <button className="adm-btn" disabled={busy} onClick={() => post({ term: 'auto' }, 'ตั้งเป็นอัตโนมัติแล้ว')}>ให้เลือกตามวันที่อัตโนมัติ</button>
           </div>
@@ -162,9 +173,11 @@ export default function TermsPanel({ term, reload, showToast, ask }) {
       <section className="v2-card adm-card">
         <div className="adm-card-head">
           <h3>เทอมทั้งหมด ({terms.length})</h3>
-          <button className="adm-btn adm-btn-sm is-red" onClick={() => setForm({ ...suggestNext(terms), showOnHome: true })}>
-            <CalendarPlus size={15} /> เพิ่มเทอม
-          </button>
+          {!locked && (
+            <button className="adm-btn adm-btn-sm is-red" onClick={() => setForm({ ...suggestNext(terms), showOnHome: true })}>
+              <CalendarPlus size={15} /> เพิ่มเทอม
+            </button>
+          )}
         </div>
         <p className="adm-sub" style={{ marginTop: 0 }}>ติ๊ก &quot;แสดงในหน้าสรุป&quot; เพื่อเลือกว่าเทอมไหนมีปุ่มในหน้าหลัก (ตอนนี้แสดง {shownCount} เทอม)</p>
 
@@ -188,9 +201,11 @@ export default function TermsPanel({ term, reload, showToast, ask }) {
                   แสดงในหน้าสรุป
                 </label>
                 <div className="adm-termrow-btns">
-                  <button className="adm-btn adm-btn-sm" onClick={() => setForm({ id: t.id, semester: t.semester, year: t.year, startDate: t.startDate, endDate: t.endDate, showOnHome: t.showOnHome })}>
-                    <Pencil size={14} /> แก้ไขวันที่
-                  </button>
+                  {!locked && (
+                    <button className="adm-btn adm-btn-sm" onClick={() => setForm({ id: t.id, semester: t.semester, year: t.year, startDate: t.startDate, endDate: t.endDate, showOnHome: t.showOnHome })}>
+                      <Pencil size={14} /> แก้ไขวันที่
+                    </button>
+                  )}
                   {t.startDate <= today && (
                     <>
                       <button className="adm-btn adm-btn-sm" disabled={!!exporting} onClick={() => exportWord(t)}>
@@ -201,14 +216,16 @@ export default function TermsPanel({ term, reload, showToast, ask }) {
                       </a>
                     </>
                   )}
-                  {!isCur && (
+                  {!isCur && !locked && (
                     <button className="adm-btn adm-btn-sm" disabled={busy} onClick={() => ask(`ตั้ง${t.name}เป็นเทอมปัจจุบัน?\nจะไม่เปลี่ยนตามวันที่อัตโนมัติจนกว่าจะกด "ให้เลือกตามวันที่อัตโนมัติ"`, 'ยืนยัน', () => post({ term: t.id }, 'เปลี่ยนเทอมปัจจุบันแล้ว'))}>
                       <Pin size={14} /> ตั้งเป็นปัจจุบัน
                     </button>
                   )}
-                  <button className="adm-btn adm-btn-sm adm-btn-danger" disabled={busy || terms.length <= 1} onClick={() => remove(t)}>
-                    <Trash2 size={14} /> ลบ
-                  </button>
+                  {!locked && (
+                    <button className="adm-btn adm-btn-sm adm-btn-danger" disabled={busy || terms.length <= 1} onClick={() => remove(t)}>
+                      <Trash2 size={14} /> ลบ
+                    </button>
+                  )}
                 </div>
               </li>
             );
@@ -218,7 +235,7 @@ export default function TermsPanel({ term, reload, showToast, ask }) {
 
       <section className="v2-card adm-card">
         <h3>จำนวนห้องของแต่ละระดับชั้น</h3>
-        <RoomsEditor showToast={showToast} />
+        <RoomsEditor showToast={showToast} locked={locked} />
       </section>
 
       <section className="v2-card adm-card">
@@ -230,7 +247,7 @@ export default function TermsPanel({ term, reload, showToast, ask }) {
 }
 
 // Rooms per grade: the evaluation page lists this many rooms, and the summary counts against it.
-function RoomsEditor({ showToast }) {
+function RoomsEditor({ showToast, locked }) {
   const [rooms, setRooms] = useState(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -261,11 +278,15 @@ function RoomsEditor({ showToast }) {
         {[1, 2, 3, 4, 5, 6].map((g) => (
           <label key={g} style={{ width: 92 }}>
             <span className="adm-sub">ม.{g}</span>
-            <input className="adm-input" type="number" min={1} max={40} value={rooms[g] ?? ''} onChange={(e) => setRooms({ ...rooms, [g]: Number(e.target.value) })} />
+            <input className="adm-input" type="number" min={1} max={40} disabled={locked} value={rooms[g] ?? ''} onChange={(e) => setRooms({ ...rooms, [g]: Number(e.target.value) })} />
           </label>
         ))}
       </div>
-      <button className="adm-btn" disabled={saving} onClick={save}><Check size={16} /> บันทึกจำนวนห้อง</button>
+      {locked ? (
+        <p className="adm-sub">นับจากรายชื่อนักเรียนในหน้าจัดการ NEXT9 อัตโนมัติ</p>
+      ) : (
+        <button className="adm-btn" disabled={saving} onClick={save}><Check size={16} /> บันทึกจำนวนห้อง</button>
+      )}
     </>
   );
 }

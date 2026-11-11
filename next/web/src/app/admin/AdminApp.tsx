@@ -6,7 +6,9 @@ import { useToast } from "@/components/tool/Tool";
 import { AuthError, adminFetch, getToken, setToken } from "./api";
 import { FieldEditor } from "./fields";
 import { PAGES, type PageDef, type Part } from "./pages";
-import { Dashboard, Handover, Passwords, Secrets, Students } from "./special";
+import { Dashboard, Handover, Passwords, Secrets } from "./special";
+import { Classes, Terms } from "./central";
+import { AssessAccounts, AssessLock, AssessPeople, AssessTime } from "./assess";
 
 // /admin/: sign in with the admin password, then one page per system (pages.ts). The page shown
 // is in the URL hash (#site, #building …) so a link can point straight at it.
@@ -15,6 +17,7 @@ export function AdminApp() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [pageId, setPageId] = useState("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [previewKey, setPreviewKey] = useState(0);
   const toast = useToast();
 
   useEffect(() => {
@@ -107,15 +110,32 @@ export function AdminApp() {
             ))}
           </div>
         )}
-        <div key={page.id}>
-          {page.custom === "dashboard" && <Dashboard toast={toast.show} onAuthError={onAuthError} />}
-          {page.custom === "handover" && <Handover />}
-          {page.custom === "passwords" && <Passwords toast={toast.show} onAuthError={onAuthError} />}
-          {page.custom === "secrets" && <Secrets toast={toast.show} onAuthError={onAuthError} />}
-          {page.parts?.map((part, i) => (
-            <PartEditor key={i} part={part} toast={toast.show} onAuthError={onAuthError} />
-          ))}
-          {page.custom === "students" && <Students toast={toast.show} onAuthError={onAuthError} />}
+        <div key={page.id} className={page.preview ? "a-split" : undefined}>
+          <div className="a-split-main">
+            {page.custom === "dashboard" && <Dashboard toast={toast.show} onAuthError={onAuthError} />}
+            {page.custom === "handover" && <Handover />}
+            {page.custom === "passwords" && <Passwords toast={toast.show} onAuthError={onAuthError} />}
+            {page.custom === "secrets" && <Secrets toast={toast.show} onAuthError={onAuthError} />}
+            {page.custom === "terms" && <Terms toast={toast.show} onAuthError={onAuthError} />}
+            {page.custom === "classes" && <Classes toast={toast.show} onAuthError={onAuthError} />}
+            {page.custom === "assess_lock" && <AssessLock toast={toast.show} onAuthError={onAuthError} />}
+            {page.custom === "assess_time" && <AssessTime toast={toast.show} onAuthError={onAuthError} />}
+            {page.custom === "assess_people" && <AssessPeople toast={toast.show} onAuthError={onAuthError} />}
+            {page.custom === "assess_accounts" && <AssessAccounts toast={toast.show} onAuthError={onAuthError} />}
+            {page.parts?.map((part, i) => (
+              <PartEditor key={i} part={part} toast={toast.show} onAuthError={onAuthError} onSaved={() => setPreviewKey((k) => k + 1)} />
+            ))}
+          </div>
+          {page.preview && (
+            <aside className="a-preview">
+              <div className="a-preview-bar">
+                <span><i className="fas fa-eye" aria-hidden /> ตัวอย่าง {page.preview}</span>
+                <button type="button" className="t-icon-btn" onClick={() => setPreviewKey((k) => k + 1)} aria-label="โหลดใหม่"><i className="fas fa-rotate" aria-hidden /></button>
+                <a className="t-icon-btn" href={page.preview} target="_blank" rel="noopener noreferrer" aria-label="เปิดแท็บใหม่"><i className="fas fa-up-right-from-square" aria-hidden /></a>
+              </div>
+              <iframe key={previewKey} src={`${page.preview}${page.preview.includes("?") ? "&" : "?"}preview=${previewKey}`} title="ตัวอย่างหน้าเว็บ" />
+            </aside>
+          )}
         </div>
       </main>
       {toast.node}
@@ -167,7 +187,7 @@ function sourceUrl(part: Part) {
   return part.source.kind === "settings" ? `/api/admin/settings/${part.source.name}` : `/api/admin/doc/${part.source.name}`;
 }
 
-function PartEditor({ part, toast, onAuthError }: { part: Part; toast: (t: string, k?: "success" | "error") => void; onAuthError: () => void }) {
+function PartEditor({ part, toast, onAuthError, onSaved }: { part: Part; toast: (t: string, k?: "success" | "error") => void; onAuthError: () => void; onSaved?: () => void }) {
   const [stored, setStored] = useState<any>(undefined);
   const [form, setForm] = useState<any>(null);
   const [dirty, setDirty] = useState(false);
@@ -209,6 +229,7 @@ function PartEditor({ part, toast, onAuthError }: { part: Part; toast: (t: strin
       setForm(part.toForm ? part.toForm(j.value) : j.value);
       setDirty(false);
       toast("บันทึกแล้ว");
+      onSaved?.();
     } catch (e) {
       if (e instanceof AuthError) return onAuthError();
       toast((e as Error).message, "error");
@@ -234,8 +255,9 @@ function PartEditor({ part, toast, onAuthError }: { part: Part; toast: (t: strin
           }}
         />
       ))}
-      <div className={`a-save${dirty ? " is-dirty" : ""}`}>
-        <span>{dirty ? "มีการแก้ไขที่ยังไม่บันทึก" : "บันทึกแล้ว"}</span>
+      {dirty && (
+      <div className="a-save is-dirty">
+        <span>มีการแก้ไขที่ยังไม่บันทึก{part.title ? ` (${part.title})` : ""}</span>
         <button type="button" className="t-btn t-btn-ghost t-btn-sm" disabled={!dirty || saving} onClick={load}>
           ยกเลิกการแก้ไข
         </button>
@@ -243,6 +265,7 @@ function PartEditor({ part, toast, onAuthError }: { part: Part; toast: (t: strin
           <i className={saving ? "fas fa-spinner fa-spin" : "fas fa-floppy-disk"} aria-hidden /> บันทึก
         </button>
       </div>
+      )}
     </section>
   );
 }

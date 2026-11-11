@@ -24,6 +24,8 @@ function normalizeRooms(input) {
 
 async function loadRooms(db, { fresh = false } = {}) {
   if (!fresh && Date.now() - roomsCache.at < 30000) return roomsCache.rooms;
+  // Rooms come from NEXT9's student list (lib/next9Sync.js); copied here every few minutes.
+  await require('./next9Sync').syncFromNext9(db);
   let rooms = { ...DEFAULT_ROOMS };
   try {
     const row = await db.prepare("SELECT value FROM settings WHERE key = 'rooms_per_grade'").get();

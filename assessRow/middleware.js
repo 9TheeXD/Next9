@@ -1,4 +1,13 @@
 import { NextResponse } from 'next/server';
+// Same secret as lib/session.js, computed with Web Crypto (middleware runs on the edge).
+async function integrationSecret() {
+  if (process.env.NEXT9_ASSESS_SECRET) return process.env.NEXT9_ASSESS_SECRET;
+  const r2 = process.env.R2_SECRET_KEY || '';
+  if (!r2) return '';
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`next9-assess-integration:${r2}`));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 import { withAuth } from 'next-auth/middleware';
 
 export default withAuth(
@@ -26,6 +35,10 @@ export default withAuth(
     callbacks: {
       authorized: ({ req, token }) => {
         const path = req.nextUrl.pathname;
+        // The NEXT9 admin page's server (lib/session.js): its API calls carry the shared secret.
+        if (path.startsWith('/api/') && !token && (req.headers.get('authorization') || '').startsWith('Bearer ')) {
+          return integrationSecret().then((secret) => secret.length >= 16 && req.headers.get('authorization') === `Bearer ${secret}`);
+        }
         // The /admin page carries its own admin sign-in form and shows nothing else to anyone who is
         // not an admin, so it must be reachable signed out. (Requiring role=admin here sent everyone
         // to the Google-only /login, where an admin session can never be created.) Its data comes
