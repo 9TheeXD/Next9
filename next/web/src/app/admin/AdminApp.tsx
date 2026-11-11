@@ -6,8 +6,8 @@ import { useToast } from "@/components/tool/Tool";
 import { AuthError, adminFetch, getToken, setToken } from "./api";
 import { FieldEditor } from "./fields";
 import { PAGES, type PageDef, type Part } from "./pages";
-import { Dashboard, Handover, Passwords, Secrets } from "./special";
-import { Classes, Terms } from "./central";
+import { AllLinks, Dashboard, Handover, Passwords, Secrets } from "./special";
+import { Classes, Council, Terms } from "./central";
 import { AssessAccounts, AssessLock, AssessPeople, AssessTime } from "./assess";
 
 // /admin/: sign in with the admin password, then one page per system (pages.ts). The page shown
@@ -118,6 +118,8 @@ export function AdminApp() {
             {page.custom === "secrets" && <Secrets toast={toast.show} onAuthError={onAuthError} />}
             {page.custom === "terms" && <Terms toast={toast.show} onAuthError={onAuthError} />}
             {page.custom === "classes" && <Classes toast={toast.show} onAuthError={onAuthError} />}
+            {page.custom === "council" && <Council toast={toast.show} onAuthError={onAuthError} />}
+            {page.custom === "all_links" && <AllLinks toast={toast.show} />}
             {page.custom === "assess_lock" && <AssessLock toast={toast.show} onAuthError={onAuthError} />}
             {page.custom === "assess_time" && <AssessTime toast={toast.show} onAuthError={onAuthError} />}
             {page.custom === "assess_people" && <AssessPeople toast={toast.show} onAuthError={onAuthError} />}

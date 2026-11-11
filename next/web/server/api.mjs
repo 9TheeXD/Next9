@@ -61,6 +61,9 @@ const R2_SECRET_KEY = config.R2_SECRET_KEY
 const R2_BUCKET = config.R2_BUCKET || "assets"
 // Public address of the site, used in link previews (Open Graph URLs).
 const SITE_ORIGIN = (config.SITE_ORIGIN || "https://next9-web.vercel.app").replace(/\/+$/, "")
+// The admin password also opens what the editor password opens (member editor, form settings).
+let ADMIN_PASSWORD = ""
+const editorOk = (v) => typeof v === "string" && !!v && (v === EDITOR_PASSWORD || (!!ADMIN_PASSWORD && v === ADMIN_PASSWORD))
 let TOILET_PASSWORD = config.TOILET_PASSWORD || "next9"
 let PHOTOS_PASSWORD = config.PHOTOS_PASSWORD || "next9"
 let PINKBOOK_PASSWORD = "1"
@@ -101,6 +104,7 @@ let SERVICE_ACCOUNT = null
 async function refreshPerRequestSettings() {
     const [pw, sheets, building, sa] = await Promise.all([getPasswords(), getSettings("sheets"), getSettings("building"), getServiceAccount()])
     EDITOR_PASSWORD = pw.editor
+    ADMIN_PASSWORD = pw.admin
     TOILET_PASSWORD = pw.toilet
     PHOTOS_PASSWORD = pw.photos
     PINKBOOK_PASSWORD = pw.pinkbook
@@ -734,6 +738,67 @@ export function ensureSchema() {
 export async function downloadMembers() {
   const buf = await getFromR2("next9/members/members.json")
   return JSON.parse(Buffer.isBuffer(buf) ? buf.toString("utf8") : String(buf))
+}
+
+// ---- The council (one list for every system) ----
+// The member list (/member/editor/) is the only list of council members. The inspectors every form
+// offers and the people who log duty (ShiftManager) are taken from it; each member can be left out
+// of either with inspector: false / duty: false (admin → สมาชิกสภา).
+let councilCache = null
+export async function getCouncil({ fresh = false } = {}) {
+  if (!fresh && councilCache && Date.now() - councilCache.at < 30 * 1000) return councilCache.list
+  const [members, students] = await Promise.all([downloadMembers(), kvGet("students", [], { cacheMs: 10 * 60 * 1000 })])
+  const norm = (s) => String(s || "").replace(/\s+/g, " ").trim()
+  // Matched on first and last name only: prefixes are written differently (น.ส. / นางสาว).
+  const bare = (s) => norm(s).replace(/^(นางสาว|นาย|นาง|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|น\.ส\.)\s*/, "")
+  const byName = new Map((students || []).map((st) => [norm(`${st.firstName} ${st.lastName}`), st]))
+  const roomKey = (r) => String(r || "").split("/").map((n) => String(Number(n) || 0).padStart(3, "0")).join("/")
+  const list = (Array.isArray(members) ? members : []).map((m) => {
+    // Class and number from the student list when the member did not set them.
+    const st = byName.get(bare(m.name))
+    return {
+      slug: m.slug, nickname: m.nickname || "", name: norm(m.name), role: m.role || "", room: m.room || (st ? `${st.class}/${st.room}` : ""),
+      no: m.no ? String(m.no) : st ? String(st.number) : "", inspector: m.inspector !== false, duty: m.duty !== false, img: m.img || "",
+    }
+  }).sort((a, b) => roomKey(a.room).localeCompare(roomKey(b.room)) || Number(a.no || 0) - Number(b.no || 0))
+  councilCache = { at: Date.now(), list }
+  return list
+}
+
+// The whole member list from the admin page (add, remove, reorder, edit). Fields the page does not
+// show (photo, bio …) are kept because the page sends the objects it read back.
+export async function saveMembers(list) {
+  if (!Array.isArray(list)) throw new Error("รายชื่อไม่ถูกต้อง")
+  const seen = new Set()
+  for (const m of list) {
+    if (!m || typeof m !== "object") throw new Error("รายชื่อไม่ถูกต้อง")
+    m.slug = String(m.slug || "").trim().toLowerCase()
+    if (!/^[a-z0-9_-]{2,40}$/.test(m.slug)) throw new Error(`รหัส (slug) "${m.slug}" ใช้ได้เฉพาะ a-z 0-9 - _`)
+    if (seen.has(m.slug)) throw new Error(`รหัส (slug) "${m.slug}" ซ้ำ`)
+    seen.add(m.slug)
+    if (!String(m.name || "").trim() || !String(m.nickname || "").trim()) throw new Error("ทุกคนต้องมีชื่อ-นามสกุลและชื่อเล่น")
+    if (!Array.isArray(m.positions)) m.positions = []
+    if (m.positions.length) m.roles = m.positions.map((p) => p.label).filter(Boolean)
+    if (!m.role && m.roles.length) m.role = m.roles[0]
+  }
+  await uploadToR2("next9/members/members.json", JSON.stringify(list, null, 2))
+  councilCache = null
+  return list
+}
+
+// Changes inspector/duty flags (and the class number) without touching the rest of members.json.
+export async function saveCouncilFlags(changes) {
+  const members = await downloadMembers()
+  for (const m of members) {
+    const c = changes[m.slug]
+    if (!c) continue
+    if (typeof c.inspector === "boolean") m.inspector = c.inspector
+    if (typeof c.duty === "boolean") m.duty = c.duty
+    if (typeof c.no === "string") m.no = c.no.trim()
+  }
+  await uploadToR2("next9/members/members.json", JSON.stringify(members, null, 2))
+  councilCache = null
+  return getCouncil({ fresh: true })
 }
 // Local development uses the production R2 credentials so images can be signed and viewed.
 // NEXT9_DEV_READONLY=1 turns every R2 write and delete into a logged no-op, so nothing a dev
@@ -2080,7 +2145,7 @@ export async function handleApi(req, res) {
     if (/^\/api\/(admin|settings|file|auth|duty)\//.test(req.url) || req.url.startsWith("/api/building/rooms/") || /^\/api\/members(\?|$)/.test(req.url) ||
         /^\/(duty\/js\/(config|data)\.js|forms\/building\/rooms\/)/.test(req.url)) {
         const handled = await handleAdminApi(req, res, {
-            presignR2Get, presignR2Put, getFromR2, uploadToR2, uploadBufferToR2, headR2Size, downloadMembers,
+            presignR2Get, presignR2Put, getFromR2, uploadToR2, uploadBufferToR2, headR2Size, downloadMembers, getCouncil, saveCouncilFlags, saveMembers,
             syncStudents: (opts) => syncStudents(opts),
         })
         if (handled !== false) return
@@ -2581,7 +2646,7 @@ export async function handleApi(req, res) {
         req.on("end", () => {
             try {
                 const { password } = JSON.parse(body)
-                if (password === EDITOR_PASSWORD) {
+                if (editorOk(password)) {
                     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" })
                     res.end(JSON.stringify({ success: true }))
                 } else {
@@ -2600,7 +2665,7 @@ export async function handleApi(req, res) {
     // Stored as next9/members/2/<slug>.webp (portrait 4:5, the shape every member page shows) and the
     // member's img gets a ?v= stamp so the CDN and browsers fetch the new photo, not the cached old one.
     if (req.method === "POST" && req.url.startsWith("/api/member-photo")) {
-        if (req.headers.authorization !== EDITOR_PASSWORD) {
+        if (!editorOk(req.headers.authorization)) {
             res.writeHead(401)
             return res.end(JSON.stringify({ success: false }))
         }
@@ -2631,6 +2696,7 @@ export async function handleApi(req, res) {
                 await uploadBufferToR2(`next9/members/2/${slug}.webp`, webp, "image/webp")
                 members[index] = { ...member, img: `2/${slug}.webp?v=${Date.now()}`, updatedAt: Date.now() }
                 await uploadToR2("next9/members/members.json", JSON.stringify(members, null, 2))
+                councilCache = null
                 send(200, { success: true, member: members[index] })
             } catch (err) {
                 console.error("member-photo:", err)
@@ -2642,7 +2708,7 @@ export async function handleApi(req, res) {
 
     if (req.method === "POST" && req.url === "/api/save-member") {
     const authHeader = req.headers.authorization;
-    if (authHeader !== EDITOR_PASSWORD) {
+    if (!editorOk(authHeader)) {
         res.writeHead(401);
         return res.end(JSON.stringify({ success: false }));
     }
@@ -2670,6 +2736,7 @@ export async function handleApi(req, res) {
 
         const jsonString = JSON.stringify(members, null, 2);
         await uploadToR2("next9/members/members.json", jsonString);
+        councilCache = null;
 
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ success: true, member: members[index] }));
@@ -2686,7 +2753,7 @@ export async function handleApi(req, res) {
 
     if (req.method === "POST" && req.url === "/api/generate-site") {
         const authHeader = req.headers.authorization
-        if (authHeader !== EDITOR_PASSWORD) {
+        if (!editorOk(authHeader)) {
             res.writeHead(401)
             return res.end(JSON.stringify({ success: false }))
         }
@@ -3450,7 +3517,7 @@ export async function handleApi(req, res) {
 
     // POST /api/inert/config - บันทึกข้อมูล Config ของฟอร์ม
     if (req.method === "POST" && urlPath === "/api/inert/config") {
-        if (req.headers.authorization !== EDITOR_PASSWORD) {
+        if (!editorOk(req.headers.authorization)) {
             res.writeHead(401); 
             return res.end(JSON.stringify({ success: false, message: "Unauthorized" }));
         }
@@ -3519,21 +3586,29 @@ export async function handleApi(req, res) {
     // POST /api/inspectors (Authorization: EDITOR_PASSWORD) replaces it with the JSON body.
     if ((urlPath === "/api/inspectors" || urlPath === "/inspectors.json") && (req.method === "GET" || req.method === "POST")) {
         if (req.method === "POST") {
-            if (req.headers.authorization !== EDITOR_PASSWORD) { res.writeHead(401); return res.end(JSON.stringify({ success: false })) }
+            if (!editorOk(req.headers.authorization)) { res.writeHead(401); return res.end(JSON.stringify({ success: false })) }
             try {
                 await kvSet("inspectors", JSON.parse(String(await collectBody(req))))
                 res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" })
                 return res.end(JSON.stringify({ success: true }))
             } catch (e) { res.writeHead(400); return res.end(JSON.stringify({ success: false, message: e.message })) }
         }
-        const list = await kvGet("inspectors", [], { cacheMs: 60 * 1000 })
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=60, s-maxage=300" })
+        // The council members marked as inspectors (admin → สมาชิกสภา); the old saved list only if the
+        // member list cannot be read.
+        let list
+        try {
+            list = (await getCouncil()).filter((m) => m.inspector).map((m) => m.name)
+        } catch (e) {
+            console.error("[inspectors] member list:", e.message)
+            list = await kvGet("inspectors", [], { cacheMs: 60 * 1000 })
+        }
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=60, s-maxage=60" })
         return res.end(JSON.stringify(list))
     }
 
     // POST /api/students/sync — reload the student list from the Google Sheet (STUDENTS_SHEET_ID).
     if (req.method === "POST" && urlPath === "/api/students/sync") {
-        if (req.headers.authorization !== EDITOR_PASSWORD) { res.writeHead(401); return res.end(JSON.stringify({ success: false })) }
+        if (!editorOk(req.headers.authorization)) { res.writeHead(401); return res.end(JSON.stringify({ success: false })) }
         try {
             const count = await syncStudents()
             res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" })

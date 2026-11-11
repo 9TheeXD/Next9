@@ -279,7 +279,7 @@ export function Handover() {
           <b>ข้อมูลพรรค/สภา:</b> แก้ชื่อ โลโก้ สี เมนู โซเชียลที่ <a href="#site">ข้อมูลหลักของเว็บ</a> แล้วแก้ <a href="#home">หน้าแรก</a>, <a href="#policies">นโยบาย</a>, <a href="#about">หน้าเกี่ยวกับ</a>
         </li>
         <li>
-          <b>สมาชิก:</b> แก้ฝ่าย/งานที่ <a href="#members">สมาชิก (โครงสร้าง)</a> แล้วใส่รายชื่อ รูป ตำแหน่งที่ <a href="/member/editor/" target="_blank">หน้าแก้ไขข้อมูลสมาชิก</a>
+          <b>สมาชิก:</b> แก้ฝ่าย/งานที่ <a href="#members">สมาชิก (โครงสร้าง)</a> แล้วเพิ่ม/ลบคนและตำแหน่งที่ <a href="#council">สมาชิกสภา</a> (รายชื่อนี้เป็นผู้ตรวจและคนลงเวรด้วย) ใส่รูปที่ <a href="/member/editor/" target="_blank">หน้าแก้ไขข้อมูลสมาชิก</a>
         </li>
         <li>
           <b>ภาคเรียน:</b> เพิ่มภาคเรียนใหม่และวันเปิด-ปิดที่ <a href="#terms">ภาคเรียน</a> (วันเปิด-ปิดเทอม ใช้ร่วมกันทุกระบบ รวมถึงระบบประเมินหน้าเสาธง)
@@ -288,7 +288,7 @@ export function Handover() {
           <b>Google Sheet:</b> สร้างไฟล์ใหม่ของปีการศึกษา แชร์ให้อีเมล service account (ดูที่ <a href="#secrets">คีย์เชื่อมต่อ</a>) เป็น Editor แล้วใส่ ID ที่ <a href="#building">ตรวจอาคาร</a>, <a href="#terms">ภาคเรียน</a> (Sheet สาย-เฉื่อย), <a href="#classes">นักเรียนและห้องเรียน</a> (ดูตัวอย่าง แล้วกดใช้รายชื่อนี้ ห้องและกลุ่ม ก/ข ของทุกระบบอัปเดตตาม)
         </li>
         <li>
-          <b>ผู้ตรวจ:</b> ใส่รายชื่อผู้ตรวจรุ่นใหม่ที่ <a href="#inspectors">รายชื่อผู้ตรวจ</a> และสมาชิกที่ลงเวรที่ <a href="#duty">เวรประจำวัน</a>
+          <b>ผู้ตรวจและคนลงเวร:</b> เปิด/ปิดรายคนที่ <a href="#council">สมาชิกสภา</a>
         </li>
         <li>
           <b>เล่มชมพู:</b> สัปดาห์ที่ 1 นับจากวันเปิดเทอมอัตโนมัติ ปรับหัวข้อตรวจได้ที่ <a href="#pinkbook">เล่มชมพู</a>
@@ -317,5 +317,150 @@ export function Handover() {
         </li>
       </ul>
     </section>
+  );
+}
+
+// ---------------- Every page of every system ----------------
+type L = { path: string; title: string; note?: string };
+const ASSESS = "https://assess-row-sdh.vercel.app";
+const CATALOG: { title: string; icon: string; items: L[] }[] = [
+  {
+    title: "แบบฟอร์ม (สมาชิกสภาใช้กรอก)",
+    icon: "fas fa-file-pen",
+    items: [
+      { path: "/forms/building/", title: "ตรวจอาคาร" },
+      { path: "/forms/inert/", title: "ลงชื่อสาย - เฉื่อย" },
+      { path: "/forms/submit_inert/", title: "รายงานส่งเล่มตรวจสาย - เฉื่อย" },
+      { path: "/forms/pinkbook/", title: "ตรวจเล่มชมพู" },
+      { path: "/duty/", title: "ลงเวรประจำวัน" },
+      { path: "/forms/toilet/?room=<รหัสห้อง>", title: "แจ้งปัญหาห้องน้ำ (เปิดจาก QR หน้าห้องน้ำ)", note: "สร้าง QR ที่หน้าตั้งค่าระบบห้องน้ำ" },
+    ],
+  },
+  {
+    title: "หน้าสรุปผล",
+    icon: "fas fa-chart-simple",
+    items: [
+      { path: "/viewforms/building/", title: "สรุปผลการตรวจอาคาร" },
+      { path: "/viewforms/inert/", title: "สรุปรายชื่อสาย - เฉื่อย" },
+      { path: "/viewforms/submit_inert/", title: "สรุปการส่งเล่มตรวจสาย - เฉื่อย", note: "รหัสผ่าน: หน้าสรุปการส่งเล่ม" },
+      { path: "/viewforms/pinkbook/", title: "สรุปผลการตรวจเล่มชมพู", note: "รหัสผ่าน: หน้าสรุปผลเล่มชมพู" },
+      { path: "/duty/summary.html", title: "สรุปการลงเวร" },
+      { path: "/duty/dashboard.html", title: "ลงเวร (หน้าหลักหลังเลือกชื่อ)" },
+      { path: "/duty/photos.html", title: "รูปเวรประจำวัน" },
+    ],
+  },
+  {
+    title: "คลังภาพ",
+    icon: "fas fa-images",
+    items: [{ path: "/photos/", title: "อัลบั้มรูปกิจกรรม", note: "รหัสผ่าน: คลังภาพ" }],
+  },
+  {
+    title: "จัดการ (ผู้ดูแล)",
+    icon: "fas fa-user-shield",
+    items: [
+      { path: "/admin/", title: "หน้าจัดการระบบ (หน้านี้)", note: "รหัสผ่านผู้ดูแล" },
+      { path: "/member/editor/", title: "แก้ไขข้อมูลสมาชิก", note: "รหัสผู้ดูแล หรือรหัสแก้ไขสมาชิก" },
+      { path: "/forms/toilet/manage/", title: "ดูเรื่องที่แจ้งห้องน้ำ", note: "รหัสผ่าน: ระบบห้องน้ำ" },
+      { path: "/forms/toilet/admin/", title: "ตั้งค่าห้องน้ำและพิมพ์ QR Code", note: "รหัสผ่าน: ระบบห้องน้ำ" },
+      { path: "/forms/inert/edit/", title: "ตั้งค่าคอลัมน์ Google Sheet สาย-เฉื่อย", note: "รหัสผู้ดูแล หรือรหัสแก้ไขสมาชิก" },
+      { path: "/links/", title: "หน้ารวมลิงก์สำหรับสมาชิกสภา" },
+    ],
+  },
+  {
+    title: "ระบบประเมินกิจกรรมหน้าเสาธง",
+    icon: "fas fa-flag",
+    items: [
+      { path: `${ASSESS}/`, title: "หน้าสรุป", note: "เข้าด้วย Google ของโรงเรียน" },
+      { path: `${ASSESS}/evaluate`, title: "หน้ากรอกคะแนน" },
+      { path: `${ASSESS}/admin`, title: "หน้าจัดการของระบบประเมิน" },
+      { path: `${ASSESS}/admin/evaluations`, title: "แก้ไข/ลบคะแนนที่บันทึก" },
+      { path: `${ASSESS}/admin/logs`, title: "ประวัติการใช้งาน" },
+    ],
+  },
+  {
+    title: "เว็บไซต์สาธารณะ",
+    icon: "fas fa-globe",
+    items: [
+      { path: "/", title: "หน้าแรก" },
+      { path: "/about/", title: "เกี่ยวกับ" },
+      { path: "/policy/", title: "นโยบาย" },
+      { path: "/member/", title: "สมาชิก" },
+      { path: "/member/grade/", title: "งานระดับชั้น" },
+      { path: "/problem/", title: "แจ้งปัญหา" },
+    ],
+  },
+  {
+    title: "แบบฟอร์มรุ่นเก่า (สำรอง)",
+    icon: "fas fa-box-archive",
+    items: [
+      { path: "/forms/building/classic/", title: "ตรวจอาคาร (รุ่นเก่า)" },
+      { path: "/forms/inert/classic/", title: "สาย - เฉื่อย (รุ่นเก่า)" },
+      { path: "/forms/pinkbook/classic/", title: "เล่มชมพู (รุ่นเก่า)" },
+      { path: "/forms/submit_inert/classic/", title: "ส่งเล่ม (รุ่นเก่า)" },
+    ],
+  },
+];
+
+export function AllLinks({ toast }: { toast: Toast }) {
+  const [q, setQ] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [extra, setExtra] = useState<L[]>([]);
+  useEffect(() => {
+    const t = setTimeout(() => setOrigin(location.origin), 0);
+    // Links added on the /links/ page that are not in the list below (other projects, new apps).
+    adminFetch("/api/admin/settings/links")
+      .then((j) => {
+        const known = new Set(CATALOG.flatMap((c) => c.items.map((i) => i.path)));
+        const items: L[] = (j.value.sections || []).flatMap((s: any) => s.items || []).map((i: any) => ({ path: i.href, title: i.title, note: i.lock || "" }));
+        setExtra(items.filter((i) => !known.has(i.path) && !known.has(i.path.replace(/\/$/, ""))));
+      })
+      .catch(() => {});
+    return () => clearTimeout(t);
+  }, []);
+  const full = (p: string) => (/^https?:/.test(p) ? p : origin + p);
+  const groups = [...CATALOG, ...(extra.length ? [{ title: "ลิงก์อื่นจากหน้ารวมลิงก์", icon: "fas fa-link", items: extra }] : [])];
+  return (
+    <>
+      <input className="t-input a-search" placeholder="ค้นหา เช่น ห้องน้ำ, สรุป, เวร" value={q} onChange={(e) => setQ(e.target.value)} />
+      {groups.map((g) => {
+        const items = g.items.filter((i) => !q || (i.title + i.path + (i.note || "")).toLowerCase().includes(q.toLowerCase()));
+        if (!items.length) return null;
+        return (
+          <section key={g.title} className="t-card a-part">
+            <h2 className="a-part-title"><i className={g.icon} aria-hidden /> {g.title}</h2>
+            <div className="a-rows">
+              {items.map((i) => (
+                <div key={i.path + i.title} className="a-row-card a-link-row">
+                  <span className="a-card-text">
+                    <b>{i.title}</b>
+                    <small>{full(i.path)}{i.note ? ` · ${i.note}` : ""}</small>
+                  </span>
+                  <button
+                    type="button"
+                    className="t-icon-btn"
+                    aria-label="คัดลอกลิงก์"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(full(i.path));
+                        toast("คัดลอกลิงก์แล้ว");
+                      } catch {
+                        toast("คัดลอกไม่สำเร็จ", "error");
+                      }
+                    }}
+                  >
+                    <i className="fas fa-copy" aria-hidden />
+                  </button>
+                  {!i.path.includes("<") && (
+                    <a className="t-icon-btn" href={full(i.path)} target="_blank" rel="noopener noreferrer" aria-label="เปิด">
+                      <i className="fas fa-arrow-up-right-from-square" aria-hidden />
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </>
   );
 }

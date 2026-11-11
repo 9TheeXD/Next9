@@ -32,7 +32,7 @@ export type PageDef = {
   icon: string;
   intro?: string;
   parts?: Part[];
-  custom?: "dashboard" | "passwords" | "secrets" | "classes" | "handover" | "terms" | "assess_lock" | "assess_time" | "assess_people" | "assess_accounts";
+  custom?: "dashboard" | "passwords" | "secrets" | "classes" | "handover" | "terms" | "council" | "all_links" | "assess_lock" | "assess_time" | "assess_people" | "assess_accounts";
   // The page this one edits: shown live beside the editor on wide screens, reloaded after each save.
   preview?: string;
   links?: { href: string; label: string; icon?: string }[];
@@ -60,6 +60,7 @@ const card4: Field[] = [
 
 export const PAGES: PageDef[] = [
   { id: "dashboard", group: "ภาพรวม", title: "ภาพรวมและสถานะ", icon: "fas fa-gauge", custom: "dashboard" },
+  { id: "all_links", group: "ภาพรวม", title: "ลิงก์ทุกระบบ", icon: "fas fa-link", custom: "all_links", intro: "ที่อยู่ของทุกหน้าในทุกระบบ (รวมหน้าที่ไม่ได้ลิงก์ไว้ในเว็บสาธารณะ) คัดลอกไปส่งให้คนที่ต้องใช้ได้" },
   { id: "handover", group: "ภาพรวม", title: "ส่งต่อรุ่นถัดไป", icon: "fas fa-people-arrows", custom: "handover" },
 
   // ---------------- Shared data (every system) ----------------
@@ -120,18 +121,16 @@ export const PAGES: PageDef[] = [
     ],
   },
   {
-    id: "inspectors",
+    id: "council",
     group: "ข้อมูลกลาง (ใช้ทุกระบบ)",
-    title: "รายชื่อผู้ตรวจ",
-    icon: "fas fa-user-check",
-    intro: "รายชื่อที่ให้เลือกในแบบฟอร์มตรวจอาคาร สาย-เฉื่อย ส่งเล่ม และเล่มชมพู",
-    parts: [
-      {
-        source: D("inspectors"),
-        fields: [{ type: "lines", key: "names", label: "รายชื่อ", placeholder: "ชื่อ-นามสกุล แล้วกด Enter (วางหลายบรรทัดได้)" }],
-        toForm: (v: any) => ({ names: Array.isArray(v) ? v : [] }),
-        fromForm: (f: any) => f.names,
-      },
+    title: "สมาชิกสภา",
+    icon: "fas fa-users",
+    custom: "council",
+    intro:
+      "รายชื่อสมาชิกสภาชุดเดียวที่ทุกระบบใช้: หน้าสมาชิกบนเว็บ รายชื่อผู้ตรวจในแบบฟอร์มทุกตัว และคนลงเวร เพิ่ม ลบ เรียงลำดับ และแก้ข้อมูล/ตำแหน่งได้ที่นี่ ส่วนรูปโปรไฟล์ตั้งที่หน้าแก้ไขข้อมูลสมาชิก",
+    links: [
+      { href: "/member/editor/", label: "เปลี่ยนรูปโปรไฟล์ (หน้าแก้ไขข้อมูลสมาชิก)", icon: "fas fa-camera" },
+      { href: "/member/", label: "เปิดหน้าสมาชิก" },
     ],
   },
 
@@ -319,7 +318,7 @@ export const PAGES: PageDef[] = [
     icon: "fas fa-sitemap",
     preview: "/member/",
     intro:
-      "ฝ่าย งาน และคณะกรรมการบริหาร ส่วนรายชื่อ รูป และตำแหน่งของแต่ละคนแก้ที่หน้าแก้ไขข้อมูลสมาชิก ตำแหน่งของสมาชิกอ้างถึงฝ่ายด้วย \"รหัส\" (key) จึงไม่ควรเปลี่ยนรหัสของฝ่ายหรืองานที่มีคนอยู่แล้ว",
+      "ฝ่าย งาน และคณะกรรมการบริหาร ส่วนคนและตำแหน่งของแต่ละคนแก้ที่หน้าสมาชิกสภา (ข้อมูลกลาง) ตำแหน่งของสมาชิกอ้างถึงฝ่ายด้วย \"รหัส\" (key) จึงไม่ควรเปลี่ยนรหัสของฝ่ายหรืองานที่มีคนอยู่แล้ว",
     links: [
       { href: "/member/editor/", label: "แก้ไขข้อมูลสมาชิก", icon: "fas fa-id-card" },
       { href: "/member/", label: "เปิดหน้าสมาชิก" },
@@ -623,7 +622,7 @@ export const PAGES: PageDef[] = [
     title: "เวรประจำวัน",
     icon: "fas fa-calendar-check",
     intro:
-      "ระบบลงเวร (/duty/) บันทึกลง Google Sheet ผ่าน Apps Script และเก็บรูปเข้าคลังภาพ ถ้าเปลี่ยน Sheet ต้องติดตั้ง Apps Script ในไฟล์ใหม่ด้วย (ดูหน้าส่งต่อรุ่นถัดไป)",
+      "ระบบลงเวร (/duty/) บันทึกลง Google Sheet ผ่าน Apps Script และเก็บรูปเข้าคลังภาพ คนที่ลงเวรได้มาจากหน้าสมาชิกสภา (เปิด \"ลงเวร\") ถ้าเปลี่ยน Sheet ต้องติดตั้ง Apps Script ในไฟล์ใหม่ด้วย (ดูหน้าส่งต่อรุ่นถัดไป)",
     links: [
       { href: "/duty/", label: "เปิดระบบลงเวร" },
       { href: "/duty/summary.html", label: "เปิดหน้าสรุป" },
@@ -637,23 +636,6 @@ export const PAGES: PageDef[] = [
           { type: "text", key: "sheet_gid", label: "GID ของแท็บบันทึกเวร", help: "ตัวเลขหลัง #gid= ในลิงก์ของแท็บ" },
           { type: "text", key: "root_album", label: "ชื่ออัลบั้มในคลังภาพที่เก็บรูปเวร" },
           { type: "number", key: "max_photos", label: "จำนวนรูปสูงสุดต่อครั้ง" },
-          {
-            type: "list",
-            key: "members",
-            label: "สมาชิกที่ลงเวร",
-            title: "nickname",
-            subtitle: "position",
-            itemName: "สมาชิก",
-            newItem: { id: 0, nickname: "", fullName: "", position: "", cls: "", no: "" },
-            fields: [
-              { type: "text", key: "nickname", label: "ชื่อเล่น" },
-              { type: "text", key: "fullName", label: "ชื่อ-นามสกุล (ตรงกับในชีท)" },
-              { type: "text", key: "position", label: "ตำแหน่ง" },
-              { type: "text", key: "cls", label: "ชั้น/ห้อง", placeholder: "5/2" },
-              { type: "text", key: "no", label: "เลขที่" },
-              { type: "number", key: "id", label: "รหัส (ตัวเลข ห้ามซ้ำ)" },
-            ],
-          },
           { type: "lines", key: "stations", label: "จุดเวร" },
           {
             type: "list",
@@ -670,18 +652,6 @@ export const PAGES: PageDef[] = [
             ],
           },
         ],
-        fromForm: (f: any) => {
-          // Give new members the next free number.
-          let max = Math.max(0, ...(f.members || []).map((m: any) => Number(m.id) || 0));
-          const seen = new Set<number>();
-          const members = (f.members || []).map((m: any) => {
-            let id = Number(m.id) || 0;
-            if (!id || seen.has(id)) id = ++max;
-            seen.add(id);
-            return { ...m, id };
-          });
-          return { ...f, members };
-        },
       },
     ],
   },

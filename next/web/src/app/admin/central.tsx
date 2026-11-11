@@ -4,6 +4,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthError, adminFetch } from "./api";
 import { sheetIdOf } from "./pages";
+import { SortableList } from "./Sortable";
+import { Drawer as DrawerLite } from "./fields";
 
 type Toast = (t: string, k?: "success" | "error") => void;
 type Props = { toast: Toast; onAuthError: () => void };
@@ -406,6 +408,191 @@ export function Classes({ toast, onAuthError }: Props) {
           </div>
         )}
       </section>
+    </>
+  );
+}
+
+// ---------------- Council (the one member list) ----------------
+// members.json as people cards: drag to reorder, click to edit, add, remove. Every system takes its
+// people from here (member pages, inspectors in the forms, duty check-in).
+type Position = { dept: string; unit: string; title: string; label: string };
+type Member = { slug: string; nickname: string; name: string; role?: string; room?: string; no?: string; img?: string; bio?: string; contacts?: { ig?: string; line?: string; call?: string }; positions?: Position[]; inspector?: boolean; duty?: boolean; [k: string]: any };
+const TITLES = ["หัวหน้า", "ผู้ช่วย", "ผู้ช่วยและเลขานุการ"];
+
+export function Council({ toast, onAuthError }: Props) {
+  const guard = useGuard(onAuthError, toast);
+  const [list, setList] = useState<Member[] | null>(null);
+  const [layout, setLayout] = useState<any>(null);
+  const [nos, setNos] = useState<Record<string, { room: string; no: string }>>({});
+  const [open, setOpen] = useState<number | null>(null);
+  const [q, setQ] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [raw, council, lay] = await Promise.all([adminFetch("/api/admin/council/members"), adminFetch("/api/admin/council"), adminFetch("/api/admin/settings/members")]);
+      setList(raw.members);
+      setNos(Object.fromEntries(council.council.map((m: any) => [m.slug, { room: m.room, no: m.no }])));
+      setLayout(lay.value);
+      setDirty(false);
+    } catch (e) {
+      guard(e);
+    }
+  }, [guard]);
+  useEffect(() => {
+    const t = setTimeout(load, 0);
+    return () => clearTimeout(t);
+  }, [load]);
+
+  if (!list || !layout) return <p className="a-loading"><i className="fas fa-spinner fa-spin" aria-hidden /></p>;
+  const change = (next: Member[]) => {
+    setList(next);
+    setDirty(true);
+  };
+  const set = (i: number, patch: Partial<Member>) => change(list.map((m, j) => (j === i ? { ...m, ...patch } : m)));
+
+  // Where a position can be: the executive board, each department, each grade.
+  const depts: { key: string; name: string; units: { key: string; name: string }[] }[] = [
+    { key: "executive", name: "คณะกรรมการบริหาร", units: [...(layout.exec || []).map((e: any) => ({ key: e.unit, name: e.caption })), { key: "secretary", name: "เลขานุการ" }, { key: "treasurer", name: "เหรัญญิก" }].filter((u, i, a) => a.findIndex((x) => x.key === u.key) === i) },
+    ...(layout.depts || []).filter((d: any) => !d.data_dept).map((d: any) => ({ key: d.key, name: d.name, units: d.units })),
+    { key: "grade", name: "ระดับชั้น", units: [1, 2, 3, 4, 5, 6].map((g) => ({ key: `m${g}`, name: `ระดับชั้นม.${g}` })) },
+  ];
+  const unitName = (p: Position) => depts.find((d) => d.key === p.dept)?.units.find((u) => u.key === p.unit)?.name || "";
+  const autoLabel = (p: Position) => (TITLES.includes(p.title) ? `${p.title}${unitName(p) === "หัวหน้าฝ่าย" ? depts.find((d) => d.key === p.dept)?.name || "" : unitName(p)}` : p.title);
+
+  const shown = list.map((m, i) => ({ m, i })).filter(({ m }) => !q || [m.name, m.nickname, m.role, m.room].some((v) => String(v || "").includes(q)));
+  const m = open !== null ? list[open] : null;
+
+  async function save() {
+    setSaving(true);
+    try {
+      setList((await adminFetch("/api/admin/council/members", { method: "PUT", body: JSON.stringify(list) })).members);
+      setDirty(false);
+      toast("บันทึกรายชื่อแล้ว หน้าสมาชิก แบบฟอร์ม และระบบลงเวรใช้รายชื่อใหม่");
+      load();
+    } catch (e) {
+      guard(e);
+    }
+    setSaving(false);
+  }
+
+  return (
+    <>
+      <section className="t-card a-part">
+        <div className="a-council-stats">
+          <div><b>{list.length}</b><span>สมาชิก</span></div>
+          <div><b>{list.filter((x) => x.inspector !== false).length}</b><span>เป็นผู้ตรวจ</span></div>
+          <div><b>{list.filter((x) => x.duty !== false).length}</b><span>ลงเวร</span></div>
+        </div>
+        <input className="t-input a-search" placeholder="ค้นหาชื่อ ชื่อเล่น ตำแหน่ง ห้อง" value={q} onChange={(e) => setQ(e.target.value)} />
+        <SortableList
+          items={shown}
+          layout="grid"
+          className="a-council"
+          onChange={(next) => (q ? null : change(next.map((x) => x.m)))}
+          render={({ m: x, i }, _k, handle) => (
+            <div className={`a-member${x.inspector === false && x.duty === false ? " is-off" : ""}`} onClick={() => setOpen(i)} role="button" tabIndex={0}>
+              <span className="a-grip" {...handle} onClick={(e) => e.stopPropagation()}><i className="fas fa-grip-vertical" aria-hidden /></span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/api/file/next9/members/${x.img || `2/${x.slug}.webp`}`} alt="" loading="lazy" onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} />
+              <div className="a-card-text">
+                <b>{x.nickname || <em className="a-muted">(ใหม่)</em>} <span className="a-muted">· {x.role || "—"}</span></b>
+                <small>{x.name}{(x.room || nos[x.slug]?.room) ? ` · ${x.room || nos[x.slug]?.room}` : ""}</small>
+              </div>
+              <span className="a-member-tags">
+                {x.inspector !== false && <span className="a-tag is-info">ผู้ตรวจ</span>}
+                {x.duty !== false && <span className="a-tag is-ok">ลงเวร</span>}
+              </span>
+            </div>
+          )}
+        />
+        <button
+          type="button"
+          className="a-add-card"
+          onClick={() => {
+            change([...list, { slug: `m${Date.now().toString(36)}`, nickname: "", name: "", role: "", room: "", positions: [], inspector: true, duty: true, contacts: {}, bio: "" }]);
+            setOpen(list.length);
+          }}
+        >
+          <i className="fas fa-user-plus" aria-hidden /> เพิ่มสมาชิก
+        </button>
+        <p className="a-help">ลากการ์ดเพื่อเรียงลำดับ (ลำดับมีผลกับลำดับในหน้าฝ่าย) · รูปโปรไฟล์ตั้งที่หน้าแก้ไขข้อมูลสมาชิก (มีตัวครอปรูป)</p>
+      </section>
+
+      {m && open !== null && (
+        <DrawerLite title={m.nickname || "สมาชิกใหม่"} onClose={() => setOpen(null)}>
+          <div className="a-drawer-photo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/file/next9/members/${m.img || `2/${m.slug}.webp`}`} alt="" onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} />
+            <a className="t-btn t-btn-sm t-btn-ghost" href="/member/editor/" target="_blank" rel="noopener noreferrer"><i className="fas fa-camera" aria-hidden /> เปลี่ยนรูป (หน้าแก้ไขข้อมูลสมาชิก)</a>
+          </div>
+          <label className="a-field"><span className="t-label">ชื่อเล่น</span><input className="t-input" value={m.nickname} onChange={(e) => set(open, { nickname: e.target.value })} /></label>
+          <label className="a-field"><span className="t-label">ชื่อ-นามสกุล (มีคำนำหน้า)</span><input className="t-input" value={m.name} placeholder="นายสมชาย ใจดี" onChange={(e) => set(open, { name: e.target.value })} /></label>
+          <label className="a-field"><span className="t-label">ตำแหน่งหลัก (แสดงใต้ชื่อ)</span><input className="t-input" value={m.role || ""} onChange={(e) => set(open, { role: e.target.value })} /></label>
+          <div className="a-inline">
+            <label><span className="t-label">ห้อง</span><input className="t-input" value={m.room || ""} placeholder={nos[m.slug]?.room || "5/2"} onChange={(e) => set(open, { room: e.target.value })} /></label>
+            <label><span className="t-label">เลขที่</span><input className="t-input" value={m.no || ""} placeholder={nos[m.slug]?.no || "อัตโนมัติ"} onChange={(e) => set(open, { no: e.target.value })} /></label>
+          </div>
+          <label className="a-switch"><input type="checkbox" checked={m.inspector !== false} onChange={(e) => set(open, { inspector: e.target.checked })} /><span className="a-switch-ui" aria-hidden /><span>เป็นผู้ตรวจ (มีชื่อในแบบฟอร์มทุกตัว)</span></label>
+          <label className="a-switch"><input type="checkbox" checked={m.duty !== false} onChange={(e) => set(open, { duty: e.target.checked })} /><span className="a-switch-ui" aria-hidden /><span>ลงเวรประจำวัน</span></label>
+
+          <div className="a-field">
+            <span className="t-label">ตำแหน่งในฝ่าย/งาน <em className="a-count">ใช้จัดคนลงหน้าฝ่ายและงานระดับชั้น</em></span>
+            {(m.positions || []).map((p, pi) => {
+              const d = depts.find((x) => x.key === p.dept);
+              const setP = (patch: Partial<Position>) => {
+                const np = { ...p, ...patch };
+                if (!("label" in patch)) np.label = autoLabel(np);
+                set(open, { positions: (m.positions || []).map((x, j) => (j === pi ? np : x)) });
+              };
+              return (
+                <div key={pi} className="a-position">
+                  <select className="t-input" value={p.dept} onChange={(e) => setP({ dept: e.target.value, unit: depts.find((x) => x.key === e.target.value)?.units[0]?.key || "" })}>
+                    {depts.map((x) => <option key={x.key} value={x.key}>{x.name}</option>)}
+                  </select>
+                  <select className="t-input" value={p.unit} onChange={(e) => setP({ unit: e.target.value })}>
+                    {(d?.units || []).map((u) => <option key={u.key} value={u.key}>{u.name}</option>)}
+                  </select>
+                  <input className="t-input" list="a-titles" value={p.title} onChange={(e) => setP({ title: e.target.value })} placeholder="หัวหน้า / ผู้ช่วย / ประธานสภา" />
+                  <input className="t-input a-position-label" value={p.label} onChange={(e) => setP({ label: e.target.value })} placeholder="ชื่อตำแหน่งที่แสดง" />
+                  <button type="button" className="a-card-del" aria-label="ลบตำแหน่ง" onClick={() => set(open, { positions: (m.positions || []).filter((_, j) => j !== pi) })}><i className="fas fa-trash" aria-hidden /></button>
+                </div>
+              );
+            })}
+            <datalist id="a-titles">{[...TITLES, "ประธานสภา", "รองประธาน 1", "รองประธาน 2", "เลขานุการ", "เหรัญญิก"].map((t) => <option key={t} value={t} />)}</datalist>
+            <button type="button" className="t-btn t-btn-sm t-btn-ghost" onClick={() => {
+              const p = { dept: depts[1]?.key || "executive", unit: depts[1]?.units[0]?.key || "", title: "ผู้ช่วย", label: "" };
+              set(open, { positions: [...(m.positions || []), { ...p, label: autoLabel(p) }] });
+            }}>
+              <i className="fas fa-plus" aria-hidden /> เพิ่มตำแหน่ง
+            </button>
+          </div>
+          <label className="a-field"><span className="t-label">แนะนำตัว</span><textarea className="t-input a-textarea" rows={4} value={m.bio || ""} onChange={(e) => set(open, { bio: e.target.value })} /></label>
+          <div className="a-inline">
+            <label><span className="t-label">Instagram</span><input className="t-input" value={m.contacts?.ig || ""} onChange={(e) => set(open, { contacts: { ...m.contacts, ig: e.target.value } })} /></label>
+            <label><span className="t-label">LINE ID</span><input className="t-input" value={m.contacts?.line || ""} onChange={(e) => set(open, { contacts: { ...m.contacts, line: e.target.value } })} /></label>
+            <label><span className="t-label">เบอร์โทร</span><input className="t-input" value={m.contacts?.call || ""} onChange={(e) => set(open, { contacts: { ...m.contacts, call: e.target.value } })} /></label>
+          </div>
+          <label className="a-field">
+            <span className="t-label">รหัส (ภาษาอังกฤษ ใช้ในลิงก์โปรไฟล์ /member/profile/&lt;รหัส&gt;.html และชื่อไฟล์รูป)</span>
+            <input className="t-input" value={m.slug} onChange={(e) => set(open, { slug: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "") })} />
+          </label>
+          <button type="button" className="t-btn t-btn-sm a-danger-btn" onClick={() => { change(list.filter((_, j) => j !== open)); setOpen(null); }}>
+            <i className="fas fa-user-minus" aria-hidden /> ลบสมาชิกคนนี้
+          </button>
+        </DrawerLite>
+      )}
+
+      {dirty && (
+        <div className="a-save is-dirty">
+          <span>มีการแก้ไขที่ยังไม่บันทึก</span>
+          <button type="button" className="t-btn t-btn-ghost t-btn-sm" disabled={saving} onClick={load}>ยกเลิกการแก้ไข</button>
+          <button type="button" className="t-btn" disabled={saving} onClick={save}>
+            <i className={saving ? "fas fa-spinner fa-spin" : "fas fa-floppy-disk"} aria-hidden /> บันทึก
+          </button>
+        </div>
+      )}
     </>
   );
 }

@@ -361,3 +361,29 @@
 .a-account input.t-input { width: 180px; }
 .a-rule select.t-input { width: auto; }
 .a-rule-add { margin-top: 10px; }
+
+/* council + links */
+.a-council-stats { display: flex; gap: 10px; margin-bottom: 12px; }
+.a-council-stats div { flex: 1; background: #f6f6f7; border-radius: 12px; padding: 10px 12px; display: grid; }
+.a-council-stats b { font-size: 1.4rem; }
+.a-council-stats span { color: var(--a-muted); font-size: .8rem; }
+.a-council { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 8px; margin-top: 10px; }
+.a-member { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--a-line); border-radius: 12px; background: #fff; }
+.a-member.is-off { opacity: .55; }
+.a-member img { width: 44px; height: 54px; object-fit: cover; border-radius: 8px; background: #eee; flex: none; }
+.a-switch-sm { margin: 0; gap: 6px; font-size: .78rem; flex-direction: column; flex-wrap: nowrap; }
+.a-switch-sm .a-switch-ui { width: 36px; height: 20px; }
+.a-switch-sm .a-switch-ui::after { width: 14px; height: 14px; }
+.a-switch-sm input:checked + .a-switch-ui::after { transform: translateX(16px); }
+.a-search { margin-bottom: 14px; }
+.a-link-row { cursor: default; }
+.a-link-row a { display: inline-grid; place-items: center; color: inherit; text-decoration: none; }
+.a-part-title i { color: var(--a-accent); margin-right: 4px; }
+.a-member { cursor: pointer; }
+.a-member-tags { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex: none; }
+.a-drawer-photo { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.a-drawer-photo img { width: 72px; height: 90px; object-fit: cover; border-radius: 10px; background: #eee; }
+.a-position { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px; border: 1px solid var(--a-line); border-radius: 10px; background: #fff; margin-bottom: 6px; position: relative; padding-right: 40px; }
+.a-position .a-card-del { position: absolute; top: 6px; right: 4px; }
+.a-position-label { grid-column: 1 / -1; }
+.a-danger-btn { background: #c62828 !important; margin-top: 12px; }
