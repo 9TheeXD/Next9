@@ -3,6 +3,9 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 
+// The Next Breath app (mobile-app project on Vercel).
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://next9-ciga-app.vercel.app").replace(/\/+$/, "");
+
 interface Stats {
   users: number;
   cigarettesAvoided: number;
@@ -125,7 +128,7 @@ export default function LandingPage() {
           </div>
           <div>
             <a 
-              href="https://app-ciga-next9.yumistack.net/login?openExternalBrowser=1" 
+              href={`${APP_URL}/login?openExternalBrowser=1`} 
               className="px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors font-prompt font-semibold text-sm border border-white/20"
             >
               เข้าสู่ระบบ
@@ -153,7 +156,7 @@ export default function LandingPage() {
           </p>
           <div className="flex flex-col items-center gap-4">
             <a 
-              href="https://app-ciga-next9.yumistack.net/login?openExternalBrowser=1"
+              href={`${APP_URL}/login?openExternalBrowser=1`}
               className="px-8 py-4 rounded-full bg-white text-black hover:bg-gray-100 transition-all font-kanit font-bold text-xl shadow-[0_0_40px_rgba(255,255,255,0.3)] hover:scale-105"
             >
               <span className="inline-block">เริ่มต้นเลย</span>
@@ -289,7 +292,7 @@ export default function LandingPage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
             <a 
-              href="https://app-ciga-next9.yumistack.net/login?openExternalBrowser=1"
+              href={`${APP_URL}/login?openExternalBrowser=1`}
               className="w-full sm:w-auto px-8 py-4 rounded-full bg-white text-black hover:bg-gray-200 transition-all font-kanit font-bold text-lg text-center"
             >
               <span className="inline-block">เริ่มต้นเลย</span>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ToolShell, useToast } from "@/components/tool/Tool";
+import { usePublicSettings } from "@/lib/useSettings";
 
 // Late/slow students form (/forms/inert/). Same requests as the old page: GET /inspectors.json,
 // GET /api/inert/config, GET /api/students/search?q=, POST /api/inert/submit { headers, sources, rows }.
@@ -23,8 +24,9 @@ const DEFAULT_COLUMNS: Column[] = [
   { header: "สาย - เฉื่อย", source: "typeVal" },
   { header: "รายการผิดระเบียบ", source: "violations" },
 ];
-const CLASSES = ["ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6"];
-const ROOMS = Array.from({ length: 16 }, (_, i) => String(i + 1));
+// Grades: admin → ปีการศึกษา (fallback while loading).
+const DEFAULT_CLASSES = ["ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6"];
+const DEFAULT_ROOMS = Array.from({ length: 16 }, (_, i) => String(i + 1));
 const NUMBERS = Array.from({ length: 45 }, (_, i) => String(i + 1));
 const OTHER = "อื่นๆ";
 const NO_ASSEMBLY = "ไม่เข้าแถวหน้าเสาธง";
@@ -77,6 +79,10 @@ function boxErrors(b: Box) {
 }
 
 export function InertForm() {
+  const school = usePublicSettings("school")?.school;
+  const CLASSES = school?.grades?.length ? school.grades.map((g) => g.name) : DEFAULT_CLASSES;
+  const maxRooms = school?.grades?.length ? Math.max(...school.grades.map((g) => Number(g.rooms) || 0)) : 0;
+  const ROOMS = maxRooms > 0 ? Array.from({ length: maxRooms }, (_, i) => String(i + 1)) : DEFAULT_ROOMS;
   const [page, setPage] = useState<1 | 2>(1);
   const [date, setDate] = useState("");
   const [inspector, setInspector] = useState("");
@@ -263,6 +269,8 @@ export function InertForm() {
               index={i}
               types={types}
               violationList={violationList}
+              classes={CLASSES}
+              rooms={ROOMS}
               autofill={autofill}
               update={(patch) => update(b.key, patch)}
               apply={(s) => applyStudent(b.key, s)}
@@ -307,6 +315,8 @@ function StudentBox({
   index,
   types,
   violationList,
+  classes: CLASSES,
+  rooms: ROOMS,
   autofill,
   update,
   apply,
@@ -316,6 +326,8 @@ function StudentBox({
   index: number;
   types: string[];
   violationList: string[];
+  classes: string[];
+  rooms: string[];
   autofill: boolean;
   update: (patch: Partial<Box>) => void;
   apply: (s: Student) => void;

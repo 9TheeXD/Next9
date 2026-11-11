@@ -282,7 +282,7 @@ export default function ProfileScreen() {
           </Text>
           <View style={{ alignItems: 'center', backgroundColor: '#fff', padding: 16, borderRadius: 12 }}>
             <QRCode 
-              value={`https://app-ciga-next9.yumistack.net/?target=${user?.displayId}`}
+              value={`${typeof window !== "undefined" && window.location?.origin?.startsWith("http") ? window.location.origin : process.env.EXPO_PUBLIC_APP_URL || "https://next9-ciga-app.vercel.app"}/?target=${user?.displayId}`}
               size={150}
             />
           </View>

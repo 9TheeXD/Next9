@@ -5,17 +5,10 @@ import { usePathname } from "next/navigation";
 import "./site-nav.css";
 import { AppLink } from "@/components/AppLink";
 
-const LINKS = [
-  { href: "/", label: "หน้าแรก" },
-  { href: "/about/", label: "เกี่ยวกับ" },
-  { href: "/policy/", label: "นโยบาย" },
-  { href: "/member/", label: "สมาชิก" },
-  { href: "/problem/", label: "แจ้งปัญหา" },
-];
-
 // The legacy site's navbar (style.css + main.js) as one component: hamburger menu on phones, and the
-// bar slides away while scrolling down past 500px and comes back on the way up.
-export function SiteNav() {
+// bar slides away while scrolling down past 500px and comes back on the way up. Menu and logo come
+// from settings (admin → เว็บไซต์), passed in by the server layout.
+export function SiteNav({ links: LINKS, logo, name }: { links: { href: string; label: string }[]; logo: string; name: string }) {
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
   const pathname = usePathname() ?? "";
@@ -41,7 +34,7 @@ export function SiteNav() {
       <nav className={`site-nav${hidden && !open ? " is-hidden" : ""}`}>
         <AppLink href="/" className="site-nav-logo">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="https://cdn.yumistack.net/next9/logo01.webp" alt="NEXT9" />
+          <img src={logo} alt={name} />
         </AppLink>
         <button
           type="button"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CalendarPlus, Pencil, Trash2, FileDown, Sheet, Check, Pin, X, AlertTriangle } from 'lucide-react';
 
 const thaiDay = (iso) => new Intl.DateTimeFormat('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' }).format(new Date(iso + 'T00:00:00'));
@@ -217,10 +217,56 @@ export default function TermsPanel({ term, reload, showToast, ask }) {
       </section>
 
       <section className="v2-card adm-card">
+        <h3>จำนวนห้องของแต่ละระดับชั้น</h3>
+        <RoomsEditor showToast={showToast} />
+      </section>
+
+      <section className="v2-card adm-card">
         <h3>ส่งออกช่วงวันที่เอง</h3>
         <ExportRange today={today} />
       </section>
     </div>
+  );
+}
+
+// Rooms per grade: the evaluation page lists this many rooms, and the summary counts against it.
+function RoomsEditor({ showToast }) {
+  const [rooms, setRooms] = useState(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    fetch('/api/settings/rooms', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => d.rooms && setRooms(d.rooms))
+      .catch(() => {});
+  }, []);
+  if (!rooms) return <div className="v2-empty" style={{ height: 80 }}><span className="v2-spin" /></div>;
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/settings/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rooms }) });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.success) {
+        setRooms(d.rooms);
+        showToast(d.message, 'success');
+      } else showToast(d.message || 'บันทึกไม่สำเร็จ', 'error');
+    } catch {
+      showToast('บันทึกไม่สำเร็จ', 'error');
+    }
+    setSaving(false);
+  }
+  return (
+    <>
+      <p className="adm-sub" style={{ marginTop: 0 }}>หน้าประเมินแสดงห้องตามจำนวนนี้ ปรับเมื่อจำนวนห้องของปีการศึกษาใหม่เปลี่ยน</p>
+      <div className="adm-row adm-dayadd" style={{ flexWrap: 'wrap' }}>
+        {[1, 2, 3, 4, 5, 6].map((g) => (
+          <label key={g} style={{ width: 92 }}>
+            <span className="adm-sub">ม.{g}</span>
+            <input className="adm-input" type="number" min={1} max={40} value={rooms[g] ?? ''} onChange={(e) => setRooms({ ...rooms, [g]: Number(e.target.value) })} />
+          </label>
+        ))}
+      </div>
+      <button className="adm-btn" disabled={saving} onClick={save}><Check size={16} /> บันทึกจำนวนห้อง</button>
+    </>
   );
 }
 

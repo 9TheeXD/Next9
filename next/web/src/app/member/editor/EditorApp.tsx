@@ -4,20 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Member } from "@/lib/members";
 import { Avatar } from "@/components/member/Avatar";
 import { ImageCropper } from "./ImageCropper";
+import { usePublicSettings } from "@/lib/useSettings";
 
-const MEMBERS_URL = "https://cdn.yumistack.net/next9/members/members.json";
-const PHOTO_BASE = "https://cdn.yumistack.net/next9/members/"; // members.ts reads files on the server, so it is not imported here
+// The list comes straight from the API (no cache), photos through /api/file/, and the role
+// suggestions from settings (admin → สมาชิก).
+const MEMBERS_URL = "/api/members";
+const PHOTO_BASE = "/api/file/next9/members/"; // members.ts reads files on the server, so it is not imported here
 const PASS_KEY = "editor_pass"; // same key as the old editor, so people stay signed in
-
-const ROLE_SUGGESTIONS = [
-  "ประธานสภา", "รองประธาน 1", "รองประธาน 2", "เลขานุการ", "เหรัญญิก",
-  "หัวหน้าฝ่ายบริหารวิชาการ", "หัวหน้าฝ่ายบริหารกิจการนักเรียน", "หัวหน้าฝ่ายบริหารทั่วไป",
-  "หัวหน้างานรับการประเมิน/นิเทศ/ติดตาม", "หัวหน้างานวางแผนสารสนเทศ", "หัวหน้างานขอเวลาเรียน",
-  "หัวหน้างานจัดทำธรรมนูญ/คู่มือสภานักเรียน", "หัวหน้างานระดับชั้น", "หัวหน้างานระเบียบวินัย",
-  "หัวหน้างานห้องเรียนสีขาว", "หัวหน้างานกิจกรรม", "หัวหน้างานประชาสัมพันธ์",
-  "หัวหน้างานอาคารสถานที่และอนุรักษ์สิ่งแวดล้อม", "หัวหน้างานปฏิคม", "หัวหน้างานทัศนศึกษาดูงาน",
-  ...[1, 2, 3, 4, 5, 6].map((g) => `หัวหน้าระดับชั้นม.${g}`),
-];
 
 type Form = { name: string; nickname: string; role: string; bio: string; ig: string; line: string; call: string };
 
@@ -42,6 +35,7 @@ function readPass() {
 }
 
 export function EditorApp() {
+  const roleSuggestions = usePublicSettings("members")?.members.role_suggestions ?? [];
   const [pass, setPass] = useState<string | null>(null); // null: still checking a saved password
   const [members, setMembers] = useState<Member[]>([]);
   const [loadError, setLoadError] = useState("");
@@ -272,7 +266,7 @@ export function EditorApp() {
               <Field label="ตำแหน่งหลัก (หัวข้อหน้าโปรไฟล์)">
                 <input value={form.role} list="e-roles" onChange={(e) => set("role", e.target.value)} />
                 <datalist id="e-roles">
-                  {[...new Set([...(member.roles ?? []), ...ROLE_SUGGESTIONS])].map((r) => (
+                  {[...new Set([...(member.roles ?? []), ...roleSuggestions])].map((r) => (
                     <option key={r} value={r} />
                   ))}
                 </datalist>

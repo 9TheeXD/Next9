@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ToolShell, useConfirm, useToast } from "@/components/tool/Tool";
 import { DEFAULT_ITEMS, isRoomSub, type Item, type RoomsConfig } from "../../forms/pinkbook/pinkbook";
+import { usePublicSettings } from "@/lib/useSettings";
 
 // Pink book results for admins (/viewforms/pinkbook/). Same requests as the old page:
 //   POST /api/pinkbook/login { password }   → cookie pinkbook_admin_auth=true (7 days)
@@ -15,8 +16,8 @@ type Report = { id: number; grade: string; room: string | number; group_name: st
 type Sel = Record<string, { label: string; title?: string; weeks: number[]; allow_week: boolean }>;
 type Log = { id: number; action: string; status?: string; created_at: string; action_by?: string; diff_summary?: string; issues?: string; unsubmitted_weeks?: string };
 
-const GRADES = ["ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6"];
-const CLASS_ROOMS: Record<string, number> = { "ม.1": 14, "ม.2": 14, "ม.3": 14, "ม.4": 16, "ม.5": 16, "ม.6": 16 };
+// Grades and rooms per grade: admin → ปีการศึกษา (these are only the fallback while loading).
+const DEFAULT_GRADES = [{ name: "ม.1", rooms: 14 }, { name: "ม.2", rooms: 14 }, { name: "ม.3", rooms: 14 }, { name: "ม.4", rooms: 16 }, { name: "ม.5", rooms: 16 }, { name: "ม.6", rooms: 16 }];
 const COOKIE = "pinkbook_admin_auth";
 const WEEKS = Array.from({ length: 22 }, (_, i) => i + 1);
 
@@ -95,7 +96,12 @@ function thaiDateTime(s?: string) {
 
 export function ViewPinkbook() {
   const [authed, setAuthed] = useState<boolean | null>(null);
-  const [term, setTerm] = useState("2/2569");
+  const school = usePublicSettings("school")?.school;
+  const gradeList = school?.grades?.length ? school.grades : DEFAULT_GRADES;
+  const GRADES = gradeList.map((g) => g.name);
+  const CLASS_ROOMS: Record<string, number> = Object.fromEntries(gradeList.map((g) => [g.name, Number(g.rooms) || 0]));
+  const [term, setTerm] = useState("");
+  const [terms, setTerms] = useState<string[]>([]);
   const [week, setWeek] = useState<number | null>(null);
   const [data, setData] = useState<Report[] | null>(null);
   const [items, setItems] = useState<Item[]>(DEFAULT_ITEMS);
@@ -126,15 +132,16 @@ export function ViewPinkbook() {
   );
 
   const init = useCallback(async () => {
-    let cfg: { current_term?: string; week_1_start?: string; items?: Item[]; rooms?: RoomsConfig } | null = null;
+    let cfg: { current_term?: string; terms?: string[]; week_1_start?: string; items?: Item[]; rooms?: RoomsConfig } | null = null;
     try {
       const json = await (await fetch(`/api/pinkbook/config?t=${Date.now()}`)).json();
       if (json.success && json.config) cfg = json.config;
     } catch {}
     if (cfg && Array.isArray(cfg.items)) setItems(cfg.items);
     if (cfg?.rooms) setRooms(cfg.rooms);
-    const t = cfg?.current_term || "2/2569";
+    const t = cfg?.current_term || "";
     setTerm(t);
+    setTerms(cfg?.terms?.length ? cfg.terms : t ? [t] : []);
     loadWeek(currentWeekFor(cfg?.week_1_start), t);
   }, [loadWeek]);
 
@@ -372,7 +379,7 @@ export function ViewPinkbook() {
       sub={
         <>
           <div className="t-tabs" role="tablist">
-            {["2/2569", "1/2569"].map((t) => (
+            {terms.map((t) => (
               <button key={t} type="button" role="tab" aria-selected={term === t} className={term === t ? "is-on" : undefined} onClick={() => { setTerm(t); loadWeek(week || 1, t); }}>
                 ภาคเรียนที่ {t}
               </button>

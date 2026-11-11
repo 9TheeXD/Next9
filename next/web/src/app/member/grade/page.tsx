@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
-import { GRADES, loadMembers, photoOf, seatsOf, shortName } from "@/lib/members";
+import { loadLayout, loadMembers, photoOf, seatsOf, shortName } from "@/lib/members";
 import { Avatar } from "@/components/member/Avatar";
 import { MemberRow, profileHref } from "@/components/member/MemberCard";
 import { AppLink } from "@/components/AppLink";
 
+// The member list is read on every request, so an edit in /member/editor/ shows on the next load.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = { title: "งานระดับชั้น" };
 
 export default async function GradePage() {
-  const members = await loadMembers();
+  const [members, layout] = await Promise.all([loadMembers(), loadLayout()]);
+  const GRADES = layout.grades;
   const lead = seatsOf(members, "affairs", "grade").find((s) => s.position.title === "หัวหน้า")?.member;
   const grades = GRADES.map((g) => {
     const seats = seatsOf(members, "grade", `m${g}`);
@@ -25,8 +29,8 @@ export default async function GradePage() {
         <div className="g-hero-inner">
           <AppLink href="/member/" className="m-back m-back-light"><i className="fas fa-arrow-left" aria-hidden /> สมาชิกทั้งหมด</AppLink>
           <p className="m-eyebrow m-eyebrow-light">ฝ่ายบริหารกิจการนักเรียน</p>
-          <h1 className="g-hero-title">งานระดับชั้น</h1>
-          <p className="g-hero-lead">ทีมสภานักเรียนประจำแต่ละระดับชั้น ม.1 ถึง ม.6 เป็นตัวกลางระหว่างนักเรียนกับสภา รับฟังทุกเสียงอย่างใกล้ชิด</p>
+          <h1 className="g-hero-title">{layout.grade_title}</h1>
+          <p className="g-hero-lead">{layout.grade_lead}</p>
           {lead && (
             <AppLink href={profileHref(lead)} className="g-lead">
               <Avatar src={photoOf(lead)} nickname={lead.nickname} className="g-lead-photo" />

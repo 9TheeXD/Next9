@@ -10,6 +10,8 @@ import { background } from "./background.mjs"
 import { SCHEMA_SQL } from "./schema.mjs"
 import { syncStudents } from "./students.mjs"
 import { readSheet, appendSheet, formatAppendedRows, getCachedToken, httpRequest } from "./google-sheets.js"
+import { getSettings, getPasswords, getServiceAccount, fileUrl } from "./settings.mjs"
+import { handleAdminApi } from "./admin.mjs"
 
 sharp.concurrency(1);
 sharp.cache(false);
@@ -50,15 +52,18 @@ async function softDeleteImages(ids) {
 // running locally). See next/web/.env.example for the full list.
 const config = process.env
 
-const EDITOR_PASSWORD = config.EDITOR_PASSWORD || "admin123"
+// Passwords are settings (admin page → รหัสผ่าน); refreshPerRequestSettings() reloads them for every
+// request. The environment variables are only the starting values (see server/settings.mjs).
+let EDITOR_PASSWORD = config.EDITOR_PASSWORD || "admin123"
 const CF_ACCOUNT_ID = config.CF_ACCOUNT_ID
 const R2_ACCESS_KEY = config.R2_ACCESS_KEY
 const R2_SECRET_KEY = config.R2_SECRET_KEY
 const R2_BUCKET = config.R2_BUCKET || "assets"
 // Public address of the site, used in link previews (Open Graph URLs).
 const SITE_ORIGIN = (config.SITE_ORIGIN || "https://next9-web.vercel.app").replace(/\/+$/, "")
-const TOILET_PASSWORD = config.TOILET_PASSWORD || "next9"
-const PHOTOS_PASSWORD = config.PHOTOS_PASSWORD || "next9"
+let TOILET_PASSWORD = config.TOILET_PASSWORD || "next9"
+let PHOTOS_PASSWORD = config.PHOTOS_PASSWORD || "next9"
+let PINKBOOK_PASSWORD = "1"
 // Must be a fixed secret: serverless instances come and go, and a per-instance random secret would
 // make album unlock tokens fail on the next instance.
 const ALBUM_TOKEN_SECRET = config.ALBUM_TOKEN_SECRET || crypto.createHash("sha256").update("next9-album:" + PHOTOS_PASSWORD).digest("hex")
@@ -75,8 +80,9 @@ const INERT_SHEET_JUNIOR_RANGE = config.INERT_SHEET_JUNIOR_RANGE || 'ม.ต้�
 const INERT_SHEET_HIGH_RANGE = config.INERT_SHEET_HIGH_RANGE || 'ม.ปลาย'
 
 // ===== Building Inspection Form: Google Sheets Config =====
-const BUILDING_SHEET_ID = config.BUILDING_SHEET_ID || '1EKh6YRmxjBRY6Nw12selyNEJ4RQjY5D5BDZXBGemksw'
-const BUILDING_VALID_NUMBERS = ['3', '5', '6', '9', '10', '11', '15']
+// Both come from the admin page (ตรวจอาคาร / Google Sheets); see refreshPerRequestSettings().
+let BUILDING_SHEET_ID = config.BUILDING_SHEET_ID || '1EKh6YRmxjBRY6Nw12selyNEJ4RQjY5D5BDZXBGemksw'
+let BUILDING_VALID_NUMBERS = ['3', '5', '6', '9', '10', '11', '15']
 
 function getBuildingSheetConfig(buildingNumber) {
     return {
@@ -87,12 +93,20 @@ function getBuildingSheetConfig(buildingNumber) {
     }
 }
 
-// Google service account (Sheets): the whole JSON key in GOOGLE_SERVICE_ACCOUNT_JSON.
+// Google service account (Sheets): the admin page's key, else GOOGLE_SERVICE_ACCOUNT_JSON.
 let SERVICE_ACCOUNT = null
-try {
-    if (config.GOOGLE_SERVICE_ACCOUNT_JSON) SERVICE_ACCOUNT = JSON.parse(config.GOOGLE_SERVICE_ACCOUNT_JSON)
-} catch (e) {
-    console.error('[INERT] GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON:', e.message)
+
+// Values that the admin pages can change at any time, loaded for every request (from a short
+// in-memory cache, so this is not a database read per request).
+async function refreshPerRequestSettings() {
+    const [pw, sheets, building, sa] = await Promise.all([getPasswords(), getSettings("sheets"), getSettings("building"), getServiceAccount()])
+    EDITOR_PASSWORD = pw.editor
+    TOILET_PASSWORD = pw.toilet
+    PHOTOS_PASSWORD = pw.photos
+    PINKBOOK_PASSWORD = pw.pinkbook
+    BUILDING_SHEET_ID = (sheets.building_sheet_id || "").trim() || config.BUILDING_SHEET_ID || '1EKh6YRmxjBRY6Nw12selyNEJ4RQjY5D5BDZXBGemksw'
+    BUILDING_VALID_NUMBERS = (building.buildings || []).map(b => String(b.number).trim()).filter(Boolean)
+    SERVICE_ACCOUNT = sa
 }
 
 async function getInertConfigSync() {
@@ -709,20 +723,10 @@ export function ensureSchema() {
     return schemaReady
 }
 
-function downloadMembers() {
-  return new Promise((resolve, reject) => {
-    https.get("https://cdn.yumistack.net/next9/members/members.json?" + Date.now(), res => {
-      let data = "";
-      res.setEncoding("utf8"); res.on("data", chunk => data += chunk);
-      res.on("end", () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          reject(new Error("Invalid JSON from CDN"));
-        }
-      });
-    }).on("error", reject);
-  });
+// The member list (next9/members/members.json in R2), read from the bucket itself.
+export async function downloadMembers() {
+  const buf = await getFromR2("next9/members/members.json")
+  return JSON.parse(Buffer.isBuffer(buf) ? buf.toString("utf8") : String(buf))
 }
 // Local development uses the production R2 credentials so images can be signed and viewed.
 // NEXT9_DEV_READONLY=1 turns every R2 write and delete into a logged no-op, so nothing a dev
@@ -1935,6 +1939,13 @@ async function loadStudents() {
 // rich-preview meta tags have to be baked into the HTML server-side before it's sent.
 // Link-preview data (Open Graph) for an album link. Used by the legacy album page below and, through
 // GET /api/photos/og?id=, by the Next.js album page, so shared links keep their preview card.
+// Absolute URL of the site logo (link previews need a full URL).
+async function siteLogoUrl() {
+    const site = await getSettings("site")
+    const u = fileUrl(site.logo)
+    return u.startsWith("/") ? SITE_ORIGIN + u : u
+}
+
 export async function albumPreview(albumId) {
     const album = albumId && await photosDb.prepare("SELECT * FROM albums WHERE id = ?").get(albumId);
     if (!album) return null;
@@ -1946,7 +1957,7 @@ export async function albumPreview(albumId) {
     // album is that its contents shouldn't be visible without the password, and an OG
     // image bypasses that entirely (crawlers, then anyone with the share link, would see
     // a photo from inside a "locked" album without ever entering it).
-    let image = "https://cdn.yumistack.net/next9/logo01.webp";
+    let image = await siteLogoUrl();
     if (!await isAlbumPathLocked(album)) {
         const firstPhoto = await photosDb.prepare("SELECT id FROM images WHERE album_id = ? AND processing_status = 'done' AND original_name NOT LIKE '[DELETED] %' ORDER BY created_at DESC LIMIT 1").get(albumId);
         if (firstPhoto) image = `${SITE_ORIGIN}/api/image/${firstPhoto.id}/medium`;
@@ -1962,7 +1973,7 @@ export async function sharePreview(token) {
     const pageUrl = `${SITE_ORIGIN}/s/?t=${encodeURIComponent(token)}`;
     if (!m.ok) {
         const title = m.reason === "expired" ? "ลิงก์นี้หมดอายุแล้ว" : "ลิงก์นี้ใช้ไม่ได้แล้ว";
-        return { title: `${title} - NEXT9`, description: "ลิงก์ที่แชร์จาก NEXT9 Photos", url: pageUrl, image: "https://cdn.yumistack.net/next9/logo01.webp", type: "website", valid: false };
+        return { title: `${title} - NEXT9`, description: "ลิงก์ที่แชร์จาก NEXT9 Photos", url: pageUrl, image: await siteLogoUrl(), type: "website", valid: false };
     }
     const parts = [];
     let description, type = "website";
@@ -1978,7 +1989,7 @@ export async function sharePreview(token) {
     // ?v= changes when the cover changes, so crawlers that cache by URL pick up the new picture.
     const image = m.imageId
         ? `${SITE_ORIGIN}/api/share/${encodeURIComponent(token)}/og.jpg?v=${encodeURIComponent(m.imageId)}`
-        : "https://cdn.yumistack.net/next9/logo01.webp";
+        : await siteLogoUrl();
     return {
         title: m.title, description, url: pageUrl, image, type, valid: true,
         imageWidth: m.imageId ? OG_W : null, imageHeight: m.imageId ? OG_H : null,
@@ -2056,6 +2067,18 @@ export async function handleApi(req, res) {
         return res.end()
     }
 
+    await refreshPerRequestSettings()
+
+    // Settings, files and the admin pages' API (server/admin.mjs).
+    if (/^\/api\/(admin|settings|file|auth|duty)\//.test(req.url) || req.url.startsWith("/api/building/rooms/") || /^\/api\/members(\?|$)/.test(req.url) ||
+        /^\/(duty\/js\/(config|data)\.js|forms\/building\/rooms\/)/.test(req.url)) {
+        const handled = await handleAdminApi(req, res, {
+            presignR2Get, presignR2Put, getFromR2, uploadToR2, uploadBufferToR2, headR2Size, downloadMembers,
+            syncStudents: (opts) => syncStudents(opts),
+        })
+        if (handled !== false) return
+    }
+
     if (req.method === "GET" && await cachedGet(req, res)) return
 
     async function getPinkbookConfigSync() {
@@ -2065,16 +2088,22 @@ export async function handleApi(req, res) {
         return {};
     }
 
+    // The pinkbook form's term: its own setting, else the school's current term (admin → ปีการศึกษา).
+    async function schoolTerm() {
+        const school = await getSettings("school");
+        return { current: `${school.term}/${school.year}`, terms: Array.isArray(school.terms) && school.terms.length ? school.terms : [`${school.term}/${school.year}`] };
+    }
     async function getPinkbookCurrentTerm() {
         const cfg = await getPinkbookConfigSync();
-        return (cfg.current_term && cfg.current_term.trim()) || "2/2569";
+        return (cfg.current_term && cfg.current_term.trim()) || (await schoolTerm()).current;
     }
 
     // Pinkbook API
     if (req.method === "GET" && req.url.startsWith("/api/pinkbook/config")) {
+        const st = await schoolTerm();
         let configData = {
-            current_term: "2/2569",
-            terms: ["2/2569", "1/2569"],
+            current_term: st.current,
+            terms: st.terms,
             week_1_start: "2026-10-26",
             items: [
                 { title: "ไม่วงกลม กและข หน้าปก", allow_week: false },
@@ -2092,8 +2121,8 @@ export async function handleApi(req, res) {
             const parsed = await kvGet("pinkbook_config", null);
             if (parsed) {
                 configData = { ...configData, ...parsed };
-                if (!configData.current_term) configData.current_term = "2/2569";
-                if (!Array.isArray(configData.terms) || configData.terms.length === 0) configData.terms = ["2/2569", "1/2569"];
+                if (!configData.current_term) configData.current_term = st.current;
+                if (!Array.isArray(configData.terms) || configData.terms.length === 0) configData.terms = st.terms;
             }
         } catch (e) {
             console.error("Failed to read pinkbook config:", e);
@@ -2233,7 +2262,7 @@ export async function handleApi(req, res) {
         req.setEncoding("utf8"); req.on("data", c => body += c);
         req.on("end", () => {
             const data = JSON.parse(body);
-            if (data.password === "1") {
+            if (data.password === PINKBOOK_PASSWORD) {
                 res.writeHead(200, { "Content-Type": "application/json" });
                 res.end(JSON.stringify({ success: true }));
             } else {
@@ -2807,23 +2836,14 @@ export async function handleApi(req, res) {
 
     // GET /api/building/config - ดึงข้อมูลโครงสร้าง Form
     if (req.method === "GET" && urlPath === "/api/building/config") {
+        // Items, scores and buildings: admin → ตรวจอาคาร.
+        const b = await getSettings("building")
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" })
         return res.end(JSON.stringify({
             success: true,
             config: {
-                ITEMS: [
-                    "เก็บขยะ กวาดพื้น ถูพื้น",
-                    "จัดโต๊ะ เก้าอี้หน้าห้อง",
-                    "จัดโต๊ะ เก้าอี้นักเรียน",
-                    "ลบกระดาน เก็บแปรงลบ และปากกา",
-                    "จัดโต๊ะครู อย่างเป็นระเบียบ เรียบร้อย"
-                ],
-                SCORES: [
-                    { value: 3, label: "ดีมาก", class: "score-3" },
-                    { value: 2, label: "พอใช้", class: "score-2" },
-                    { value: 1, label: "ปรับปรุง", class: "score-1" },
-                    { value: 0, label: "ไม่ผ่าน", class: "score-0" }
-                ],
+                ITEMS: b.items_v1,
+                SCORES: (b.scores || []).map(sc => ({ value: Number(sc.value), label: sc.label, class: `score-${Number(sc.value)}` })),
                 BUILDINGS: BUILDING_VALID_NUMBERS
             }
         }))
@@ -2831,18 +2851,12 @@ export async function handleApi(req, res) {
 
     // GET /api/building/config_v2 - ดึงข้อมูลโครงสร้าง Form สำหรับ v2
     if (req.method === "GET" && urlPath === "/api/building/config_v2") {
+        const b = await getSettings("building")
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" })
         return res.end(JSON.stringify({
             success: true,
             config: {
-                ITEMS: [
-                    "หลังห้องเรียน",
-                    "หลังตู้ล็อกเกอร์(ถ้าห้องนั้นมี)",
-                    "หน้าห้องเรียน",
-                    "กระดานดำ",
-                    "โต๊ะนักเรียน",
-                    "การปิดเครื่องใช้ไฟฟ้า"
-                ],
+                ITEMS: b.items_v2,
                 BUILDINGS: BUILDING_VALID_NUMBERS
             }
         }))

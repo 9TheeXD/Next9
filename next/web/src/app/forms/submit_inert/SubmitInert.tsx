@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { StateCard, ToolShell, useToast } from "@/components/tool/Tool";
+import { usePublicSettings } from "@/lib/useSettings";
 
 // Report that a grade's late-check books were handed in (/forms/submit_inert/). Same request as the
 // old page: POST /api/submit-inert/submit, multipart { reporter, classes (JSON array), file }.
 // The class values are "ข้างอ.5 ม.1" … then "หลังโดม ม.1" …, in that order, as the old page sent them.
 
-const LEVELS = ["ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6"];
-const PLACES = ["ข้างอ.5", "หลังโดม"];
+// Places: admin → ส่งเล่มตรวจสาย-เฉื่อย; grades: admin → ปีการศึกษา. Fallbacks while loading.
+const DEFAULT_LEVELS = ["ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6"];
+const DEFAULT_PLACES = ["ข้างอ.5", "หลังโดม"];
 
 function useInAppIOS() {
   const [inApp, setInApp] = useState(false);
@@ -21,6 +23,9 @@ function useInAppIOS() {
 }
 
 export function SubmitInert() {
+  const cfg = usePublicSettings("school", "submit_inert");
+  const LEVELS = cfg ? cfg.school.grades.map((g) => g.name) : DEFAULT_LEVELS;
+  const PLACES = cfg ? cfg.submit_inert.places : DEFAULT_PLACES;
   const [inspectors, setInspectors] = useState<string[] | null>(null);
   const [reporter, setReporter] = useState("");
   const [open, setOpen] = useState(false);

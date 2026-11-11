@@ -281,6 +281,14 @@ export default function DashboardV2() {
   const today = useMemo(() => bangkokToday(), []);
   const maxDate = useMemo(() => (isStudentView ? studentMaxDate() : null), [isStudentView]);
   const [terms, setTerms] = useState(FALLBACK_TERMS);
+  // Rooms per grade (admin setting); ROOMS_PER_GRADE until it answers.
+  const [roomsPerGrade, setRoomsPerGrade] = useState(ROOMS_PER_GRADE);
+  useEffect(() => {
+    fetch('/api/settings/rooms')
+      .then((r) => r.json())
+      .then((d) => d.rooms && setRoomsPerGrade(d.rooms))
+      .catch(() => {});
+  }, []);
   const [currentTerm, setCurrentTerm] = useState('2');
   const [period, setPeriod] = useState('1m');
   const [custom, setCustom] = useState(() => ({ start: monthBack(today), end: today }));
@@ -447,14 +455,14 @@ export default function DashboardV2() {
         }
         return mean(details.filter((x) => x.grade === g && x.room !== 0 && x.criterion === c.id).map((x) => x.avg_score));
       });
-      return { grade: g, score, criteria, rooms, evaluated: evaluatedRooms.length, total: ROOMS_PER_GRADE[g] };
+      return { grade: g, score, criteria, rooms, evaluated: evaluatedRooms.length, total: roomsPerGrade[g] || ROOMS_PER_GRADE[g] };
     });
     const schoolScore = mean(grades.map((g) => g.score));
     const ranked = grades.filter((g) => g.score > 0).sort((a, b) => b.score - a.score);
     const allRooms = roomAvg.filter((r) => r.room !== 0 && r.avg_score > 0).sort((a, b) => b.avg_score - a.avg_score);
     const schoolCriteria = CRITERIA.map((c, i) => ({ ...c, score: mean(grades.map((g) => g.criteria[i])) }));
     return { grades, schoolScore, bestGrade: ranked[0], worstGrade: ranked[ranked.length - 1], topRoom: allRooms[0], schoolCriteria, roomsEvaluated: allRooms.length };
-  }, [summary, basis]);
+  }, [summary, basis, roomsPerGrade]);
 
   const gradeSeries = useMemo(() => {
     const out = {};

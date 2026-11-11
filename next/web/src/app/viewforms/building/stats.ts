@@ -17,7 +17,10 @@ export type Row = {
   issues: Issue[];
 };
 
-export const fullImageUrl = (url?: string) => (!url ? "" : url.startsWith("http") ? url : "https://cdn.yumistack.net/" + url);
+// Photos are stored as R2 keys and served through /api/file/ (a redirect to R2); old records that kept
+// the bucket's public URL are mapped the same way.
+export const fullImageUrl = (url?: string) =>
+  !url ? "" : url.startsWith("https://cdn.yumistack.net/") ? "/api/file/" + url.slice(26) : url.startsWith("http") ? url : "/api/file/" + url;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function mergeData(result: any): Row[] {

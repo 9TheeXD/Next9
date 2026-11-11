@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ToolShell, useConfirm, useToast } from "@/components/tool/Tool";
 import { buddhistShort, calendarIndex, details, filterRows, fullImageUrl, historyFor, isPerfect, mergeData, overview, type RoomStat, type Row } from "./stats";
+import { usePublicSettings } from "@/lib/useSettings";
 
 // Building inspection summary (/viewforms/building/). Reads GET /api/building/data_v2?building=all,
 // and its one write is POST /api/building/cancel_deduction { issue_id, is_cancelled: true }.
 
-const BUILDINGS = ["3", "5", "6", "9", "10", "11", "15"];
+// Buildings: admin → ตรวจอาคาร (this list is only the fallback while loading).
+const DEFAULT_BUILDINGS = ["3", "5", "6", "9", "10", "11", "15"];
 const DAYS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 type Photo = { url: string; type: "overall" | "issue"; date: string; inspectors: string; id?: number; name: string; cancelled?: boolean };
 
@@ -23,6 +25,8 @@ function photosOf(r: Row): Photo[] {
 }
 
 export function ViewBuilding() {
+  const building = usePublicSettings("building")?.building;
+  const BUILDINGS = building ? building.buildings.map((b) => String(b.number)) : DEFAULT_BUILDINGS;
   const [raw, setRaw] = useState<Row[] | null>(null);
   const [filter, setFilter] = useState({ building: "all", start: "", end: "" });
   const [applied, setApplied] = useState(filter);

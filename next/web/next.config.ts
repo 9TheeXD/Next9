@@ -47,6 +47,11 @@ const nextConfig: NextConfig = {
       beforeFiles: [
         // inspectors.json used to be a file beside the pages; it is kept in the database now.
         { source: "/inspectors.json", destination: "/api/inspectors" },
+        // Building rooms and ShiftManager's member list/config are settings now (admin pages); the
+        // pages still ask for the old file names.
+        { source: "/forms/building/rooms/:n.json", destination: "/api/building/rooms/:n" },
+        { source: "/duty/js/config.js", destination: "/api/duty/config.js" },
+        { source: "/duty/js/data.js", destination: "/api/duty/data.js" },
       ],
       // Only reached when no Next.js route matches, so a migrated page automatically wins.
       fallback: LEGACY_DIRS.map((d) => ({ source: `/${d}/`, destination: `/${d}/index.html` })),

@@ -8,10 +8,35 @@ const GRADE_CONFIG = {
   6: { totalRooms: 16, poolRooms: [1,2,3,4], building1Rooms: [5,6,7,8] },
 };
 
+// Rooms per grade are a setting (admin → ภาคเรียน → จำนวนห้อง, settings key rooms_per_grade,
+// JSON { "1": 14, … }). API routes call loadRooms(db) before validating; the value is cached for 30 s.
+const DEFAULT_ROOMS = { 1: 14, 2: 14, 3: 14, 4: 16, 5: 16, 6: 16 };
+let roomsCache = { at: 0, rooms: { ...DEFAULT_ROOMS } };
+
+function normalizeRooms(input) {
+  const out = {};
+  for (const g of [1, 2, 3, 4, 5, 6]) {
+    const n = Number(input && input[g]);
+    out[g] = Number.isInteger(n) && n >= 1 && n <= 40 ? n : DEFAULT_ROOMS[g];
+  }
+  return out;
+}
+
+async function loadRooms(db, { fresh = false } = {}) {
+  if (!fresh && Date.now() - roomsCache.at < 30000) return roomsCache.rooms;
+  let rooms = { ...DEFAULT_ROOMS };
+  try {
+    const row = await db.prepare("SELECT value FROM settings WHERE key = 'rooms_per_grade'").get();
+    if (row && row.value) rooms = normalizeRooms(JSON.parse(row.value));
+  } catch {}
+  roomsCache = { at: Date.now(), rooms };
+  return rooms;
+}
+
 function getRoomsForZone(grade, zone) {
-  const config = GRADE_CONFIG[grade];
-  if (!config) return [];
-  return Array.from({ length: config.totalRooms }, (_, i) => i + 1);
+  const total = roomsCache.rooms[grade] || (GRADE_CONFIG[grade] && GRADE_CONFIG[grade].totalRooms);
+  if (!total) return [];
+  return Array.from({ length: total }, (_, i) => i + 1);
 }
 
 function isValidRoom(grade, room, zone) {
@@ -169,6 +194,9 @@ async function checkSystemLock(db, userRole = null) {
 
 module.exports = {
   GRADE_CONFIG,
+  DEFAULT_ROOMS,
+  loadRooms,
+  normalizeRooms,
   getRoomsForZone,
   isValidRoom,
   isValidGrade,

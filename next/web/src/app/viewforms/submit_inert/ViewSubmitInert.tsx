@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ToolShell, useConfirm, useToast } from "@/components/tool/Tool";
+import { usePublicSettings } from "@/lib/useSettings";
 
 // Weekly status of the late-check books (/viewforms/submit_inert/). Same requests as the old page:
 //   GET /api/submit-inert/data, GET /inspectors.json
@@ -12,10 +13,12 @@ import { ToolShell, useConfirm, useToast } from "@/components/tool/Tool";
 
 type Rec = { id: string | number; date_str: string; reporter: string; classes: string[]; image_key?: string; is_admin_override?: boolean };
 
-const LEVELS = ["1", "2", "3", "4", "5", "6"];
-const PLACES = ["ข้างอ.5", "หลังโดม"];
+// Places: admin → ส่งเล่มตรวจสาย-เฉื่อย; grades: admin → ปีการศึกษา. Fallbacks while loading.
+const DEFAULT_LEVELS = ["1", "2", "3", "4", "5", "6"];
+const DEFAULT_PLACES = ["ข้างอ.5", "หลังโดม"];
 const DAYS = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์"];
-const CDN = "https://cdn.yumistack.net/";
+// Photos are served through /api/file/ (a redirect to R2).
+const CDN = "/api/file/";
 
 function getMonday(d: Date) {
   const date = new Date(d);
@@ -31,14 +34,16 @@ const addDays = (d: Date, n: number) => {
 const show = (d: Date) => d.toLocaleDateString("th-TH", { day: "numeric", month: "short" });
 const dbDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-function analyze(records: Rec[]) {
+function analyze(records: Rec[], PLACES: string[], LEVELS: string[]) {
   const all = [...new Set(records.flatMap((r) => r.classes || []))];
-  const a5 = LEVELS.filter((l) => !all.includes(`ข้างอ.5 ม.${l}`));
-  const dome = LEVELS.filter((l) => !all.includes(`หลังโดม ม.${l}`));
-  return { a5, dome, complete: a5.length === 0 && dome.length === 0 };
+  const missing = PLACES.map((place) => ({ place, levels: LEVELS.filter((l) => !all.includes(`${place} ม.${l}`)) }));
+  return { missing, complete: missing.every((m) => m.levels.length === 0) };
 }
 
 export function ViewSubmitInert() {
+  const cfg = usePublicSettings("school", "submit_inert");
+  const PLACES = cfg ? cfg.submit_inert.places : DEFAULT_PLACES;
+  const LEVELS = cfg ? cfg.school.grades.map((g, i) => String(g.name).match(/\d+/)?.[0] || String(i + 1)) : DEFAULT_LEVELS;
   const [unlocked, setUnlocked] = useState<boolean | null>(null);
   const [data, setData] = useState<Rec[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -164,7 +169,7 @@ export function ViewSubmitInert() {
           const date = addDays(monday, i);
           const str = dbDate(date);
           const recs = records(str);
-          const st = analyze(recs);
+          const st = analyze(recs, PLACES, LEVELS);
           const state = recs.length === 0 ? "none" : st.complete ? "ok" : "part";
           return (
             <button key={str} type="button" className={`t-card vs-day is-${state}`} onClick={() => setDay({ date, str })}>
@@ -177,8 +182,9 @@ export function ViewSubmitInert() {
                   <span className="vs-missing">ยังไม่ส่ง</span>
                 ) : (
                   <>
-                    <div><span className="t-muted">ข้างอ.5:</span> <b className={st.a5.length ? "vs-bad" : "vs-good"}>{st.a5.length ? `ขาด ${st.a5.join(", ")}` : "ครบ"}</b></div>
-                    <div><span className="t-muted">หลังโดม:</span> <b className={st.dome.length ? "vs-bad" : "vs-good"}>{st.dome.length ? `ขาด ${st.dome.join(", ")}` : "ครบ"}</b></div>
+                    {st.missing.map((m) => (
+                      <div key={m.place}><span className="t-muted">{m.place}:</span> <b className={m.levels.length ? "vs-bad" : "vs-good"}>{m.levels.length ? `ขาด ${m.levels.join(", ")}` : "ครบ"}</b></div>
+                    ))}
                     <div className="t-muted vs-who">ผู้ส่ง: {[...new Set(recs.map((r) => r.reporter))].join(", ")}</div>
                   </>
                 )}
@@ -286,9 +292,15 @@ function Lock({ onUnlock }: { onUnlock: () => void }) {
     <div className="t-center">
       <form
         className="t-login"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          if (value === "next9") {
+          // Checked by the server: admin → รหัสผ่าน ("หน้าสรุปการส่งเล่มตรวจสาย-เฉื่อย").
+          let ok = false;
+          try {
+            const r = await fetch("/api/auth/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "viewforms", password: value }) });
+            ok = r.ok;
+          } catch {}
+          if (ok) {
             try {
               localStorage.setItem("next9_viewforms_auth", "true");
             } catch {}

@@ -11,20 +11,24 @@
 //   Photos sent together (LINE imageSet) get ONE summary message, sent as a free reply when possible.
 //   Any other text goes to Dialogflow.
 //
-// Env: LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, DIALOGFLOW_CREDENTIALS_JSON (service account
-// key JSON of the Dialogflow agent), DIALOGFLOW_PROJECT_ID (default: the key's project_id).
+// Keys: the admin page (คีย์เชื่อมต่อ), else the env variables LINE_CHANNEL_ACCESS_TOKEN,
+// LINE_CHANNEL_SECRET, DIALOGFLOW_CREDENTIALS_JSON (service account key JSON of the Dialogflow agent),
+// DIALOGFLOW_PROJECT_ID (default: the key's project_id). Album list length: settings "line".
 import * as line from "@line/bot-sdk"
 import { openDb } from "./db.mjs"
 import { background } from "./background.mjs"
 import { createAlbum, ensureSchema, ingestBuffer, listOpenAlbums } from "./api.mjs"
+import { getSecret, getSettings } from "./settings.mjs"
 
 const db = openDb("app")
 const REPLY_TOKEN_MS = 50000 // reply tokens last about a minute; stay on the safe side
 
 let clients = null
-function lineClients() {
-    if (!clients) {
-        const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN || ""
+let clientsToken = null
+async function lineClients() {
+    const channelAccessToken = await getSecret("line_channel_access_token")
+    if (!clients || clientsToken !== channelAccessToken) {
+        clientsToken = channelAccessToken
         clients = {
             api: new line.messagingApi.MessagingApiClient({ channelAccessToken }),
             blob: new line.messagingApi.MessagingApiBlobClient({ channelAccessToken }),
@@ -48,8 +52,8 @@ function ensureTables() {
     return tablesReady
 }
 
-export function verifySignature(rawBody, signature) {
-    const secret = process.env.LINE_CHANNEL_SECRET || ""
+export async function verifySignature(rawBody, signature) {
+    const secret = await getSecret("line_channel_secret")
     if (!secret || !signature) return false
     try { return line.validateSignature(rawBody, secret, signature) } catch { return false }
 }
@@ -72,17 +76,17 @@ async function queueCount(userId) {
 // ---- messaging ----
 const text = (t, extra = {}) => ({ type: "text", text: t, ...extra })
 async function reply(event, messages) {
-    return lineClients().api.replyMessage({ replyToken: event.replyToken, messages })
+    return (await lineClients()).api.replyMessage({ replyToken: event.replyToken, messages })
 }
 // Reply while the event's token is still fresh (free), else a push (counts against the monthly quota).
 async function replyOrPush(event, userId, messages) {
     if (event.replyToken && Date.now() - (event.timestamp || 0) < REPLY_TOKEN_MS) {
         try { await reply(event, messages); return } catch {}
     }
-    try { await lineClients().api.pushMessage({ to: userId, messages }) } catch (e) { console.error("[LINE] push failed", e.message) }
+    try { await (await lineClients()).api.pushMessage({ to: userId, messages }) } catch (e) { console.error("[LINE] push failed", e.message) }
 }
 async function showLoading(userId) {
-    try { await lineClients().api.showLoadingAnimation({ chatId: userId, loadingSeconds: 60 }) } catch {}
+    try { await (await lineClients()).api.showLoadingAnimation({ chatId: userId, loadingSeconds: 60 }) } catch {}
 }
 
 async function streamToBuffer(stream) {
@@ -93,7 +97,7 @@ async function streamToBuffer(stream) {
 
 // Downloads one LINE message's content and stores it in the album. True on success.
 async function uploadMessage(albumId, msg, createdAt) {
-    const { blob } = lineClients()
+    const { blob } = await lineClients()
     try {
         const buffer = await streamToBuffer(await blob.getMessageContent(msg.id))
         let poster = null
@@ -179,11 +183,11 @@ async function handleMedia(event, userId) {
 async function handleDialogflow(event, userId, input) {
     let dialogflow
     try { dialogflow = (await import("@google-cloud/dialogflow")).default } catch (e) { dialogflow = null }
-    const creds = process.env.DIALOGFLOW_CREDENTIALS_JSON
+    const creds = await getSecret("dialogflow_credentials_json")
     if (!dialogflow || !creds) return
     try {
         const credentials = JSON.parse(creds)
-        const projectId = process.env.DIALOGFLOW_PROJECT_ID || credentials.project_id || "sdh-next9-chatbot"
+        const projectId = (await getSecret("dialogflow_project_id")) || credentials.project_id || "sdh-next9-chatbot"
         const sessionClient = new dialogflow.SessionsClient({ credentials, projectId })
         const sessionPath = sessionClient.projectAgentSessionPath(projectId, userId)
         const [response] = await sessionClient.detectIntent({ session: sessionPath, queryInput: { text: { text: input, languageCode: "th" } } })
@@ -211,12 +215,13 @@ async function handleDialogflow(event, userId, input) {
 
 async function showAlbumPicker(event) {
     try {
-        const albums = await listOpenAlbums(12)
+        const limit = Math.min(12, Math.max(1, Number((await getSettings("line")).album_limit) || 12))
+        const albums = await listOpenAlbums(limit)
         const items = [
             { type: "action", action: { type: "postback", label: "➕ สร้างอัลบั้มใหม่", data: "action=create_album", displayText: "สร้างอัลบั้มใหม่" } },
             ...albums.map((a) => ({ type: "action", action: { type: "postback", label: a.name.substring(0, 20), data: `action=select_album&id=${a.id}&name=${encodeURIComponent(a.name.substring(0, 20))}`, displayText: `เลือกอัลบั้ม: ${a.name.substring(0, 20)}` } })),
         ]
-        return reply(event, [text("กรุณาเลือกอัลบั้มที่ต้องการอัปโหลดรูปลงไปครับ หรือกดสร้างใหม่ (แสดงสูงสุด 12 อัลบั้มล่าสุด):", { quickReply: { items } })])
+        return reply(event, [text(`กรุณาเลือกอัลบั้มที่ต้องการอัปโหลดรูปลงไปครับ หรือกดสร้างใหม่ (แสดงสูงสุด ${limit} อัลบั้มล่าสุด):`, { quickReply: { items } })])
     } catch (error) {
         console.error(error)
         return reply(event, [text("เกิดข้อผิดพลาดในการดึงข้อมูลอัลบั้มครับ")])

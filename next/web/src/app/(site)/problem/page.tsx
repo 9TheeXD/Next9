@@ -1,32 +1,29 @@
 import type { Metadata } from "next";
-import { PROBLEM_FORM } from "../policies";
+import { getSettings } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "แจ้งปัญหา", icons: { icon: "/assets/icons/problem.svg" } };
+// Texts: admin → หน้าแจ้งปัญหา; the form link: admin → เว็บไซต์.
+export const revalidate = 3600;
 
-const STEPS = [
-  { icon: "fas fa-pen", title: "เล่าปัญหา", text: "กรอกแบบฟอร์มออนไลน์ บอกว่าเกิดอะไร ที่ไหน" },
-  { icon: "fas fa-paper-plane", title: "ส่งถึงสภา", text: "เรื่องถูกส่งถึงทีม NEXT9 โดยตรง" },
-  { icon: "fas fa-screwdriver-wrench", title: "ติดตามแก้ไข", text: "ทีมรับเรื่องประสานงานและเร่งแก้ไข" },
-];
-
-export default function ProblemPage() {
+export default async function ProblemPage() {
+  const [site, problem] = await Promise.all([getSettings("site"), getSettings("problem")]);
   return (
     <main>
       <section className="s-page-hero">
-        <p className="s-eyebrow">เสียงของเพื่อน พี่ น้อง คือจุดเริ่มต้นของการเปลี่ยนแปลง</p>
-        <h1>ร่วมแจ้งปัญหา</h1>
-        <p className="s-lead">
-          หากพบปัญหา หรือมีข้อแนะนำที่ต้องการให้ทีม NEXT9 เร่งดำเนินการแก้ไข ส่งเรื่องผ่านระบบแจ้งออนไลน์ได้ทันที
-        </p>
-        <a href={PROBLEM_FORM} target="_blank" rel="noopener noreferrer" className="s-btn s-btn-lg">
-          <i className="fas fa-bullhorn" aria-hidden /> คลิกเพื่อแจ้งปัญหา
-        </a>
+        <p className="s-eyebrow">{problem.eyebrow}</p>
+        <h1>{problem.title}</h1>
+        <p className="s-lead">{problem.lead}</p>
+        {site.problem_form_url && (
+          <a href={site.problem_form_url} target="_blank" rel="noopener noreferrer" className="s-btn s-btn-lg">
+            <i className="fas fa-bullhorn" aria-hidden /> {problem.button}
+          </a>
+        )}
       </section>
 
       <section className="s-section">
         <div className="s-steps">
-          {STEPS.map((s, i) => (
-            <div key={s.title} className="s-step">
+          {problem.steps.map((s, i) => (
+            <div key={s.title + i} className="s-step">
               <span className="s-step-n">{i + 1}</span>
               <i className={s.icon} aria-hidden />
               <h3>{s.title}</h3>
@@ -34,9 +31,11 @@ export default function ProblemPage() {
             </div>
           ))}
         </div>
-        <p className="s-note">
-          <i className="fas fa-restroom" aria-hidden /> ปัญหาห้องน้ำ: สแกน QR Code ที่ติดอยู่หน้าห้องน้ำแต่ละห้อง เพื่อแจ้งได้ตรงจุดที่สุด
-        </p>
+        {problem.note && (
+          <p className="s-note">
+            <i className="fas fa-restroom" aria-hidden /> {problem.note}
+          </p>
+        )}
       </section>
     </main>
   );

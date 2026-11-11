@@ -63,14 +63,17 @@ async function getAccessToken(email, privateKeyPEM, scope = 'https://www.googlea
 }
 
 // ===== Token Cache =====
+// Per service account: the admin page can switch to another account at any time.
 let cachedToken = null
 let tokenExpiry = 0
+let tokenEmail = null
 
 async function getCachedToken(email, privateKeyPEM) {
-    if (cachedToken && Date.now() < tokenExpiry) {
+    if (cachedToken && tokenEmail === email && Date.now() < tokenExpiry) {
         return cachedToken
     }
     cachedToken = await getAccessToken(email, privateKeyPEM)
+    tokenEmail = email
     tokenExpiry = Date.now() + 50 * 60 * 1000 // 50 minutes (token valid 60 min)
     return cachedToken
 }

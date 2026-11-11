@@ -3,17 +3,20 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { StateCard, ToolShell, useToast } from "@/components/tool/Tool";
+import { usePublicSettings } from "@/lib/useSettings";
 
 type Room = { id: string; name: string };
 type Config = { rooms: Room[]; problems: string[] };
 
-const ROLES = ["นักเรียน", "ครู", "บุคคลอื่น"];
+// Who is reporting: admin → ห้องน้ำ (fallback while loading).
+const DEFAULT_ROLES = ["นักเรียน", "ครู", "บุคคลอื่น"];
 const OTHER = "อื่นๆ";
 
 // The public report form, opened from the QR code on each restroom: /forms/toilet/?id=<room id>.
 // Requests are the same as the old page's: GET /api/toilet/config, POST /api/toilet/submit
 // { roomId, role, problem, customProblem }.
 export function ToiletReport() {
+  const ROLES = usePublicSettings("toilet_form")?.toilet_form.roles ?? DEFAULT_ROLES;
   const id = useSearchParams()?.get("id") ?? null;
   const [state, setState] = useState<"loading" | "notfound" | "form" | "done">("loading");
   const [room, setRoom] = useState<Room | null>(null);

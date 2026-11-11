@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 const { getDb } = require('@/lib/db');
 const { validateCsrfToken, CSRF_COOKIE_NAME } = require('@/lib/csrf');
-const { isValidGrade, isValidRoom, isValidCriterion, isValidScore, isValidZone, isValidDateFormat, getRoomsForZone, checkSystemLock, getEvalWindow, getEvalDays, evalDayStatus } = require('@/lib/config');
+const { isValidGrade, isValidRoom, isValidCriterion, isValidScore, isValidZone, isValidDateFormat, getRoomsForZone, loadRooms, checkSystemLock, getEvalWindow, getEvalDays, evalDayStatus } = require('@/lib/config');
 
 export async function GET(request) {
   try {
@@ -77,6 +77,7 @@ export async function POST(request) {
     }
 
     const db = getDb();
+    await loadRooms(db);
 
     // Time restriction check (the window admins set on /admin; 07:00 - 08:30 by default)
     const formatter = new Intl.DateTimeFormat('en-US', {

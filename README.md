@@ -2,10 +2,14 @@
 
 Monorepo for the SDH Council systems. Three independent projects live side by side; each has its own `package.json`.
 
-> **Branch `serverless`:** every system runs on Vercel + Turso + Supabase + Cloudflare R2 instead of the VPS.
-> The old Express-style `next/server.js` is now `next/web/server/api.mjs`, served by the Next.js app; the
-> LINE bot is `next/web/src/pages/api/line/webhook.ts`; the Discord bot is gone. Setup and data migration:
-> [SERVERLESS.md](SERVERLESS.md). The Docker/VPS instructions below apply to `main`.
+> **Hosting:** every system runs on Vercel + Turso + Supabase + Cloudflare R2 (no VPS). The old Express-style
+> `next/server.js` is now `next/web/server/api.mjs`, served by the Next.js app; the LINE bot is
+> `next/web/src/pages/api/line/webhook.ts`; the Discord bot is gone. Setup and data migration:
+> [SERVERLESS.md](SERVERLESS.md). The Docker/VPS instructions further down are historical.
+>
+> **Settings without code:** names, texts, Google Sheets, school year, forms, passwords and keys are edited
+> on the site's admin page (`/admin/`, `next/web/server/settings.mjs` + `src/app/admin/`). Thai handover guide
+> for the next council: [HANDOVER.md](HANDOVER.md).
 
 | Folder | What it is | Stack |
 |---|---|---|

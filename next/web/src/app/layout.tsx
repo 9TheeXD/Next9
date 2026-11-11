@@ -3,18 +3,28 @@ import Script from "next/script";
 import { Suspense } from "react";
 import { NavProgress } from "@/components/NavProgress";
 import "./globals.css";
+import { fileUrl, getSettings } from "@/lib/settings";
 
-export const metadata: Metadata = {
-  title: {
-    default: "NEXT9 - สภานักเรียนโรงเรียนสิรินธร",
-    template: "%s - NEXT9",
-  },
-  icons: { icon: "https://cdn.yumistack.net/next9/logo01.webp" },
-};
+// Name, logo and colour: admin → เว็บไซต์.
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getSettings("site");
+  return {
+    // Relative image URLs in link previews (logo, member photos) resolve against the site address.
+    metadataBase: new URL(process.env.SITE_ORIGIN || "http://localhost:8070"),
+    title: {
+      default: `${site.name} - ${site.council}`,
+      template: `%s - ${site.name}`,
+    },
+    icons: { icon: fileUrl(site.logo) },
+  };
+}
 
-export const viewport: Viewport = {
-  themeColor: "#b00909",
-};
+export async function generateViewport(): Promise<Viewport> {
+  const site = await getSettings("site");
+  return { themeColor: site.theme_color || "#b00909" };
+}
+
+export const revalidate = 3600;
 
 // Same as the legacy photos pages: links opened inside LINE switch to the phone's real browser, and
 // Facebook/Instagram in-app browsers on Android hand the page to Chrome (those in-app browsers break
@@ -26,10 +36,14 @@ const OPEN_EXTERNAL = `(function(){if(!/^\\/(photos|s|forms\\/submit_inert)(\\/|
 // page hydrates (the photos home hides its login card under html.has-token).
 const HAS_TOKEN = `try{if(/(^|;\\s*)photos_token=/.test(document.cookie)||localStorage.getItem('photos_token'))document.documentElement.classList.add('has-token')}catch(e){}`;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const site = await getSettings("site");
+  // The theme colour from settings replaces the default red wherever the styles use the variables.
+  const accent = /^#[0-9a-f]{3,8}$/i.test(site.theme_color) && site.theme_color.toLowerCase() !== "#b00909" ? site.theme_color : null;
   return (
     <html lang="th" suppressHydrationWarning>
       <head>
+        {accent && <style>{`:root{--accent:${accent};--color-primary:${accent};--color-ring:${accent}}`}</style>}
         {/* The legacy site's fonts, loaded the same way, so every inline font-family: 'Prompt' matches. */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />

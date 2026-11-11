@@ -22,7 +22,7 @@ let lbCurrentIssueId = null;
 function getFullImageUrl(url) {
     if (!url) return '';
     if (url.startsWith('http')) return url;
-    return 'https://cdn.yumistack.net/' + url;
+    return '/api/file/' + url;
 }
 
 document.addEventListener('DOMContentLoaded', () => {

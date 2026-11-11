@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 const { getDb } = require('@/lib/db');
 const { writeAudit, recentAudit, restoreAudit, unitLabel } = require('@/lib/audit');
-const { CRITERIA, SCORE_LABELS, isValidDateFormat, isValidGrade, isValidRoom, isValidZone, isValidScore } = require('@/lib/config');
+const { CRITERIA, SCORE_LABELS, isValidDateFormat, isValidGrade, isValidRoom, loadRooms, isValidZone, isValidScore } = require('@/lib/config');
 
 const CRITERION_NOS = [1, 2, 3, 4, 5];
 // One column per criterion: its score for the (evaluator, unit, date) group, NULL when missing.
@@ -16,6 +16,7 @@ const unauthorized = () => NextResponse.json({ message: 'Unauthorized' }, { stat
 const bad = (message) => NextResponse.json({ success: false, message }, { status: 400 });
 
 async function isAdmin() {
+  await loadRooms(getDb()); // room numbers are validated against the rooms-per-grade setting
   const session = await getServerSession(authOptions);
   return !!session && session.user.role === 'admin';
 }

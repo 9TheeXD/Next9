@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { playableUrl } from "@/lib/storage";
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,7 +25,8 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ success: true, data: sounds });
+    const origin = new URL(request.url).origin;
+    return NextResponse.json({ success: true, data: sounds.map((s) => ({ ...s, url: playableUrl(s.url, origin) })) });
   } catch (error) {
     console.error("GET mobile sounds error:", error);
     return NextResponse.json({ success: false, error: "Internal error" }, { status: 500 });

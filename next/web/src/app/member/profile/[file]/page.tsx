@@ -1,17 +1,20 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { DEPTS, bySlug, loadMembers, photoOf } from "@/lib/members";
+import { bySlug, loadLayout, loadMembers, photoOf } from "@/lib/members";
 import { Avatar } from "@/components/member/Avatar";
 import { AppLink } from "@/components/AppLink";
 
 // Profile links have always been /member/profile/<slug>.html (shared around, bookmarked).
 const slugOf = (file: string) => decodeURIComponent(file).replace(/\.html$/, "");
 
-const DEPT_LINK: Record<string, string> = Object.fromEntries([
-  ...DEPTS.filter((d) => !d.dataDept).map((d) => [d.key, `/member/${d.key}/`]),
-  ["grade", "/member/grade/"],
-  ["executive", "/member/"],
-]);
+async function deptLinks(): Promise<Record<string, string>> {
+  const { depts } = await loadLayout();
+  return Object.fromEntries([
+    ...depts.filter((d) => !d.dataDept).map((d) => [d.key, `/member/${d.key}/`]),
+    ["grade", "/member/grade/"],
+    ["executive", "/member/"],
+  ]);
+}
 
 export async function generateMetadata(props: PageProps<"/member/profile/[file]">): Promise<Metadata> {
   const m = bySlug(await loadMembers(), slugOf((await props.params).file));
@@ -26,6 +29,7 @@ export async function generateMetadata(props: PageProps<"/member/profile/[file]"
 export default async function ProfilePage(props: PageProps<"/member/profile/[file]">) {
   const m = bySlug(await loadMembers(), slugOf((await props.params).file));
   if (!m) notFound();
+  const DEPT_LINK = await deptLinks();
   const c = m.contacts ?? {};
   const shown = (v?: string) => !!v && v.trim() !== "" && v.trim() !== "—";
   const positions = m.positions?.length ? m.positions : [{ label: m.role, dept: "executive" as const }];

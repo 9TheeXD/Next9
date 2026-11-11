@@ -1,37 +1,38 @@
 import { AppLink } from "@/components/AppLink";
+import { fileUrl, getSettings } from "@/lib/settings";
 
-export const SOCIAL = [
-  { href: "https://www.facebook.com/SirindhornStudentCouncil", label: "Facebook", icon: "fab fa-facebook-f" },
-  { href: "https://www.instagram.com/sdh.studentcouncil", label: "Instagram", icon: "fab fa-instagram" },
-];
-
-export function SiteFooter() {
+// Name, logo, menu, social links and motto: admin → เว็บไซต์.
+export async function SiteFooter() {
+  const site = await getSettings("site");
   return (
     <footer className="site-footer">
       <div className="site-footer-inner">
         <div className="site-footer-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="https://cdn.yumistack.net/next9/logo01.webp" alt="" width={40} height={40} />
+          <img src={fileUrl(site.logo)} alt="" width={40} height={40} />
           <div>
-            <b>NEXT9</b>
-            <span>สภานักเรียนโรงเรียนสิรินธร</span>
+            <b>{site.name}</b>
+            <span>{site.council}</span>
           </div>
         </div>
         <nav className="site-footer-links">
-          <AppLink href="/about/">เกี่ยวกับ</AppLink>
-          <AppLink href="/policy/">นโยบาย</AppLink>
-          <AppLink href="/member/">สมาชิก</AppLink>
-          <AppLink href="/problem/">แจ้งปัญหา</AppLink>
+          {site.nav
+            .filter((l) => l.href !== "/")
+            .map((l) => (
+              <AppLink key={l.href} href={l.href}>
+                {l.label}
+              </AppLink>
+            ))}
         </nav>
         <div className="site-footer-social">
-          {SOCIAL.map((s) => (
+          {site.social.map((s) => (
             <a key={s.href} href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label}>
               <i className={s.icon} aria-hidden />
             </a>
           ))}
         </div>
       </div>
-      <p className="site-footer-motto">“ทุกทางเพื่อสิรินธร ทุกทางเพื่อเกียรติกำจร”</p>
+      {site.motto && <p className="site-footer-motto">“{site.motto}”</p>}
     </footer>
   );
 }

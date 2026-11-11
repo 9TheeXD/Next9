@@ -19,7 +19,8 @@ import { scrollBelowHeader } from '@/lib/smoothScroll';
 import '../v2/v2.css';
 import '../v2/evaluate/evaluate.css';
 
-const ROOMS = { 1: 14, 2: 14, 3: 14, 4: 16, 5: 16, 6: 16 };
+// Rooms per grade: /api/settings/rooms (admins set it on /admin); these are only the fallback.
+const DEFAULT_ROOMS = { 1: 14, 2: 14, 3: 14, 4: 16, 5: 16, 6: 16 };
 const SCORES = [
   { v: 5, label: 'ดีมาก', pct: '≥90%' },
   { v: 4, label: 'ดี', pct: '70–89%' },
@@ -39,10 +40,10 @@ function bangkokMinutes() {
 }
 
 // A unit is one thing that gets five scores: a room, or (for the whole-grade evaluation) a grade.
-const unitsFor = (target) =>
+const unitsFor = (target, ROOMS = DEFAULT_ROOMS) =>
   target === 'overall'
     ? [1, 2, 3, 4, 5, 6].map((g) => ({ grade: g, room: 0, label: `ม.${g}` }))
-    : Array.from({ length: ROOMS[target] }, (_, i) => ({ grade: target, room: i + 1, label: `${target}/${i + 1}` }));
+    : Array.from({ length: ROOMS[target] || 0 }, (_, i) => ({ grade: target, room: i + 1, label: `${target}/${i + 1}` }));
 const keyOf = (grade, room, criterion) => `${grade}-${room}-${criterion}`;
 
 export default function EvaluateV2() {
@@ -51,6 +52,7 @@ export default function EvaluateV2() {
   const today = useMemo(() => bangkokToday(), []);
   const [minutes, setMinutes] = useState(() => bangkokMinutes());
   const [win, setWin] = useState(DEFAULT_WINDOW);
+  const [rooms, setRooms] = useState(DEFAULT_ROOMS);
   // Today closed by an admin (weekend, holiday): the reason to show, else ''.
   const [dayClosed, setDayClosed] = useState('');
   const inHours = minutes >= hhmmToMinutes(win.from) && minutes <= hhmmToMinutes(win.to);
@@ -93,6 +95,10 @@ export default function EvaluateV2() {
         })
         .catch(() => {});
     loadWindow();
+    fetch('/api/settings/rooms', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => d.rooms && setRooms(d.rooms))
+      .catch(() => {});
     const w = setInterval(loadWindow, 60000);
     return () => {
       clearInterval(t);
@@ -203,10 +209,10 @@ export default function EvaluateV2() {
     [scores, today, getCsrf, flash],
   );
 
-  const units = useMemo(() => unitsFor(target), [target]);
+  const units = useMemo(() => unitsFor(target, rooms), [target, rooms]);
   const doneCount = (u) => CRITERIA.filter((c) => scores[keyOf(u.grade, u.room, c.id)] > 0).length;
   const progress = (t) => {
-    const us = unitsFor(t);
+    const us = unitsFor(t, rooms);
     return { done: us.filter((u) => doneCount(u) === 5).length, total: us.length };
   };
 

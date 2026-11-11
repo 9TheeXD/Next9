@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { DEPTS, loadMembers, seatsOf, type DeptKey } from "@/lib/members";
+import { loadLayout, loadMembers, seatsOf, type DeptKey } from "@/lib/members";
 import { MemberCard, MemberRow } from "@/components/member/MemberCard";
 import { AppLink } from "@/components/AppLink";
 
-function deptOf(key: string) {
-  return DEPTS.find((d) => d.key === key);
+async function deptOf(key: string) {
+  return (await loadLayout()).depts.find((d) => d.key === key);
 }
 
 export async function generateMetadata(props: PageProps<"/member/[dept]">): Promise<Metadata> {
-  const dept = deptOf((await props.params).dept);
+  const dept = await deptOf((await props.params).dept);
   return { title: dept?.name ?? "สมาชิก" };
 }
 
 export default async function DeptPage(props: PageProps<"/member/[dept]">) {
-  const dept = deptOf((await props.params).dept);
+  const dept = await deptOf((await props.params).dept);
   if (!dept) notFound();
   const members = await loadMembers();
 

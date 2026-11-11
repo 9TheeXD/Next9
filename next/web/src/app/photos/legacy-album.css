@@ -621,7 +621,7 @@
 }
 
 .lp-album .home-hero {
-    background-image: url('https://cdn.yumistack.net/next9/001.webp');
+    background-image: url('/api/file/next9/001.webp');
     background-size: cover;
     background-size: 180%;
     background-position: center;

@@ -2,13 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppLink } from "@/components/AppLink";
-import { SECTIONS, type LinkItem } from "./data";
+import type { LinkItem, LinkSection } from "./data";
 
-const ALL = SECTIONS.flatMap((s) => s.items);
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 
 function absolute(href: string) {
-  return new URL(href, typeof window === "undefined" ? "https://next9-web.vercel.app" : location.href).href;
+  return new URL(href, location.href).href;
 }
 
 function greeting(now: Date) {
@@ -36,8 +35,10 @@ async function copyText(text: string) {
   }
 }
 
-// The internal systems hub (/links/): search, category filter, copy or share any link.
-export function LinksHub() {
+// The internal systems hub (/links/): search, category filter, copy or share any link. Sections,
+// name and logo come from settings (admin → หน้ารวมลิงก์ / เว็บไซต์), passed in by the server page.
+export function LinksHub({ sections: SECTIONS, logo, name, council, title, origin }: { sections: LinkSection[]; logo: string; name: string; council: string; title: string; origin: string }) {
+  const ALL = useMemo(() => SECTIONS.flatMap((s) => s.items), [SECTIONS]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [now, setNow] = useState<Date | null>(null);
@@ -113,10 +114,10 @@ export function LinksHub() {
     <div className="l-page">
       <div className="l-glow" aria-hidden />
       <div className="l-top">
-        <AppLink href="/" className="l-pill" aria-label="ไปเว็บไซต์หลัก NEXT9">
+        <AppLink href="/" className="l-pill" aria-label={`ไปเว็บไซต์หลัก ${name}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="https://cdn.yumistack.net/next9/logo01.webp" alt="" width={26} height={26} />
-          NEXT9 <span>/ INTERNAL</span>
+          <img src={logo} alt="" width={26} height={26} />
+          {name} <span>/ INTERNAL</span>
         </AppLink>
         <div className="l-top-right">
           <span className="l-pill l-clock">
@@ -131,8 +132,8 @@ export function LinksHub() {
 
       <header className="l-hero">
         <span className="l-live"><span /> พื้นที่สำหรับสมาชิกสภานักเรียน</span>
-        <h1>ศูนย์รวมระบบภายใน</h1>
-        <p className="l-sub">สภานักเรียนโรงเรียนสิรินธร</p>
+        <h1>{title}</h1>
+        <p className="l-sub">{council}</p>
         <p className="l-greet">{now ? greeting(now) : " "}</p>
         <div className="l-stats">
           <div><b>{ALL.length}</b><span>ระบบทั้งหมด</span></div>
@@ -187,7 +188,8 @@ export function LinksHub() {
             )}
             <div className="l-grid">
               {s.items.map((it) => {
-                const url = new URL(it.href, "https://next9-web.vercel.app");
+                // The page's own address (SITE_ORIGIN) on server and browser alike, so both render the same text.
+                const url = new URL(it.href, origin + "/links/");
                 const body = (
                   <>
                     <span className="l-card-top">

@@ -679,7 +679,7 @@
         const records = rawData.filter(d => d.date_str === dateStr);
         
         // Populate global imgs array for Lightbox
-        imgs = records.map(r => 'https://cdn.yumistack.net/' + r.image_key).filter(k => !k.endsWith('undefined') && !k.endsWith('admin_override') && k !== 'https://cdn.yumistack.net/');
+        imgs = records.map(r => '/api/file/' + r.image_key).filter(k => !k.endsWith('undefined') && !k.endsWith('admin_override') && k !== '/api/file/');
 
         const hasOverride = records.some(r => r.is_admin_override);
 
@@ -726,7 +726,7 @@
                         <button class="btn-edit" onclick='openEditModal(${JSON.stringify(r)})'>แก้ไขฟอร์มนี้</button>
                     </div>
                     <div>
-                        <img src="https://cdn.yumistack.net/${r.image_key}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 6px; border: 1px solid #dadce0; cursor: pointer;" alt="Proof" onclick="openLB(${idx})">
+                        <img src="/api/file/${r.image_key}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 6px; border: 1px solid #dadce0; cursor: pointer;" alt="Proof" onclick="openLB(${idx})">
                     </div>
                 `;
                 content.appendChild(div);

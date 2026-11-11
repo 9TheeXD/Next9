@@ -5,7 +5,7 @@ import { useToast } from "@/components/tool/Tool";
 import {
   DEFAULT_ITEMS,
   LOCAL_KEY,
-  TERM,
+  TERM_FALLBACK,
   calculateCurrentWeek,
   draftId,
   draftIsEmpty,
@@ -24,6 +24,7 @@ import {
   type Selected,
 } from "./pinkbook";
 import { History } from "./History";
+import { usePublicSettings } from "@/lib/useSettings";
 
 // Pink book inspection form (/forms/pinkbook/). Same requests and data as the old page:
 //   GET /api/pinkbook/config, GET /inspectors.json, GET /api/pinkbook/latest?grade&room&group
@@ -32,7 +33,7 @@ import { History } from "./History";
 //   GET/POST /api/pinkbook/draft                           (unsaved work, keyed by this browser's id)
 // plus localStorage pinkbook_inspector / pinkbook_week / pinkbook_draft(_id) and cookie pb_draft.
 
-const GRADES = ["ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6"];
+const DEFAULT_GRADES = ["ม.1", "ม.2", "ม.3", "ม.4", "ม.5", "ม.6"];
 const WEEKS = Array.from({ length: 22 }, (_, i) => i + 1);
 const MESSY = "ไม่เรียบร้อย";
 const NEAT = "เรียบร้อย";
@@ -47,6 +48,11 @@ function store(key: string, value?: string) {
 
 export function PinkbookForm() {
   const [items, setItems] = useState<Item[]>(DEFAULT_ITEMS);
+  // The term being recorded: the pinkbook settings' current term, else the school's (admin → ปีการศึกษา).
+  const [TERM, setTerm] = useState("");
+  // Grades: admin → ปีการศึกษา.
+  const school = usePublicSettings("school")?.school;
+  const GRADES = school?.grades?.length ? school.grades.map((g) => g.name) : DEFAULT_GRADES;
   // Checklist from the server config, permanent items included; picking a room starts from this.
   const [baseItems, setBaseItems] = useState<Item[]>(DEFAULT_ITEMS);
   const [roomsConfig, setRoomsConfig] = useState<RoomsConfig>({});
@@ -149,19 +155,24 @@ export function PinkbookForm() {
         .then((r) => r.json())
         .then((l) => alive && setInspectors(l))
         .catch(() => {});
-      if (store("pinkbook_term_v2") !== TERM) {
+      let cfgItems: Item[] = DEFAULT_ITEMS;
+      let cfgRooms: RoomsConfig = {};
+      let json: { success?: boolean; config?: { items?: Item[]; rooms?: RoomsConfig; week_1_start?: string; current_term?: string } } = {};
+      try {
+        json = await (await fetch(`/api/pinkbook/config?t=${Date.now()}`)).json();
+      } catch {}
+      const term = json.config?.current_term || TERM_FALLBACK;
+      if (alive) setTerm(term);
+      if (store("pinkbook_term_v2") !== term) {
         try {
           localStorage.removeItem("pinkbook_week");
         } catch {}
-        store("pinkbook_term_v2", TERM);
+        store("pinkbook_term_v2", term);
       }
       let insp = store("pinkbook_inspector") || "";
       let wk = store("pinkbook_week") || "";
       if (wk === "22") wk = "";
-      let cfgItems: Item[] = DEFAULT_ITEMS;
-      let cfgRooms: RoomsConfig = {};
       try {
-        const json = await (await fetch(`/api/pinkbook/config?t=${Date.now()}`)).json();
         if (json.success && json.config) {
           if (Array.isArray(json.config.items)) cfgItems = json.config.items;
           if (json.config.rooms) cfgRooms = json.config.rooms;

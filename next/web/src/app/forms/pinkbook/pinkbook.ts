@@ -16,7 +16,8 @@ export type RoomRecord = {
 };
 export type RoomsConfig = Record<string, Record<string, { sub?: boolean }>>;
 
-export const TERM = "2/2569";
+// Only used if the settings cannot be loaded; the real term comes from /api/pinkbook/config.
+export const TERM_FALLBACK = "2/2569";
 export const DEFAULT_ITEMS: Item[] = [
   { title: "ไม่วงกลม กและข หน้าปก", allow_week: false },
   { title: "ไม่เขียนที่อยู่", allow_week: false },

@@ -2,22 +2,18 @@
 
 import { useEffect, useState } from "react";
 
-const SLIDES = [
-  { src: "https://cdn.yumistack.net/next9/411.webp", alt: "สมาชิกพรรค NEXT9" },
-  { src: "https://cdn.yumistack.net/next9/412.webp", alt: "โรงเรียนสิรินธร" },
-];
-
 // The home banner: slides every 4 seconds, pauses while the pointer is on it, swipeable on phones.
-export function HeroSlider() {
+// The pictures come from settings (admin → หน้าแรก).
+export function HeroSlider({ slides: SLIDES }: { slides: { src: string; alt: string }[] }) {
   const [i, setI] = useState(0);
   const [paused, setPaused] = useState(false);
   const [touchX, setTouchX] = useState<number | null>(null);
 
   useEffect(() => {
-    if (paused) return;
+    if (paused || SLIDES.length < 2) return;
     const t = setInterval(() => setI((n) => (n + 1) % SLIDES.length), 4000);
     return () => clearInterval(t);
-  }, [paused]);
+  }, [paused, SLIDES.length]);
 
   const go = (d: number) => setI((n) => (n + d + SLIDES.length) % SLIDES.length);
 

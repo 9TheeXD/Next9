@@ -13,7 +13,7 @@ async function rawBody(req: NextApiRequest): Promise<string> {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(200).send("LINE webhook");
   const body = await rawBody(req);
-  if (!verifySignature(body, String(req.headers["x-line-signature"] || ""))) return res.status(401).end();
+  if (!(await verifySignature(body, String(req.headers["x-line-signature"] || "")))) return res.status(401).end();
   try {
     await handleWebhook(JSON.parse(body));
   } catch (e) {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ToolShell, useToast } from "@/components/tool/Tool";
 import { exportWord, filterByMonths, groupByClass, type InertRow } from "./exportWord";
+import { usePublicSettings } from "@/lib/useSettings";
 
 // Late/slow students summary (/viewforms/inert/): GET /api/inert/report?type=all|junior|high&term=1|2,
 // and a Word export built in the browser (same document as the old page).
@@ -15,7 +16,11 @@ const TYPES = [
 ];
 
 export function ViewInert() {
-  const [term, setTerm] = useState("2");
+  // Year and current term: admin → ปีการศึกษา.
+  const school = usePublicSettings("school")?.school;
+  const year = school?.year || "";
+  const [termPicked, setTerm] = useState("");
+  const term = termPicked || String(school?.term || "2");
   const [type, setType] = useState("all");
   const [rows, setRows] = useState<InertRow[] | null>(null);
   const [query, setQuery] = useState("");
@@ -76,7 +81,7 @@ export function ViewInert() {
           <div className="t-tabs" role="tablist">
             {["2", "1"].map((t) => (
               <button key={t} type="button" role="tab" aria-selected={term === t} className={term === t ? "is-on" : undefined} onClick={() => setTerm(t)}>
-                ภาคเรียนที่ {t}/2569
+                ภาคเรียนที่ {t}{year ? `/${year}` : ""}
               </button>
             ))}
           </div>
@@ -160,7 +165,7 @@ export function ViewInert() {
               </label>
               <label>
                 <span className="t-label">ปีการศึกษา</span>
-                <input className="t-input" value={exp.year} onChange={(e) => setExp({ ...exp, year: e.target.value })} placeholder="เช่น 2569" required />
+                <input className="t-input" value={exp.year} onChange={(e) => setExp({ ...exp, year: e.target.value })} placeholder={year ? `เช่น ${year}` : "ปีการศึกษา"} required />
               </label>
             </div>
             <div className="t-modal-actions">

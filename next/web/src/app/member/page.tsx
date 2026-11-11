@@ -1,31 +1,28 @@
-import { DEPTS, GRADES, loadMembers, seatsOf, type DeptKey, type Member } from "@/lib/members";
+import { loadLayout, loadMembers, seatsOf, type DeptKey, type Member } from "@/lib/members";
 import { MemberCard, MemberRow } from "@/components/member/MemberCard";
 import { AppLink } from "@/components/AppLink";
 
-const EXEC_UNITS = [
-  { unit: "president", caption: "ประธานสภานักเรียน" },
-  { unit: "vp1", caption: "รองประธาน 1" },
-  { unit: "vp2", caption: "รองประธาน 2" },
-  { unit: "secretary", caption: "เลขานุการ" },
-  { unit: "treasurer", caption: "เหรัญญิก" },
-];
+// The member list is read on every request, so an edit in /member/editor/ shows on the next load.
+export const dynamic = "force-dynamic";
 
 function firstSeat(members: Member[], unit: string) {
   return seatsOf(members, "executive", unit)[0]?.member;
 }
 
 export default async function MembersPage() {
-  const members = await loadMembers();
-  const [president, ...board] = EXEC_UNITS.map((e) => ({ ...e, member: firstSeat(members, e.unit) }));
+  const [members, layout] = await Promise.all([loadMembers(), loadLayout()]);
+  const { depts: DEPTS, grades: GRADES } = layout;
+  // Executive board and texts: admin → สมาชิก (โครงสร้าง).
+  const [president, ...board] = (layout.exec.length ? layout.exec : [{ unit: "", caption: "" }]).map((e) => ({ ...e, member: firstSeat(members, e.unit) }));
   const roster = [...members].sort((a, b) => (a.room ?? "").localeCompare(b.room ?? "", "th", { numeric: true }));
 
   return (
     <main>
       <header className="m-hero">
         <div className="m-hero-inner">
-          <p className="m-eyebrow">NEXT9 · สภานักเรียน</p>
-          <h1 className="m-hero-title">สมาชิกสภานักเรียน</h1>
-          <p className="m-hero-lead">บุคลากรคุณภาพ พร้อมพัฒนาโรงเรียนในทุกด้าน</p>
+          <p className="m-eyebrow">{layout.eyebrow}</p>
+          <h1 className="m-hero-title">{layout.title}</h1>
+          <p className="m-hero-lead">{layout.lead}</p>
           <div className="m-hero-stats">
             <div><b>{members.length}</b><span>สมาชิก</span></div>
             <div><b>{DEPTS.length}</b><span>ฝ่าย</span></div>
@@ -68,9 +65,9 @@ export default async function MembersPage() {
             );
           })}
           <AppLink href="/member/grade/" className="m-tile m-tile-grade">
-            <span className="m-tile-kicker">ม.1 – ม.6</span>
-            <span className="m-tile-name">งานระดับชั้น</span>
-            <span className="m-tile-text">ทีมดูแลนักเรียนแต่ละระดับชั้น ใกล้ชิดทุกห้องเรียน</span>
+            <span className="m-tile-kicker">{GRADES.length ? `ม.${GRADES[0]} – ม.${GRADES[GRADES.length - 1]}` : ""}</span>
+            <span className="m-tile-name">{layout.grade_title}</span>
+            <span className="m-tile-text">{layout.grade_text}</span>
             <i className="fas fa-arrow-right m-tile-arrow" aria-hidden />
           </AppLink>
         </div>
