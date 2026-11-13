@@ -2359,7 +2359,7 @@ export async function handleApi(req, res) {
         const term = url.searchParams.get("term") || await getPinkbookCurrentTerm();
         try {
             const db = pinkbookDb;
-            const stmt = db.prepare(`SELECT * FROM pinkbook_records WHERE inspected_week = ? AND term = ? ORDER BY grade, room, group_name`);
+            const stmt = db.prepare(`SELECT * FROM pinkbook_records WHERE inspected_week = ? AND term = ? ORDER BY grade, room, group_name, id DESC`);
             const rows = await stmt.all(week, term);
             db.close();
             res.writeHead(200, { "Content-Type": "application/json" });
@@ -2601,9 +2601,15 @@ export async function handleApi(req, res) {
                 const stmt = db.prepare(`INSERT INTO pinkbook_records (inspector_name, inspected_week, grade, room, group_name, issues, unsubmitted_weeks, raw_issues, term) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
                 const insertLogStmt = db.prepare(`INSERT INTO pinkbook_logs (record_id, inspected_week, grade, room, group_name, action, action_by, status, issues, unsubmitted_weeks, raw_issues, diff_summary, term) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
                 
+                const delStmt = db.prepare(`DELETE FROM pinkbook_records WHERE inspected_week = ? AND grade = ? AND room = ? AND group_name = ? AND term = ?`);
+                // One record per room/group/week: a room listed twice keeps its last entry, and a new
+                // submission replaces the room's earlier result (the logs keep the history).
+                const byKey = new Map();
+                for (const r of data.records || []) byKey.set(`${r.grade}|${r.room}|${r.group_name}`, r);
                 let insertedCount = 0;
                 const tx = db.transaction(async (records) => {
                     for (const r of records) {
+                        await delStmt.run(data.inspected_week, r.grade, r.room, r.group_name, targetTerm);
                         const info = await stmt.run(data.inspector_name, data.inspected_week, r.grade, r.room, r.group_name, r.issues, JSON.stringify(r.unsubmitted_weeks || []), JSON.stringify(r.raw_issues || {}), targetTerm);
                         const status = (r.issues && r.issues !== '-') ? 'ไม่เรียบร้อย' : 'เรียบร้อย';
                         await insertLogStmt.run(
@@ -2624,7 +2630,7 @@ export async function handleApi(req, res) {
                         insertedCount++;
                     }
                 });
-                await tx(data.records);
+                await tx([...byKey.values()]);
                 
                 db.close();
                 res.writeHead(200, { "Content-Type": "application/json" });

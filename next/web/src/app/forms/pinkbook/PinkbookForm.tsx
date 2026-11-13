@@ -363,6 +363,8 @@ export function PinkbookForm() {
     };
     record.updatedAt = Date.now();
     const wasEditing = !!editingId && rooms.some((r) => r.id === editingId);
+    const dup = rooms.find((r) => r.grade === grade && r.room === room && r.group_name === grp && r.id !== editingId);
+    if (dup) return sayErr(`${grade}/${room}${hasSub ? ` กลุ่ม ${grp}` : ""} อยู่ในตารางแล้ว กดแก้ไขที่แถวเดิมแทน`);
     if (wasEditing) {
       record.id = editingId!;
       setRooms(sortRooms(rooms.map((r) => (r.id === editingId ? record : r))));
