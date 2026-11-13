@@ -2378,6 +2378,9 @@ export async function handleApi(req, res) {
             const getStmt = db.prepare(`SELECT * FROM pinkbook_records WHERE id = ?`);
             const record = await getStmt.get(id);
             if (record) {
+                // Delete the room's result, including any duplicate copies of it for the same week.
+                await db.prepare(`DELETE FROM pinkbook_records WHERE inspected_week = ? AND grade = ? AND room = ? AND group_name = ? AND term = ?`)
+                  .run(record.inspected_week, record.grade, record.room, record.group_name, record.term);
                 await db.prepare(`DELETE FROM pinkbook_records WHERE id = ?`).run(id);
                 // Record log
                 await db.prepare(`INSERT INTO pinkbook_logs (record_id, inspected_week, grade, room, group_name, action, action_by, status, issues, unsubmitted_weeks, raw_issues, diff_summary, term) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
