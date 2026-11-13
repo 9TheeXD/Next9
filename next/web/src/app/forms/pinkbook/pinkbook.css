@@ -112,6 +112,19 @@
   margin: -6px 0 10px;
   font-size: 0.82rem;
 }
+.pb-week-hint {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+.pb-week-warn {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #fff4d6;
+  color: #8a5a00;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
 .pb-seg {
   display: grid;
   grid-template-columns: 1fr 1fr;

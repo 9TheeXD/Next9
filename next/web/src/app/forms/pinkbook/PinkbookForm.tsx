@@ -7,6 +7,8 @@ import {
   LOCAL_KEY,
   TERM_FALLBACK,
   calculateCurrentWeek,
+  thaiDate,
+  weekRangeText,
   draftId,
   draftIsEmpty,
   formatRoomTime,
@@ -59,6 +61,9 @@ export function PinkbookForm() {
   const [inspectors, setInspectors] = useState<string[]>([]);
   const [inspector, setInspector] = useState("");
   const [week, setWeek] = useState("");
+  // The page's own idea of today and this week, fixed when the page loads: if the date shown is not
+  // today, the page is stale and the inspector should reload it.
+  const [today, setToday] = useState<{ date: Date; week: number; week1?: string } | null>(null);
   const [grade, setGrade] = useState("");
   const [room, setRoom] = useState("");
   const [group, setGroup] = useState("");
@@ -170,17 +175,15 @@ export function PinkbookForm() {
         store("pinkbook_term_v2", term);
       }
       let insp = store("pinkbook_inspector") || "";
-      let wk = store("pinkbook_week") || "";
-      if (wk === "22") wk = "";
+      // Always start on this week (a remembered week goes stale); an unsent draft keeps its own week.
+      const week1 = json.config?.week_1_start;
+      const nowWeek = calculateCurrentWeek(week1);
+      if (alive) setToday({ date: new Date(), week: nowWeek, week1 });
+      let wk = String(nowWeek);
       try {
         if (json.success && json.config) {
           if (Array.isArray(json.config.items)) cfgItems = json.config.items;
           if (json.config.rooms) cfgRooms = json.config.rooms;
-          if (!wk || wk === "22") {
-            wk = String(calculateCurrentWeek(json.config.week_1_start));
-            store("pinkbook_inspector", insp);
-            store("pinkbook_week", wk);
-          }
         }
       } catch {}
       if (!alive) return;
@@ -558,9 +561,27 @@ export function PinkbookForm() {
               <span className="t-label">สัปดาห์ที่ตรวจ <span className="t-req">*</span></span>
               <select className="t-input" value={week} onChange={(e) => { setWeek(e.target.value); saveCache(inspector, e.target.value); }}>
                 <option value="" disabled>-- เลือกสัปดาห์ --</option>
-                {WEEKS.map((w) => <option key={w} value={String(w)}>สัปดาห์ที่ {w}</option>)}
+                {WEEKS.map((w) => (
+                  <option key={w} value={String(w)}>
+                    สัปดาห์ที่ {w}{today ? ` (${weekRangeText(today.week1, w)})` : ""}{today?.week === w ? " · สัปดาห์นี้" : ""}
+                  </option>
+                ))}
               </select>
             </label>
+            <p className="t-muted pb-hint pb-week-hint">
+              * เลือกสัปดาห์ของ<b>วันที่ตรวจจริง</b> (สัปดาห์ปัจจุบันของภาคเรียน) ไม่ใช่สัปดาห์ที่เขียนอยู่ในเล่ม
+              {today && (
+                <>
+                  <br />
+                  วันนี้คือ <b>{thaiDate(today.date, true)}</b> = สัปดาห์ที่ {today.week} ถ้าวันที่นี้ไม่ใช่วันนี้ ให้รีเฟรชหน้าเว็บ
+                </>
+              )}
+            </p>
+            {today && week && Number(week) !== today.week && (
+              <p className="pb-week-warn" role="alert">
+                <i className="fas fa-triangle-exclamation" aria-hidden /> สัปดาห์ที่ {week} ไม่ใช่สัปดาห์ปัจจุบัน (สัปดาห์ที่ {today.week}) ตรวจให้แน่ใจว่าเลือกถูก
+              </p>
+            )}
           </section>
 
           <section className="t-card">

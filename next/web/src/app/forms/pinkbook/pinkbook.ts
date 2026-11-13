@@ -47,6 +47,28 @@ export function calculateCurrentWeek(week1DateStr?: string) {
   return Math.max(1, Math.min(22, diffWeeks + 1));
 }
 
+// Monday-Friday of school week n (week 1 = the week holding week1DateStr), for showing next to the picker.
+export function weekDates(week1DateStr: string | undefined, n: number) {
+  const dateStr = week1DateStr && week1DateStr >= "2026-10-01" ? week1DateStr : "2026-10-26";
+  const w1 = new Date(dateStr);
+  const mon = new Date(w1);
+  mon.setDate(w1.getDate() - w1.getDay() + 1 + (n - 1) * 7);
+  const fri = new Date(mon);
+  fri.setDate(mon.getDate() + 4);
+  return { mon, fri };
+}
+
+const TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+const TH_DAYS = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+export const thaiDate = (d: Date, withDay = false) =>
+  `${withDay ? `วัน${TH_DAYS[d.getDay()]}ที่ ` : ""}${d.getDate()} ${TH_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
+export function weekRangeText(week1DateStr: string | undefined, n: number) {
+  const { mon, fri } = weekDates(week1DateStr, n);
+  const a =
+    mon.getFullYear() !== fri.getFullYear() ? thaiDate(mon) : mon.getMonth() === fri.getMonth() ? String(mon.getDate()) : thaiDate(mon).replace(/ \d{4}$/, "");
+  return `${a} – ${thaiDate(fri)}`;
+}
+
 export function isRoomSub(rooms: RoomsConfig, grade: string, room: string) {
   const g = String(grade || "").replace(/\D/g, "");
   const r = String(room);
