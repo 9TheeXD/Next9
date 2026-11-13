@@ -26,6 +26,7 @@ import {
   type Selected,
 } from "./pinkbook";
 import { History } from "./History";
+import { WeekProgress } from "./WeekProgress";
 import { usePublicSettings } from "@/lib/useSettings";
 
 // Pink book inspection form (/forms/pinkbook/). Same requests and data as the old page:
@@ -61,6 +62,7 @@ export function PinkbookForm() {
   const [inspectors, setInspectors] = useState<string[]>([]);
   const [inspector, setInspector] = useState("");
   const [week, setWeek] = useState("");
+  const [sentCount, setSentCount] = useState(0);
   // The page's own idea of today and this week, fixed when the page loads: if the date shown is not
   // today, the page is stale and the inspector should reload it.
   const [today, setToday] = useState<{ date: Date; week: number; week1?: string } | null>(null);
@@ -426,6 +428,7 @@ export function PinkbookForm() {
       }
       if (ok) {
         setSuccess(true);
+        setSentCount((n) => n + 1);
         setRooms([]);
         clearTimeout(draft.current.timer);
         draft.current.lastSent = "";
@@ -718,6 +721,7 @@ export function PinkbookForm() {
               {sending ? <><i className="fas fa-spinner fa-spin" aria-hidden /> {sending}</> : <><i className="fas fa-check-to-slot" aria-hidden /> บันทึกการตรวจลงฐานข้อมูล</>}
             </button>
           </div>
+          <WeekProgress week={week} term={TERM} grades={GRADES} roomsConfig={roomsConfig} pending={rooms} refresh={sentCount} />
         </main>
       </div>
       {formOpen && <div className="pb-overlay" onClick={() => setFormOpen(false)} />}
