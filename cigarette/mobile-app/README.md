@@ -11,7 +11,8 @@ npm run build        # tsc --noEmit + expo export --platform web + service worke
 Layout:
 
 - `src/app/` — screens (expo-router). `(tabs)/sos.tsx` is the craving help hub, `rescue.tsx` the step-by-step craving flow.
-- `src/games/` — the games: plain TypeScript, Canvas 2D and Web Audio. Each game exports a `GameFactory`.
+- `src/games/` — the 10 games: plain TypeScript, Canvas 2D and Web Audio. Each game exports a `GameDefinition`
+  (register it in `src/games/index.ts`, add a cover in `assets/images/games/`). Shared art: `src/games/art/`.
   `src/components/GameHost.tsx` mounts a game in a `<canvas>` (web only).
 - `src/lib/quitPlan.ts` — the user's reasons, if-then plans and craving history (kept on the device).
 - `src/lib/api.ts` — API client. `/api` is rewritten to admin-web by `vercel.json`.

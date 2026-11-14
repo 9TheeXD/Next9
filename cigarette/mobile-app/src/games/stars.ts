@@ -31,6 +31,7 @@ export const starsGame: GameDefinition = {
   title: "เส้นทางดวงดาว",
   tagline: "จำลำดับดาวที่สว่าง แล้วแตะตาม",
   why: "การจำลำดับภาพต้องใช้ความจำส่วนเดียวกับที่ความอยากใช้สร้างภาพบุหรี่ในหัว พอสมองไม่ว่าง ความอยากก็จางลง",
+  category: "brain",
   minutes: "2–4 นาที",
   palette: ["#0e1440", "#c7a2ff"],
   create: (env) => new StarsGame(env),

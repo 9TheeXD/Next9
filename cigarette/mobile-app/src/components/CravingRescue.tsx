@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useGamification } from "@/contexts/GamificationContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { api } from "@/lib/api";
-import { findGame, type GameDefinition } from "@/games";
+import { GAMES, findGame, type GameDefinition } from "@/games";
 import GameHost from "@/components/GameHost";
 import MoveBreak from "@/components/MoveBreak";
 import SlipRecovery from "@/components/SlipRecovery";
@@ -179,33 +179,29 @@ export default function CravingRescue({ onClose }: { onClose: () => void }) {
                 icon="grid"
                 color="#8b5cf6"
                 title="เล่นเกม 3 นาที"
-                desc="เกมต่อบล็อกช่วยลดความอยากได้ในงานวิจัย"
+                desc="กดเพื่อเล่นเกมต่อบล็อก (มีงานวิจัยว่าช่วย) หรือเลือกเกมอื่นด้านล่าง"
                 onPress={() => {
                   markTool("game");
                   setGame(findGame("blocks") ?? null);
                   setStep("game");
                 }}
                 extra={
-                  <View style={styles.miniRow}>
-                    {["gems", "stars"].map((id) => {
-                      const g = findGame(id);
-                      if (!g) return null;
-                      return (
-                        <Pressable
-                          key={id}
-                          style={styles.mini}
-                          onPress={() => {
-                            markTool("game");
-                            setGame(g);
-                            setStep("game");
-                          }}
-                          accessibilityRole="button"
-                        >
-                          <Text style={styles.miniText}>{g.title}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.miniRow}>
+                    {GAMES.filter((g) => g.id !== "blocks" && g.category !== "calm").map((g) => (
+                      <Pressable
+                        key={g.id}
+                        style={styles.mini}
+                        onPress={() => {
+                          markTool("game");
+                          setGame(g);
+                          setStep("game");
+                        }}
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.miniText}>{g.title}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
                 }
               />
               <ToolCard
@@ -602,7 +598,7 @@ const styles = StyleSheet.create({
   toolIcon: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   toolTitle: { color: "#fff", fontSize: 16, fontWeight: "800" },
   toolDesc: { color: "rgba(255,255,255,0.65)", fontSize: 13, marginTop: 2, lineHeight: 18 },
-  miniRow: { flexDirection: "row", gap: 8, marginTop: 12, marginLeft: 60 },
+  miniRow: { flexDirection: "row", gap: 8, marginTop: 12, paddingLeft: 60, paddingRight: 8 },
   mini: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: "rgba(139,92,246,0.25)" },
   miniText: { color: "#ddd6fe", fontSize: 12, fontWeight: "700" },
   quickRow: { flexDirection: "row", gap: 8, marginTop: 4 },

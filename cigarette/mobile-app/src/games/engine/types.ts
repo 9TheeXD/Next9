@@ -44,6 +44,8 @@ export interface GameInstance {
   destroy?(): void;
 }
 
+export type GameCategory = "puzzle" | "brain" | "action" | "calm";
+
 export interface GameDefinition {
   id: string;
   title: string;
@@ -52,6 +54,8 @@ export interface GameDefinition {
   /** Why this game helps with a craving, in one or two sentences. */
   why: string;
   minutes: string;
+  /** Shelf in the game list. */
+  category: GameCategory;
   /** Two colours for the card art in the game list. */
   palette: [string, string];
   create(env: GameEnv): GameInstance;

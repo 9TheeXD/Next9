@@ -1,15 +1,30 @@
-import React from "react";
-import { View, Text, Pressable, StyleSheet, ImageBackground, ImageSourcePropType } from "react-native";
+import React, { useState } from "react";
+import { View, Text, Pressable, StyleSheet, ImageBackground, ImageSourcePropType, ScrollView } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import { GAMES, type GameDefinition } from "@/games";
+import type { GameCategory } from "@/games/engine/types";
 
 const COVERS: Record<string, ImageSourcePropType> = {
   blocks: require("../../assets/images/games/cover_blocks.jpg"),
   gems: require("../../assets/images/games/cover_gems.jpg"),
   stars: require("../../assets/images/games/cover_stars.jpg"),
   lantern: require("../../assets/images/games/cover_lantern.jpg"),
+  blast: require("../../assets/images/games/cover_blast.jpg"),
+  merge: require("../../assets/images/games/cover_merge.jpg"),
+  tiles: require("../../assets/images/games/cover_tiles.jpg"),
+  slice: require("../../assets/images/games/cover_slice.jpg"),
+  bubbles: require("../../assets/images/games/cover_bubbles.jpg"),
+  sudoku: require("../../assets/images/games/cover_sudoku.jpg"),
 };
+
+const SHELVES: { id: GameCategory | "all"; label: string; icon: string }[] = [
+  { id: "all", label: "ทั้งหมด", icon: "grid" },
+  { id: "puzzle", label: "ปริศนา", icon: "box" },
+  { id: "action", label: "แอ็กชัน", icon: "zap" },
+  { id: "brain", label: "ฝึกสมอง", icon: "cpu" },
+  { id: "calm", label: "ผ่อนคลาย", icon: "wind" },
+];
 
 interface Props {
   onPlay: (game: GameDefinition) => void;
@@ -20,12 +35,32 @@ interface Props {
 }
 
 export default function GameLibrary({ onPlay, showWhy = true, only }: Props) {
-  const games = only ? GAMES.filter((g) => only.includes(g.id)) : GAMES;
+  const [shelf, setShelf] = useState<GameCategory | "all">("all");
+  const pool = only ? GAMES.filter((g) => only.includes(g.id)) : GAMES;
+  const games = shelf === "all" ? pool : pool.filter((g) => g.category === shelf);
   const [featured, ...rest] = games;
-  if (!featured) return null;
   return (
     <View style={styles.wrap}>
-      <GameCard game={featured} onPlay={onPlay} showWhy={showWhy} big badge="แนะนำตอนอยากสูบ" />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelves}>
+        {SHELVES.filter((s) => s.id === "all" || pool.some((g) => g.category === s.id)).map((s) => {
+          const on = shelf === s.id;
+          return (
+            <Pressable
+              key={s.id}
+              onPress={() => setShelf(s.id)}
+              style={[styles.shelf, on && styles.shelfOn]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+            >
+              <Feather name={s.icon as any} size={13} color={on ? "#fff" : "#475569"} />
+              <Text style={[styles.shelfText, on && styles.shelfTextOn]}>{s.label}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      {featured ? (
+        <GameCard game={featured} onPlay={onPlay} showWhy={showWhy} big badge={shelf === "all" ? "แนะนำตอนอยากสูบ" : undefined} />
+      ) : null}
       <View style={styles.grid}>
         {rest.map((g) => (
           <GameCard key={g.id} game={g} onPlay={onPlay} showWhy={false} />
@@ -99,6 +134,11 @@ function GameCard({
 
 const styles = StyleSheet.create({
   wrap: { gap: 12 },
+  shelves: { gap: 8, paddingRight: 8 },
+  shelf: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "rgba(0,0,0,0.08)" },
+  shelfOn: { backgroundColor: "#4f46e5", borderColor: "#4f46e5" },
+  shelfText: { fontSize: 13, fontWeight: "700", color: "#475569" },
+  shelfTextOn: { color: "#ffffff" },
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 12 },
   card: {
     borderRadius: 20,

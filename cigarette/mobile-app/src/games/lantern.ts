@@ -37,6 +37,7 @@ export const lanternGame: GameDefinition = {
   title: "โคมลอยลมหายใจ",
   tagline: "หายใจช้าๆ ตามจังหวะ ปล่อยโคมขึ้นฟ้า",
   why: "การหายใจช้าๆ ราวนาทีละ 6 ครั้งช่วยลดความเครียดและความกระวนกระวาย ซึ่งเป็นตัวกระตุ้นความอยากที่พบบ่อย",
+  category: "calm",
   minutes: "2–3 นาที",
   palette: ["#141a4d", "#ffb45c"],
   create: (env) => new LanternGame(env),

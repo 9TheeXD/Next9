@@ -52,7 +52,7 @@ function rotateCells(cells: [number, number][], n: number, dir: 1 | -1): [number
   return cells.map(([x, y]) => (dir === 1 ? [n - 1 - y, x] : [y, n - 1 - x]) as [number, number]);
 }
 
-function drawBlock(ctx: CanvasRenderingContext2D, s: number, color: string) {
+export function drawBlock(ctx: CanvasRenderingContext2D, s: number, color: string) {
   const r = s * 0.2;
   const g = ctx.createLinearGradient(0, 0, s, s);
   g.addColorStop(0, shade(color, 0.35));
@@ -97,6 +97,7 @@ export const blocksGame: GameDefinition = {
   title: "ต่อบล็อกดวงดาว",
   tagline: "เรียงบล็อกให้เต็มแถว เพลินจนลืมความอยาก",
   why: "งานวิจัยพบว่าเล่นเกมต่อบล็อกแบบนี้ 3 นาทีช่วยให้ความอยากลดลง เพราะสมองต้องใช้จินตภาพไปกับการวางบล็อกแทนภาพของบุหรี่",
+  category: "puzzle",
   minutes: "3 นาที",
   palette: ["#2b1a6b", "#34d8ff"],
   create: (env) => new BlocksGame(env),

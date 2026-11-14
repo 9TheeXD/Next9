@@ -142,6 +142,7 @@ export const gemsGame: GameDefinition = {
   title: "สวนอัญมณี",
   tagline: "สลับอัญมณีให้เรียงกัน 3 เม็ด",
   why: "เกมเรียงสีต้องใช้สายตาและความคิดตลอดเวลา ภาพของบุหรี่ในหัวจึงเบาลง และ 3 นาทีก็พอให้คลื่นความอยากผ่านไป",
+  category: "puzzle",
   minutes: "3 นาที",
   palette: ["#3a1d6e", "#ff4d6d"],
   create: (env) => new GemsGame(env),
