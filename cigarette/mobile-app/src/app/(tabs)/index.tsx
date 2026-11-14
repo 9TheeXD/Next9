@@ -15,6 +15,7 @@ import type { APIResponse } from "@/types";
 import { useRouter, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import FamilyDashboard from "@/components/FamilyDashboard";
+import ExplorerHome from "@/components/ExplorerHome";
 import { LinearGradient } from "expo-linear-gradient";
 import MissionBubble from "@/components/MissionBubble";
 import DailyMissionModal from "@/components/DailyMissionModal";
@@ -120,6 +121,9 @@ export default function TrackerScreen() {
 
   if (user?.role === "FAMILY") {
     return <FamilyDashboard />;
+  }
+  if (user?.role === "EXPLORER") {
+    return <ExplorerHome />;
   }
 
   // Removed full screen loading to allow skeleton loading states

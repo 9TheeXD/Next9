@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
     const resolvedDuration = duration || body.smokingDuration || "6 เดือน - 2 ปี";
     const resolvedSmokingType = smokingType || "บุหรี่ธรรมดา";
 
-    if (!displayId || !ageGroup || !gender) {
+    // Every answer is optional in the app; anything skipped is stored as "ไม่ระบุ".
+    if (!displayId) {
       return NextResponse.json<APIResponse<never>>(
         { success: false, error: "Missing required fields" },
         { status: 400 }
@@ -31,8 +32,8 @@ export async function POST(request: NextRequest) {
       data: {
         displayId,
         userId: existingUser ? existingUser.id : null,
-        ageGroup,
-        gender,
+        ageGroup: ageGroup || "ไม่ระบุ",
+        gender: gender || "ไม่ระบุ",
         occupation,
         smokingType: resolvedSmokingType,
         frequency: resolvedFrequency,

@@ -2,7 +2,7 @@
 // Mobile App Type Definitions
 // ============================================
 
-export type UserRole = "SMOKER" | "FAMILY" | "ADMIN";
+export type UserRole = "SMOKER" | "FAMILY" | "ADMIN" | "EXPLORER";
 export type BadgeCategory = "STREAK" | "HEALTH" | "QUIZ" | "MILESTONE";
 
 export interface UserProfile {

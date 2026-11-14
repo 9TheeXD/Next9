@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import { Platform, DeviceEventEmitter } from "react-native";
-import type { APIResponse } from "@/types";
+import type { APIResponse, AuthResponse } from "@/types";
 
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000/api";
@@ -118,6 +118,10 @@ export const api = {
 
   putGameState: (data: unknown) =>
     request<{ updatedAt: string }>("/game-state", { method: "PUT", body: JSON.stringify(data) }),
+
+  // Switch a "try the app" account to quitter or supporter (after the matching survey was sent).
+  upgradeRole: (data: { role: "SMOKER" | "FAMILY"; targetDisplayId?: string }) =>
+    request<AuthResponse>("/profile/role", { method: "POST", body: JSON.stringify(data) }),
 
   getRank: (userId: string) => request<{ rank: number }>(`/profile/rank?userId=${userId}`),
 

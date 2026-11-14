@@ -19,6 +19,8 @@ interface AuthContextType {
     role: string;
     targetDisplayId?: string;
   }) => Promise<void>;
+  /** A "try the app" account becomes a quitter or a supporter; the ID and game coins stay. */
+  upgradeRole: (role: "SMOKER" | "FAMILY", targetDisplayId?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   isOfflineMode: boolean;
@@ -197,6 +199,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const upgradeRole = useCallback(async (role: "SMOKER" | "FAMILY", targetDisplayId?: string) => {
+    const response = (await api.upgradeRole({ role, targetDisplayId })) as APIResponse<AuthResponse>;
+    if (!response.success || !response.data) {
+      throw new Error(response.error || "Could not change role");
+    }
+    await setToken(response.data.token);
+    setUser(response.data.user);
+    AsyncStorage.setItem(OFFLINE_USER_KEY, JSON.stringify(response.data.user)).catch(console.error);
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       if (user) {
@@ -238,6 +250,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         login,
         register,
+        upgradeRole,
         logout,
         refreshProfile,
         isOfflineMode,

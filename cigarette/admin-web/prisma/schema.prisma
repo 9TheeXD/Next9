@@ -11,6 +11,7 @@ enum UserRole {
   SMOKER
   FAMILY
   ADMIN
+  EXPLORER // trying the app: no survey, no quit data
 }
 
 enum SmokingType {
