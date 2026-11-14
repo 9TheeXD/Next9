@@ -167,11 +167,11 @@ export default function ProfileScreen() {
             </Text>
           </View>
           <Text style={styles.userName}>{user?.displayId}</Text>
-          <Text style={styles.userEmail}>รหัสประจำตัวผู้สูบ</Text>
+          <Text style={styles.userEmail}>{user?.role === "SMOKER" ? "รหัสประจำตัวผู้สูบ" : "รหัสประจำตัว"}</Text>
           <Text style={styles.memberSince}>เป็นสมาชิกตั้งแต่ {memberSince}</Text>
         </View>
 
-        {user?.role !== "FAMILY" && (
+        {user?.role === "SMOKER" && (
           <>
             {/* Stats */}
             <View style={styles.statsCard}>
@@ -212,7 +212,7 @@ export default function ProfileScreen() {
           </>
         )}
 
-        {user?.role !== "FAMILY" && (
+        {user?.role === "SMOKER" && (
           <View style={styles.settingsCard}>
             <Text style={styles.settingsTitle}>การตั้งค่าการสูบบุหรี่</Text>
             <View style={styles.settingRow}>
@@ -249,7 +249,7 @@ export default function ProfileScreen() {
         )}
 
         {/* Emergency Contact setting */}
-        {user?.role !== "FAMILY" && (
+        {user?.role === "SMOKER" && (
           <View style={styles.settingsCard}>
             <Text style={styles.settingsTitle}>ติดต่อฉุกเฉิน</Text>
             <View style={styles.settingRow}>
@@ -273,7 +273,7 @@ export default function ProfileScreen() {
         )}
 
         {/* QR Code Section */}
-        <View style={styles.settingsCard}>
+        <View style={[styles.settingsCard, user?.role === "EXPLORER" && { display: "none" }]}>
           <Text style={styles.settingsTitle}>สแกนเพื่อติดตาม</Text>
           <Text style={{ fontSize: 13, color: '#64748b', marginBottom: 16, textAlign: 'center' }}>
             {user?.role === "FAMILY" 

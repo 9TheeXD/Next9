@@ -21,6 +21,9 @@ export default function TabsLayout() {
     return <Redirect href="/(auth)/login" />;
   }
 
+  const explorer = user?.role === "EXPLORER";
+  const family = user?.role === "FAMILY";
+
   return (
     <Tabs
       backBehavior="initialRoute"
@@ -46,7 +49,7 @@ export default function TabsLayout() {
         name="health"
         options={{
           title: "สุขภาพ",
-          href: (user?.role === "FAMILY" ? null : "/(tabs)/health") as any,
+          href: (family || explorer ? null : "/(tabs)/health") as any,
           tabBarIcon: ({ color }) => <Feather name="heart" size={20} color={color} />,
         }}
       />
@@ -54,7 +57,7 @@ export default function TabsLayout() {
         name="sos"
         options={{
           title: "SOS",
-          href: (user?.role === "FAMILY" ? null : "/(tabs)/sos") as any,
+          href: (family || explorer ? null : "/(tabs)/sos") as any,
           tabBarIcon: ({ color }) => <Feather name="alert-circle" size={20} color={color} />,
         }}
       />
@@ -64,7 +67,7 @@ export default function TabsLayout() {
         name="games"
         options={{
           title: "เกม",
-          href: (user?.role !== "FAMILY" ? null : "/(tabs)/games") as any,
+          href: (!family && !explorer ? null : "/(tabs)/games") as any,
           tabBarIcon: ({ color }) => <Feather name="play" size={20} color={color} />,
         }}
       />
@@ -72,7 +75,7 @@ export default function TabsLayout() {
         name="history"
         options={{
           title: "ประวัติ",
-          href: (user?.role !== "FAMILY" ? null : "/(tabs)/history") as any,
+          href: (!family ? null : "/(tabs)/history") as any,
           tabBarIcon: ({ color }) => <Feather name="clock" size={20} color={color} />,
         }}
       />
@@ -81,12 +84,12 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: user?.role === "FAMILY" ? "หน้าหลัก" : "ติดตาม",
+          title: family || explorer ? "หน้าหลัก" : "ติดตาม",
           tabBarLabel: () => null, // Hide text
           tabBarIcon: ({ focused }) => (
             <View style={styles.fabContainer}>
               <View style={[styles.fab, focused && styles.fabFocused]}>
-                <Feather name={user?.role === "FAMILY" ? "home" : "activity"} size={32} color="#ffffff" />
+                <Feather name={family || explorer ? "home" : "activity"} size={32} color="#ffffff" />
               </View>
             </View>
           ),
@@ -98,7 +101,7 @@ export default function TabsLayout() {
         name="knowledge"
         options={{
           title: "แผนเลิก",
-          href: (user?.role === "FAMILY" ? null : "/(tabs)/knowledge") as any,
+          href: (family || explorer ? null : "/(tabs)/knowledge") as any,
           tabBarIcon: ({ color }) => <Feather name="compass" size={20} color={color} />,
         }}
       />
@@ -108,7 +111,7 @@ export default function TabsLayout() {
         name="guidance"
         options={{
           title: "คำแนะนำ",
-          href: (user?.role !== "FAMILY" ? null : "/(tabs)/guidance") as any,
+          href: (!family ? null : "/(tabs)/guidance") as any,
           tabBarIcon: ({ color }) => <Feather name="info" size={20} color={color} />,
         }}
       />

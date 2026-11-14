@@ -21,7 +21,7 @@ export function useAdaptiveMission(recentLogs: any[]) {
 
   // Load and calculate today's mission
   const loadMission = useCallback(async () => {
-    if (!user || user.role === 'FAMILY') {
+    if (!user || (user.role === 'FAMILY' || user.role === 'EXPLORER')) {
       setMission(null);
       setLoading(false);
       return;

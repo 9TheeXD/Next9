@@ -203,7 +203,7 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
   // ───── Weekly Missions Loading ─────
   useEffect(() => {
     const loadWeekly = async () => {
-      if (!isAuthenticated || user?.role === "FAMILY") return;
+      if (!isAuthenticated || (user?.role === "FAMILY" || user?.role === "EXPLORER")) return;
       try {
         const todayStr = getBangkokDateString();
         // A simple way to track week is just the week number or start of week
@@ -301,7 +301,7 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
 
   const addXP = useCallback((amount: number, message: string) => {
     // **Disable XP for FAMILY role**
-    if (user?.role === "FAMILY") return;
+    if ((user?.role === "FAMILY" || user?.role === "EXPLORER")) return;
 
     setXp((prev) => {
       const newXp = prev + amount;
@@ -332,7 +332,7 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
   }, [isOnline, user?.role]);
 
   const claimWeeklyMission = useCallback((mission: WeeklyMissionType) => {
-    if (user?.role === "FAMILY") return;
+    if ((user?.role === "FAMILY" || user?.role === "EXPLORER")) return;
     setWeeklyMissions(prev => {
       if (prev[mission]) return prev;
       const next = { ...prev, [mission]: true };
@@ -368,7 +368,7 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
 
   const completeDailyMission = useCallback(async (mission: DailyMissionType) => {
     // **Disable missions for FAMILY role**
-    if (user?.role === "FAMILY") return;
+    if ((user?.role === "FAMILY" || user?.role === "EXPLORER")) return;
 
     setDailyMissions((prev) => {
       if (prev[mission]) return prev; // Already completed

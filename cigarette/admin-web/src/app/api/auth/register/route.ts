@@ -14,7 +14,7 @@ import type { APIResponse } from "@/types";
  * that sign-in (or POST /api/auth/device-key from an already signed-in app) binds them to the key.
  */
 
-const ALLOWED_ROLES = new Set(["SMOKER", "FAMILY"]);
+const ALLOWED_ROLES = new Set(["SMOKER", "FAMILY", "EXPLORER"]);
 
 function bad(error: string, status = 400) {
   return NextResponse.json<APIResponse<never>>({ success: false, error }, { status });
@@ -118,6 +118,8 @@ export async function POST(request: NextRequest) {
         if (!survey.userId) {
           await prisma.surveyResponse.update({ where: { id: survey.id }, data: { userId: existing.id } });
         }
+      } else if (existing.role === "EXPLORER") {
+        // Trying the app: nothing to check, no survey.
       } else if (existing.role === "FAMILY") {
         const followerSurvey = await prisma.followerSurveyResponse.findUnique({ where: { displayId } });
         if (!followerSurvey) return bad("SURVEY_REQUIRED");
@@ -152,7 +154,7 @@ export async function POST(request: NextRequest) {
       cigarettesPerDay = cigarettesPerDayFrom(survey.frequency || "");
       smokingType =
         survey.smokingType === "บุหรี่ไฟฟ้า" || survey.smokingType === "บุหรี่ไฟฟ้า(พอต)" ? "POD" : "CIGARETTE";
-    } else {
+    } else if (role === "FAMILY") {
       const followerSurvey = await prisma.followerSurveyResponse.findUnique({ where: { displayId } });
       if (!followerSurvey) return bad("SURVEY_REQUIRED");
     }
@@ -162,7 +164,7 @@ export async function POST(request: NextRequest) {
         displayId,
         displayName: "ผู้ใช้งาน " + displayId,
         smokingType,
-        role: role as "SMOKER" | "FAMILY",
+        role: role as "SMOKER" | "FAMILY" | "EXPLORER",
         cigarettesPerDay,
         pricePerPack: 100,
         cigarettesPerPack: 20,
@@ -171,7 +173,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (role === "SMOKER") {
+    if (role === "EXPLORER") {
+      // nothing to link
+    } else if (role === "SMOKER") {
       await prisma.surveyResponse.update({ where: { displayId }, data: { userId: created.id } });
     } else {
       await prisma.followerSurveyResponse.update({ where: { displayId }, data: { userId: created.id } });

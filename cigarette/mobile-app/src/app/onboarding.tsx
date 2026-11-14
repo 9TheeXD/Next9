@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Platform, ActivityIndicator, Linking } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useAlert } from "@/contexts/AlertContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -238,13 +238,32 @@ function DynamicField({
   );
 }
 
+// Nothing in the questionnaire is mandatory: every answer helps tune the app, none is needed to use it.
+function relaxConfig<T>(x: T): T {
+  if (Array.isArray(x)) return x.map(relaxConfig) as unknown as T;
+  if (x && typeof x === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(x as Record<string, unknown>)) {
+      out[k] = k === 'required' ? false : relaxConfig(v);
+    }
+    return out as T;
+  }
+  return x;
+}
+
 // =====================
 // Main Component
 // =====================
 export default function OnboardingWizard() {
   const router = useRouter();
   const { showAlert } = useAlert();
-  const { register } = useAuth();
+  const { register, user, upgradeRole } = useAuth();
+  const params = useLocalSearchParams<{ as?: string }>();
+  // Chosen on the welcome screen: the questions below fit that path and are all optional.
+  const intent: 'smoker' | 'follower' | null =
+    params.as === 'smoker' ? 'smoker' : params.as === 'follower' ? 'follower' : null;
+  // A "try the app" account that now picks a path keeps its ID and coins.
+  const upgrading = user?.role === 'EXPLORER';
 
   const [step, setStep] = useState(1);
   const [displayId, setDisplayId] = useState('');
@@ -326,7 +345,7 @@ export default function OnboardingWizard() {
         const res = await fetch(`${API_BASE_URL}/public/onboarding-config`);
         const json = await res.json();
         if (json.success && json.data) {
-          setConfig(json.data);
+          setConfig(relaxConfig(json.data));
         } else {
           showAlert({ message: "ไม่สามารถโหลดแบบฟอร์มได้", type: "error" });
         }
@@ -360,6 +379,10 @@ export default function OnboardingWizard() {
     init();
   }, []);
 
+  useEffect(() => {
+    if (upgrading && user?.displayId) setDisplayId(user.displayId);
+  }, [upgrading, user?.displayId]);
+
   const updateForm = useCallback((key: string, value: string) => {
     setForm(prev => ({ ...prev, [key]: value }));
     setErrors(prev => ({ ...prev, [key]: false }));
@@ -367,8 +390,12 @@ export default function OnboardingWizard() {
 
   // Derived state
   const isSmoker = config
-    ? config.smokingBehavior.roleQuestion.smokerValues.includes(form.isSmokerStr || '')
+    ? form.isSmokerStr
+      ? config.smokingBehavior.roleQuestion.smokerValues.includes(form.isSmokerStr)
+      : intent === 'smoker'
     : false;
+  // Steps this person will see, e.g. a supporter skips the smoking-habit page.
+  const stepList = isSmoker ? [1, 2, 3, 4, 5] : intent === 'follower' ? [1, 3, 5] : [1, 2, 3, 5];
   const isNonSmoker = form.isSmokerStr === 'ไม่เคยสูบเลย';
 
   // FTND Score calculation from config
@@ -446,11 +473,9 @@ export default function OnboardingWizard() {
         onValidationFail(newErrors);
         return;
       }
-      setStep(2);
+      setStep(intent === 'follower' ? 3 : 2);
       scrollToTop();
     } else if (step === 2) {
-      if (!form.isSmokerStr) newErrors.isSmokerStr = true;
-      
       if (form.isSmokerStr && isSmoker) {
         for (const field of config.smokingBehavior.smokerFields) {
           if (field.required && !form[field.key]) newErrors[field.key] = true;
@@ -475,37 +500,15 @@ export default function OnboardingWizard() {
         setStep(4);
         scrollToTop();
       } else {
-        if (!form.hasSmoker) newErrors.hasSmoker = true;
-
-        if (form.hasSmoker === 'มี') {
-          const conditionalFields = config.followerQuestions.fields.filter(
-            f => f.required && f.conditional === 'hasSmoker'
-          );
-          for (const field of conditionalFields) {
-            if (!form[field.key]) newErrors[field.key] = true;
-          }
-          if (Object.keys(newErrors).length > 0) {
-            onValidationFail(newErrors);
-            return;
-          }
+        if (form.hasSmoker === 'ไม่มี') {
+          void finishWithoutSurvey();
+        } else {
           setStep(5);
           scrollToTop();
-        } else if (form.hasSmoker === 'ไม่มี') {
-          if (Object.keys(newErrors).length > 0) {
-            onValidationFail(newErrors);
-            return;
-          }
-          showAlert({ message: "ขอบคุณที่ให้ข้อมูล", type: "success" });
-          if (Platform.OS === 'web') {
-            window.location.href = process.env.EXPO_PUBLIC_ADMIN_URL || 'https://ciga-next9.vercel.app/';
-          } else {
-            router.replace('/');
-          }
         }
       }
     } else if (step === 4) {
       if (isSmoker) {
-        if (!form.wantToQuit) newErrors.wantToQuit = true;
         if (Object.keys(newErrors).length > 0) {
           onValidationFail(newErrors);
           return;
@@ -517,9 +520,32 @@ export default function OnboardingWizard() {
   };
 
   const handleBack = () => {
-    if (step === 5 && !isSmoker) setStep(3);
-    else if (step > 1) setStep(step - 1);
+    if (step === 1) {
+      router.replace(user ? '/(tabs)' : ('/(auth)/login' as any));
+      return;
+    }
+    const i = stepList.indexOf(step);
+    setStep(i > 0 ? stepList[i - 1] : 1);
     scrollToTop();
+  };
+
+  // No smoker to help and nothing to ask: just start exploring the app.
+  const finishWithoutSurvey = async () => {
+    setLoading(true);
+    try {
+      if (!upgrading) await register({ displayId, role: 'EXPLORER' });
+      router.replace('/(tabs)');
+    } catch (e: any) {
+      showAlert({ message: e.message || 'เริ่มใช้งานไม่สำเร็จ ลองใหม่อีกครั้ง', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // "Skip the rest": send what has been answered so far (or just start exploring).
+  const skipRest = () => {
+    if (!intent && !form.isSmokerStr) void finishWithoutSurvey();
+    else void handleSubmit();
   };
 
   // Submit
@@ -533,8 +559,8 @@ export default function OnboardingWizard() {
 
         const payload = {
           displayId,
-          ageGroup: form.ageGroup,
-          gender: form.gender,
+          ageGroup: form.ageGroup || 'ไม่ระบุ',
+          gender: form.gender || 'ไม่ระบุ',
           smokingType: form.smokingType,
           frequency: form.ftnd4 || form.amountPerDay || "10 มวนหรือน้อยกว่า",
           cravingTime: form.cravingTime,
@@ -559,7 +585,8 @@ export default function OnboardingWizard() {
 
         if (res.ok) {
           try {
-            await register({ displayId, role: 'SMOKER' });
+            if (upgrading) await upgradeRole('SMOKER');
+            else await register({ displayId, role: 'SMOKER' });
             router.replace('/(tabs)');
           } catch (e: any) {
             showAlert({ 
@@ -593,11 +620,14 @@ export default function OnboardingWizard() {
 
         if (res.ok) {
           try {
-            await register({ 
-              displayId, 
-              role: 'FAMILY',
-              ...(form.smokerCode ? { targetDisplayId: form.smokerCode } : {})
-            });
+            if (upgrading) await upgradeRole('FAMILY', form.smokerCode || undefined);
+            else {
+              await register({
+                displayId,
+                role: 'FAMILY',
+                ...(form.smokerCode ? { targetDisplayId: form.smokerCode } : {})
+              });
+            }
             router.replace('/(tabs)');
           } catch (e: any) {
             showAlert({ 
@@ -626,7 +656,7 @@ export default function OnboardingWizard() {
   // Progress bar
   const renderProgressBar = () => (
     <View style={styles.progressContainer}>
-      <View style={[styles.progressBar, { width: `${(step / 5) * 100}%` }]} />
+      <View style={[styles.progressBar, { width: `${(Math.max(1, stepList.indexOf(step) + 1) / stepList.length) * 100}%` }]} />
     </View>
   );
 
@@ -639,6 +669,12 @@ export default function OnboardingWizard() {
     return (
       <View style={styles.page}>
         <Text style={styles.pageTitle}>{config.basicInfo.title}</Text>
+        <View style={styles.privacyCard}>
+          <Feather name="shield" size={18} color="#0f766e" style={{ marginTop: 2 }} />
+          <Text style={styles.privacyCardText}>
+            ตอบเท่าที่สบายใจ ข้อไหนไม่อยากตอบก็ข้ามได้ ไม่ต้องบอกชื่อจริง เบอร์โทร หรือที่อยู่ คำตอบใช้ปรับแอปให้เหมาะกับคุณ และดูเป็นภาพรวมโดยไม่ระบุตัวตน
+          </Text>
+        </View>
         {config.basicInfo.fields.map(field => (
           <DynamicField
             key={field.key}
@@ -658,12 +694,14 @@ export default function OnboardingWizard() {
     return (
       <View style={styles.page}>
         <Text style={styles.pageTitle}>{config.smokingBehavior.title}</Text>
-        <DynamicField
-          field={rq}
-          value={form[rq.key] || ''}
-          onChange={(v: string) => updateForm(rq.key, v)}
-          hasError={errors[rq.key]}
-        />
+        {!intent && (
+          <DynamicField
+            field={rq}
+            value={form[rq.key] || ''}
+            onChange={(v: string) => updateForm(rq.key, v)}
+            hasError={errors[rq.key]}
+          />
+        )}
         {isSmoker && config.smokingBehavior.smokerFields.map(field => (
           <DynamicField
             key={field.key}
@@ -1004,12 +1042,12 @@ export default function OnboardingWizard() {
   return (
     <View style={styles.container}>
       <View style={styles.headerArea}>
-        {step > 1 && (
-          <Pressable style={styles.backButton} onPress={handleBack}>
-            <Feather name="arrow-left" size={24} color="#0f172a" />
-          </Pressable>
-        )}
-        <Text style={styles.headerTitle}>ขั้นตอนที่ {step}/5</Text>
+        <Pressable style={styles.backButton} onPress={handleBack} accessibilityLabel="ย้อนกลับ">
+          <Feather name="arrow-left" size={24} color="#0f172a" />
+        </Pressable>
+        <Text style={styles.headerTitle}>
+          ขั้นตอนที่ {Math.max(1, stepList.indexOf(step) + 1)}/{stepList.length}
+        </Text>
       </View>
 
       {renderProgressBar()}
@@ -1038,9 +1076,16 @@ export default function OnboardingWizard() {
       <View style={styles.stickyFooter}>
         <View style={styles.stickyFooterInner}>
           {step < 5 ? (
-            <Pressable style={styles.primaryButton} onPress={handleNext}>
-              <Text style={styles.primaryButtonText}>ถัดไป</Text>
-            </Pressable>
+            <View style={{ width: '100%', gap: 6 }}>
+              <Pressable style={styles.primaryButton} onPress={handleNext}>
+                <Text style={styles.primaryButtonText}>ถัดไป</Text>
+              </Pressable>
+              <Pressable style={styles.skipButton} onPress={skipRest} disabled={loading}>
+                <Text style={styles.skipButtonText}>
+                  {intent || form.isSmokerStr ? 'ข้ามคำถามที่เหลือ แล้วเริ่มใช้เลย' : 'ข้ามทั้งหมด ขอลองใช้งานก่อน'}
+                </Text>
+              </Pressable>
+            </View>
           ) : isSmoker ? (
             <View style={{ width: '100%', gap: 8 }}>
               <Pressable style={styles.primaryButton} onPress={handleSubmit} disabled={loading}>
@@ -1107,6 +1152,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  skipButton: { paddingVertical: 10, alignItems: 'center' },
+  skipButtonText: { color: '#0369a1', fontSize: 14, fontWeight: '600' },
+  privacyCard: { flexDirection: 'row', gap: 10, backgroundColor: 'rgba(15,118,110,0.08)', borderRadius: 12, padding: 14, marginBottom: 16 },
+  privacyCardText: { flex: 1, color: '#115e59', fontSize: 13, lineHeight: 20 },
   primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   secondaryButton: { 
     flexDirection: 'row', 

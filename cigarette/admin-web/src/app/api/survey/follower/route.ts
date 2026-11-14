@@ -14,7 +14,8 @@ export async function POST(request: NextRequest) {
       reward,
     } = body;
 
-    if (!displayId || !relation || !smokingFrequency || !concern || !supportMethod) {
+    // Every answer is optional in the app; anything skipped is stored as "ไม่ระบุ".
+    if (!displayId) {
       return NextResponse.json<APIResponse<never>>(
         { success: false, error: "Missing required fields" },
         { status: 400 }
@@ -27,10 +28,10 @@ export async function POST(request: NextRequest) {
       data: {
         displayId,
         userId: existingUser ? existingUser.id : null,
-        relation,
-        smokingFrequency,
-        concern,
-        supportMethod,
+        relation: relation || "ไม่ระบุ",
+        smokingFrequency: smokingFrequency || "ไม่ระบุ",
+        concern: concern || "ไม่ระบุ",
+        supportMethod: supportMethod || "ไม่ระบุ",
         reward,
       },
     });
