@@ -56,6 +56,7 @@ model User {
   isDeleted         Boolean     @default(false)
   surveyResponse    SurveyResponse?
   followerSurvey    FollowerSurveyResponse?
+  gameSave          GameSave?
 }
 
 model UserActionLog {
@@ -202,4 +203,13 @@ model FollowerSurveyResponse {
   reward           String?
   createdAt        DateTime @default(now())
   isDeleted        Boolean  @default(false)
+}
+
+// Per-user game progress (coins, shop items, upgrades, best scores, unlocked levels).
+// One JSON document per user; the app merges on the device and uploads the result.
+model GameSave {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data      Json
+  updatedAt DateTime @updatedAt
 }

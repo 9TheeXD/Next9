@@ -109,3 +109,7 @@ cd cigarette/mobile-app && npm run build    # tsc --noEmit + expo export + servi
 - Docker (`ciga-next9`, `nextbreath-db`), `docker-compose`, `sudo`, PM2, nginx/Coolify
 - โฟลเดอร์ `admin-web/persistent-sounds/` เป็นสำเนาไฟล์เสียงสมัย VPS (ตอนนี้เสียงอยู่ใน R2)
   อัปโหลดเข้า R2 ด้วย `node admin-web/scripts/upload-sounds.mjs persistent-sounds`
+
+## ข้อมูลเกมของผู้ใช้
+เหรียญ ของในร้าน อัปเกรด คะแนนสูงสุด และด่านที่ปลดล็อก เก็บบนเครื่องและซิงก์ขึ้นตาราง `GameSave` ตามบัญชี (`/api/game-state`)
+ตารางนี้สร้างด้วย `admin-web/prisma/migrations/20261114080000_game_save/migration.sql` (รันซ้ำได้) — ถ้าตั้ง DB ใหม่ให้รันไฟล์นี้ด้วย

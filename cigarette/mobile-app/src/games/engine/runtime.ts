@@ -2,6 +2,7 @@
 // keyboard input, pausing when the page is hidden, and sound unlocking on the first tap.
 
 import { Sfx } from "./audio";
+import { syncBus } from "./syncbus";
 import type { GameDefinition, GameEvent, GameInstance, PointerInfo } from "./types";
 
 export interface GameHandle {
@@ -19,7 +20,7 @@ export interface MountOptions {
   muted?: boolean;
 }
 
-const STORE_PREFIX = "nb_game_";
+export const STORE_PREFIX = "nb_game_";
 
 export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOptions = {}): GameHandle {
   const canvas = document.createElement("canvas");
@@ -60,6 +61,7 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
       set: (k, v) => {
         try {
           localStorage.setItem(STORE_PREFIX + def.id + "_" + k, v);
+          syncBus.changed();
         } catch {
           /* storage full or blocked */
         }
