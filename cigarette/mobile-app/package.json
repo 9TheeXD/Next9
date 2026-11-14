@@ -1,12 +1,11 @@
 {
   "name": "mobile-app",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "scripts": {
     "start": "expo start",
     "build": "npx tsc --noEmit && npx expo export --platform web && node scripts/generate-sw.js",
     "export": "npx tsc --noEmit && npx expo export --platform web && node scripts/generate-sw.js",
-    "deploy": "npx tsc --noEmit && sudo npx expo export --platform web && sudo node scripts/generate-sw.js",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",

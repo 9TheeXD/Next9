@@ -1,17 +1,13 @@
 {
   "name": "admin-web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "deploy": "prisma generate && sudo docker build -t ciga-next9-img . && sudo docker rm -f ciga-next9 && sudo docker run -d --name ciga-next9 --restart unless-stopped --network host --env-file .env.local -v /home/cmp/sdh-council/cigarette/admin-web/persistent-sounds:/app/public/sounds ciga-next9-img",
-    "restart": "sudo docker restart ciga-next9",
-    "db:up": "sudo docker-compose up -d",
-    "db:down": "sudo docker-compose down",
-    "db:restart": "sudo docker restart nextbreath-db",
-    "start": "next start -p 7011",
-    "lint": "eslint"
+    "start": "next start",
+    "lint": "eslint",
+    "db:push": "prisma db push"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1053.0",

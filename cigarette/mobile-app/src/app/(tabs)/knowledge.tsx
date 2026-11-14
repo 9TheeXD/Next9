@@ -6,24 +6,28 @@ import QuizCard from "@/components/QuizCard";
 import { QUIZ_BANK } from "@/utils/quizBank";
 import { ACTION_STEPS, ARTICLES, RECOVERY_TIMELINE } from "@/utils/planContent";
 import { useAppSounds } from "@/hooks/useAppSounds";
+import QuitToolkit from "@/components/QuitToolkit";
+
+type PlanTab = "MINE" | "PLAN" | "QUIZ";
+const PLAN_TABS: PlanTab[] = ["MINE", "PLAN", "QUIZ"];
 
 export default function PlanDashboardScreen() {
   const params = useLocalSearchParams<{ tab?: string }>();
-  const [activeTab, setActiveTab] = useState<"PLAN" | "QUIZ">(
-    (params.tab?.toUpperCase() as "PLAN" | "QUIZ") || "PLAN"
+  const [activeTab, setActiveTab] = useState<PlanTab>(
+    PLAN_TABS.includes(params.tab?.toUpperCase() as PlanTab) ? (params.tab!.toUpperCase() as PlanTab) : "MINE"
   );
   const router = useRouter();
 
   useEffect(() => {
     if (params.tab) {
       const t = params.tab.toUpperCase();
-      if (t === "PLAN" || t === "QUIZ") {
-        setActiveTab(t);
+      if (PLAN_TABS.includes(t as PlanTab)) {
+        setActiveTab(t as PlanTab);
       }
     }
   }, [params.tab]);
 
-  const changeTab = (v: "PLAN" | "QUIZ") => {
+  const changeTab = (v: PlanTab) => {
     setActiveTab(v);
     router.setParams({ tab: v });
   };
@@ -32,7 +36,7 @@ export default function PlanDashboardScreen() {
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('reset_tab_knowledge', () => {
-      if (activeTab !== "PLAN") changeTab("PLAN");
+      if (activeTab !== "MINE") changeTab("MINE");
     });
     return () => sub.remove();
   }, [activeTab]);
@@ -40,8 +44,8 @@ export default function PlanDashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        if (activeTab !== "PLAN") {
-          changeTab("PLAN");
+        if (activeTab !== "MINE") {
+          changeTab("MINE");
           return true;
         }
         return false;
@@ -158,23 +162,31 @@ export default function PlanDashboardScreen() {
         
         {/* Tab Switcher */}
         <View style={styles.tabContainer}>
+          <Pressable
+            style={[styles.tab, activeTab === "MINE" && styles.activeTab]}
+            onPress={() => { playClick(); changeTab("MINE"); }}
+          >
+            <Text style={[styles.tabText, activeTab === "MINE" && styles.activeTabText]}>แผนของฉัน</Text>
+          </Pressable>
           <Pressable 
             style={[styles.tab, activeTab === "PLAN" && styles.activeTab]} 
             onPress={() => { playClick(); changeTab("PLAN"); }}
           >
-            <Text style={[styles.tabText, activeTab === "PLAN" && styles.activeTabText]}>คู่มือเลิกบุหรี่</Text>
+            <Text style={[styles.tabText, activeTab === "PLAN" && styles.activeTabText]}>คู่มือ</Text>
           </Pressable>
           <Pressable 
             style={[styles.tab, activeTab === "QUIZ" && styles.activeTab]} 
             onPress={() => { playClick(); changeTab("QUIZ"); }}
           >
-            <Text style={[styles.tabText, activeTab === "QUIZ" && styles.activeTabText]}>แบบทดสอบ (Quiz)</Text>
+            <Text style={[styles.tabText, activeTab === "QUIZ" && styles.activeTabText]}>แบบทดสอบ</Text>
           </Pressable>
         </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        {activeTab === "PLAN" ? (
+        {activeTab === "MINE" ? (
+          <QuitToolkit onStartRescue={() => router.push("/sos?view=RESCUE" as any)} />
+        ) : activeTab === "PLAN" ? (
           <>
             {renderActionSteps()}
             {renderArticleList("ความจริงที่คนไม่พูดถึง", "รู้ทันกลลวงของสมองและอันตรายที่มองไม่เห็น", truthArticles)}
