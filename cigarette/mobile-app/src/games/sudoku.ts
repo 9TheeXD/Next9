@@ -6,6 +6,7 @@ import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engin
 import { Particles, Floaters, makeSprite, roundRectPath, clamp, FONT_DISPLAY, FONT_BODY, rng } from "./engine/fx";
 import { Button, drawCard } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
+import { wallet } from "./engine/economy";
 
 const DIFFICULTY = [
   { label: "ง่าย", keep: 42 },
@@ -81,6 +82,7 @@ export const sudokuGame: GameDefinition = {
 type State = "intro" | "play" | "win";
 
 class SudokuGame implements GameInstance {
+  private earned = 0;
   private w = 0;
   private h = 0;
   private cell = 36;
@@ -94,6 +96,7 @@ class SudokuGame implements GameInstance {
   private sel = -1;
   private notesMode = false;
   private hints = 3;
+  private hintsUsed = 0;
   private mistakes = 0;
   private elapsed = 0;
   private diff = 0;
@@ -122,6 +125,7 @@ class SudokuGame implements GameInstance {
     this.notes = Array.from({ length: 81 }, () => new Set());
     this.sel = puzzle.indexOf(0);
     this.hints = 3;
+    this.hintsUsed = 0;
     this.mistakes = 0;
     this.elapsed = 0;
     this.notesMode = false;
@@ -193,13 +197,22 @@ class SudokuGame implements GameInstance {
   }
 
   private hint() {
-    if (this.hints <= 0 || this.state !== "play") return;
+    if (this.state !== "play") return;
     let i = this.sel;
     if (i < 0 || this.puzzle[i] || this.values[i] === this.solution[i]) {
       i = this.values.findIndex((v, k) => v !== this.solution[k]);
       if (i < 0) return;
     }
+    if (this.hints <= 0) {
+      // Out of free hints: use a hint from the shop stock, or buy one with coins
+      if (!wallet.useOrBuy("boost_hint")) {
+        this.floaters.add("เหรียญไม่พอซื้อคำใบ้", this.w / 2, this.h * 0.5, "#f87171", 18, 1.2);
+        return;
+      }
+      this.hints++;
+    }
     this.hints--;
+    this.hintsUsed++;
     this.sel = i;
     const was = this.notesMode;
     this.notesMode = false;
@@ -218,7 +231,7 @@ class SudokuGame implements GameInstance {
     const wins = (parseInt(this.env.store.get(key) || "0", 10) || 0) + 1;
     this.env.store.set(key, String(wins));
     this.env.emit({
-      type: "end",
+      type: "end", coins: (this.earned = [30, 50, 80][this.diff]),
       score: wins,
       best: wins,
       summary: `ซูโดกุ${DIFFICULTY[this.diff].label} สำเร็จใน ${mins} นาที`,
@@ -354,7 +367,7 @@ class SudokuGame implements GameInstance {
     ctx.fillText(`ซูโดกุ · ${DIFFICULTY[this.diff].label}`, this.gx, 16);
     ctx.font = `500 13px ${FONT_BODY}`;
     ctx.fillStyle = "#64748b";
-    ctx.fillText(`ผิด ${this.mistakes} ครั้ง · คำใบ้ ${this.hints}`, this.gx, 40);
+    ctx.fillText(`ผิด ${this.mistakes} ครั้ง · คำใบ้ ${this.hints}${wallet.boosters("boost_hint") ? ` (+${wallet.boosters("boost_hint")})` : ""}`, this.gx, 40);
     ctx.textAlign = "right";
     const s = Math.floor(this.elapsed);
     ctx.font = `700 20px ${FONT_DISPLAY}`;
@@ -450,7 +463,7 @@ class SudokuGame implements GameInstance {
         ctx.fillStyle = "#94a3b8";
         ctx.fillText(left ? String(left) : "✓", x + L.numW / 2, L.top + L.numH * 0.82);
       }
-      const tools = ["ลบ", this.notesMode ? "จดโน้ต: เปิด" : "จดโน้ต", `คำใบ้ (${this.hints})`];
+      const tools = ["ลบ", this.notesMode ? "จดโน้ต: เปิด" : "จดโน้ต", this.hints ? `คำใบ้ (${this.hints})` : wallet.boosters("boost_hint") ? `คำใบ้ (คลัง ${wallet.boosters("boost_hint")})` : "คำใบ้ (15 เหรียญ)"];
       tools.forEach((t, k) => {
         const x = L.x0 + k * (L.toolW + 8);
         const on = k === 1 && this.notesMode;
@@ -459,7 +472,7 @@ class SudokuGame implements GameInstance {
         ctx.fill();
         ctx.strokeStyle = "rgba(30,41,59,0.15)";
         ctx.stroke();
-        ctx.fillStyle = on ? "#ffffff" : k === 2 && !this.hints ? "#cbd5e1" : ink;
+        ctx.fillStyle = on ? "#ffffff" : k === 2 && !this.hints ? "#b45309" : ink;
         ctx.font = `600 15px ${FONT_DISPLAY}`;
         ctx.fillText(t, x + L.toolW / 2, L.toolY + L.toolH / 2 + 1);
       });
@@ -508,10 +521,10 @@ class SudokuGame implements GameInstance {
         subtitle: `ซูโดกุระดับ${DIFFICULTY[this.diff].label}`,
         bigValue: `${Math.floor(s2 / 60)}:${String(s2 % 60).padStart(2, "0")}`,
         bigLabel: "เวลาที่ใช้",
-        chips: [`ผิด ${this.mistakes} ครั้ง`, `ใช้คำใบ้ ${3 - this.hints}`],
+        chips: [`ผิด ${this.mistakes} ครั้ง`, `ใช้คำใบ้ ${this.hintsUsed}`],
         accent: "#2563eb",
         buttons: [this.againBtn],
-        appear: this.stateT * 2.5,
+        appear: this.stateT * 2.5, coins: this.earned,
       });
     }
   }

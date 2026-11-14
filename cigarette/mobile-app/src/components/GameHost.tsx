@@ -4,6 +4,7 @@ import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { GameDefinition, GameEvent } from "@/games";
 import { mountGame, type GameHandle } from "@/games/engine/runtime";
+import { wallet } from "@/games/engine/economy";
 import { useGamification } from "@/contexts/GamificationContext";
 import { api } from "@/lib/api";
 
@@ -29,6 +30,13 @@ export default function GameHost({ game, onExit, onEvent, exitLabel }: Props) {
   const rewardsRef = useRef(0);
   const [muted, setMuted] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [coins, setCoins] = useState(0);
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    setCoins(wallet.coins());
+    return wallet.subscribe(setCoins);
+  }, []);
   const { addXP, completeDailyMission } = useGamification();
   const onEventRef = useRef(onEvent);
 
@@ -50,6 +58,7 @@ export default function GameHost({ game, onExit, onEvent, exitLabel }: Props) {
         api.postActionLog({ action: "GAME_PLAYED", details: `เล่นเกม${game.title}`, metadata: { gameId: game.id } }).catch(() => {});
       }
       if (e.type === "end") {
+        wallet.add(e.coins ?? 10);
         // XP for the first three finished rounds per visit, so the game is rewarding but not farmable.
         if (rewardsRef.current < 3) {
           rewardsRef.current++;
@@ -129,6 +138,10 @@ export default function GameHost({ game, onExit, onEvent, exitLabel }: Props) {
           {game.title}
         </Text>
         <View style={styles.barRight}>
+          <View style={styles.coinPill} accessibilityLabel={`เหรียญ ${coins}`}>
+            <View style={styles.coinDot} />
+            <Text style={styles.coinText}>{coins.toLocaleString()}</Text>
+          </View>
           <Pressable onPress={toggleMute} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={muted ? "เปิดเสียง" : "ปิดเสียง"}>
             <Feather name={muted ? "volume-x" : "volume-2"} size={19} color="#fff" />
           </Pressable>
@@ -184,6 +197,9 @@ const styles = StyleSheet.create({
   barBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
   title: { flex: 1, textAlign: "center", color: "#fff", fontSize: 16, fontWeight: "700" },
   barRight: { flexDirection: "row", minWidth: 64, justifyContent: "flex-end" },
+  coinPill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(0,0,0,0.3)", paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, marginRight: 4 },
+  coinDot: { width: 13, height: 13, borderRadius: 7, backgroundColor: "#ffc93c", borderWidth: 2, borderColor: "#c98a0b" },
+  coinText: { color: "#ffe08a", fontWeight: "800", fontSize: 13 },
   iconBtn: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
   stage: { flex: 1, position: "relative", overflow: "hidden" },
   native: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 12 },

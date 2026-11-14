@@ -153,6 +153,38 @@ export interface CardOptions {
   appear: number;
   /** Optional icon drawn above the title, centred on (0,0), about 64px. */
   icon?: (ctx: CanvasRenderingContext2D) => void;
+  /** Coins earned this round, shown as a gold badge. */
+  coins?: number;
+}
+
+/** A gold coin with a leaf mark, centred on (x, y). */
+export function drawCoin(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  ctx.save();
+  ctx.translate(x, y);
+  const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.1, 0, 0, r);
+  g.addColorStop(0, "#fff3b0");
+  g.addColorStop(0.5, "#ffc93c");
+  g.addColorStop(1, "#c98a0b");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#a86b00";
+  ctx.lineWidth = Math.max(1, r * 0.12);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.68, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(168,107,0,0.5)";
+  ctx.lineWidth = Math.max(0.8, r * 0.08);
+  ctx.stroke();
+  // Leaf
+  ctx.fillStyle = "#a86b00";
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.32, r * 0.3);
+  ctx.quadraticCurveTo(-r * 0.3, -r * 0.4, r * 0.35, -r * 0.35);
+  ctx.quadraticCurveTo(r * 0.3, r * 0.3, -r * 0.32, r * 0.3);
+  ctx.fill();
+  ctx.restore();
 }
 
 /** Centred card with title, text and buttons. Lays the buttons out and returns the card rect. */
@@ -169,8 +201,9 @@ export function drawCard(ctx: CanvasRenderingContext2D, w: number, h: number, o:
   const iconH = o.icon ? 78 : 0;
   const bigH = o.bigValue ? 86 : 0;
   const chipsH = o.chips && o.chips.length ? 40 : 0;
+  const coinsH = o.coins ? 40 : 0;
   const btnH = o.buttons.length * 62;
-  const ch = pad + iconH + 40 + (o.subtitle ? 26 : 0) + bodyLines.length * 23 + (bodyLines.length ? 10 : 0) + bigH + chipsH + btnH + pad - 10;
+  const ch = pad + iconH + 40 + (o.subtitle ? 26 : 0) + bodyLines.length * 23 + (bodyLines.length ? 10 : 0) + bigH + chipsH + coinsH + btnH + pad - 10;
   const cx = w / 2;
   const cy = h / 2 + (1 - a) * 40;
   const x = cx - cw / 2;
@@ -247,6 +280,23 @@ export function drawCard(ctx: CanvasRenderingContext2D, w: number, h: number, o:
       xx += widths[i] + 8;
     });
     yy += chipsH;
+  }
+  if (o.coins) {
+    const label = `+${o.coins.toLocaleString()} เหรียญ`;
+    ctx.font = `800 18px ${FONT_DISPLAY}`;
+    const tw = ctx.measureText(label).width;
+    const bw = tw + 52;
+    ctx.fillStyle = "rgba(255,201,60,0.18)";
+    roundRectPath(ctx, cx - bw / 2, yy, bw, 32, 16);
+    ctx.fill();
+    drawCoin(ctx, cx - bw / 2 + 18, yy + 16, 11);
+    ctx.fillStyle = "#ffd76a";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, cx - bw / 2 + 36, yy + 17);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    yy += coinsH;
   }
   o.buttons.forEach((b, i) => {
     b.place(cx, yy + i * 62, cw - pad * 2, 50);

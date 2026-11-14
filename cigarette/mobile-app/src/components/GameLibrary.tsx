@@ -1,9 +1,11 @@
-import React, { useState } from "react";
-import { View, Text, Pressable, StyleSheet, ImageBackground, ImageSourcePropType, ScrollView } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, Pressable, StyleSheet, ImageBackground, ImageSourcePropType, ScrollView, Platform } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import { GAMES, type GameDefinition } from "@/games";
 import type { GameCategory } from "@/games/engine/types";
+import { shopScreen } from "@/games/shop";
+import { wallet } from "@/games/engine/economy";
 
 const COVERS: Record<string, ImageSourcePropType> = {
   blocks: require("../../assets/images/games/cover_blocks.jpg"),
@@ -16,12 +18,26 @@ const COVERS: Record<string, ImageSourcePropType> = {
   slice: require("../../assets/images/games/cover_slice.jpg"),
   bubbles: require("../../assets/images/games/cover_bubbles.jpg"),
   sudoku: require("../../assets/images/games/cover_sudoku.jpg"),
+  shooter: require("../../assets/images/games/cover_shooter.jpg"),
+  pulse: require("../../assets/images/games/cover_pulse.jpg"),
+  snake: require("../../assets/images/games/cover_snake.jpg"),
+  defense: require("../../assets/images/games/cover_defense.jpg"),
+  party: require("../../assets/images/games/cover_party.jpg"),
+  hockey: require("../../assets/images/games/cover_hockey.jpg"),
+  dots: require("../../assets/images/games/cover_dots.jpg"),
+  chess: require("../../assets/images/games/cover_chess.jpg"),
+  xo: require("../../assets/images/games/cover_xo.jpg"),
+  connect4: require("../../assets/images/games/cover_connect4.jpg"),
+  checkers: require("../../assets/images/games/cover_checkers.jpg"),
+  othello: require("../../assets/images/games/cover_othello.jpg"),
 };
 
 const SHELVES: { id: GameCategory | "all"; label: string; icon: string }[] = [
   { id: "all", label: "ทั้งหมด", icon: "grid" },
   { id: "puzzle", label: "ปริศนา", icon: "box" },
   { id: "action", label: "แอ็กชัน", icon: "zap" },
+  { id: "duel", label: "สู้บอท/เพื่อน", icon: "users" },
+  { id: "party", label: "ปาร์ตี้หลายคน", icon: "smile" },
   { id: "brain", label: "ฝึกสมอง", icon: "cpu" },
   { id: "calm", label: "ผ่อนคลาย", icon: "wind" },
 ];
@@ -39,8 +55,32 @@ export default function GameLibrary({ onPlay, showWhy = true, only }: Props) {
   const pool = only ? GAMES.filter((g) => only.includes(g.id)) : GAMES;
   const games = shelf === "all" ? pool : pool.filter((g) => g.category === shelf);
   const [featured, ...rest] = games;
+  const [coins, setCoins] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    setCoins(wallet.coins());
+    return wallet.subscribe(setCoins);
+  }, []);
   return (
     <View style={styles.wrap}>
+      {Platform.OS === "web" ? (
+        <Pressable
+          onPress={() => onPlay(shopScreen)}
+          style={({ pressed }) => [styles.shop, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel={`ร้านค้าเหรียญ มี ${coins} เหรียญ`}
+        >
+          <LinearGradient colors={["#312e81", "#7c3aed"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+          <View style={styles.shopCoin}>
+            <Feather name="star" size={18} color="#92400e" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.shopTitle}>ร้านค้า · {coins.toLocaleString()} เหรียญ</Text>
+            <Text style={styles.shopText}>สกิน ตัวช่วย อัปเกรดตัวละครไม่จำกัด · ได้เหรียญจากการเล่นและการไม่สูบ</Text>
+          </View>
+          <Feather name="shopping-bag" size={22} color="#fde68a" />
+        </Pressable>
+      ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelves}>
         {SHELVES.filter((s) => s.id === "all" || pool.some((g) => g.category === s.id)).map((s) => {
           const on = shelf === s.id;
@@ -134,6 +174,10 @@ function GameCard({
 
 const styles = StyleSheet.create({
   wrap: { gap: 12 },
+  shop: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, overflow: "hidden" },
+  shopCoin: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#fbbf24", alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: "#fde68a" },
+  shopTitle: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  shopText: { color: "rgba(255,255,255,0.8)", fontSize: 12, marginTop: 2, lineHeight: 16 },
   shelves: { gap: 8, paddingRight: 8 },
   shelf: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "rgba(0,0,0,0.08)" },
   shelfOn: { backgroundColor: "#4f46e5", borderColor: "#4f46e5" },

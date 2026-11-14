@@ -40,6 +40,7 @@ export const starsGame: GameDefinition = {
 type State = "intro" | "show" | "input" | "pause" | "over";
 
 class StarsGame implements GameInstance {
+  private earned = 0;
   private w = 0;
   private h = 0;
   private area = { x: 0, y: 0, w: 0, h: 0 };
@@ -194,7 +195,7 @@ class StarsGame implements GameInstance {
     this.state = "over";
     this.stateT = 0;
     this.env.emit({
-      type: "end",
+      type: "end", coins: (this.earned = Math.max(5, reached * 4)),
       score: reached,
       best: this.best,
       summary: `จำได้ยาวสุด ${reached} ดวง`,
@@ -478,7 +479,7 @@ class StarsGame implements GameInstance {
         chips: [`สถิติ ${this.best} ดวง`],
         accent: "#8b6cff",
         buttons: [this.againBtn],
-        appear: this.stateT * 2.5,
+        appear: this.stateT * 2.5, coins: this.earned,
       });
     }
   }

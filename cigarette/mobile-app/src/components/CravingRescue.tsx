@@ -9,6 +9,7 @@ import { useGamification } from "@/contexts/GamificationContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { api } from "@/lib/api";
 import { GAMES, findGame, type GameDefinition } from "@/games";
+import { wallet } from "@/games/engine/economy";
 import GameHost from "@/components/GameHost";
 import MoveBreak from "@/components/MoveBreak";
 import SlipRecovery from "@/components/SlipRecovery";
@@ -86,6 +87,7 @@ export default function CravingRescue({ onClose }: { onClose: () => void }) {
     if (!xpGiven.current && afterValue !== null && afterValue < before && !smoked) {
       xpGiven.current = true;
       addXP(20, "ผ่านความอยากไปได้");
+      wallet.add(30);
       completeDailyMission("minigame");
     }
   };
@@ -536,7 +538,7 @@ function Result({ before, after, seconds, onTryMore, onSlip, onDone }: { before:
       </View>
       <Text style={styles.leadC}>
         {dropped
-          ? `ใช้เวลาราว ${mins} นาที ความอยากลดลง ${before - after} ระดับ ครั้งหน้าที่อยาก จำไว้ว่ามันผ่านไปได้แบบนี้`
+          ? `ใช้เวลาราว ${mins} นาที ความอยากลดลง ${before - after} ระดับ ได้ 30 เหรียญไว้ซื้อของในเกม ครั้งหน้าที่อยาก จำไว้ว่ามันผ่านไปได้แบบนี้`
           : "บางคลื่นใช้เวลานานกว่า ลองอีกวิธี หรือโทรคุยกับ 1600 ก็ได้ คุณไม่ต้องสู้คนเดียว"}
       </Text>
       <Pressable style={[styles.primary, { alignSelf: "stretch" }]} onPress={dropped ? onDone : onTryMore} accessibilityRole="button">

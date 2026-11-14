@@ -6,7 +6,10 @@ import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engin
 import { Particles, Floaters, makeSprite, roundRectPath, rgba, clamp, ease, TAU, FONT_DISPLAY, FONT_BODY, glow, rng } from "./engine/fx";
 import { Button, drawCard, glassPanel, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
+import { coinsFor, wallet } from "./engine/economy";
 import { drawBlock } from "./blocks";
+import { drawBlockSkin } from "./art/skins";
+import { BoosterButton } from "./engine/booster";
 
 const N = 8;
 const COLORS = ["#ff6b8b", "#ffb547", "#ffe15a", "#5ee08f", "#4fd1ff", "#6f8bff", "#b884ff", "#ff8fd6"];
@@ -64,6 +67,7 @@ export const blastGame: GameDefinition = {
 type State = "intro" | "play" | "over";
 
 class BlastGame implements GameInstance {
+  private earned = 0;
   private w = 0;
   private h = 0;
   private cell = 40;
@@ -92,6 +96,8 @@ class BlastGame implements GameInstance {
   private againBtn = new Button("เล่นอีกครั้ง", "#22b8cf");
   private rand = rng(Date.now() % 99991);
   private motes: { x: number; y: number; r: number; s: number }[] = [];
+  private hammer = new BoosterButton("boost_hammer");
+  private reroll = new BoosterButton("boost_reroll");
 
   constructor(private env: GameEnv) {
     this.best = parseInt(env.store.get("best") || "0", 10) || 0;
@@ -244,7 +250,7 @@ class BlastGame implements GameInstance {
       this.best = r.best;
       this.newBest = r.isNew;
       this.env.sfx.tone({ freq: 330, dur: 0.6, vol: 0.09, glideTo: 180 });
-      this.env.emit({ type: "end", score: this.score, best: this.best, summary: `ล้างไป ${this.lines} แถว`, stats: { lines: this.lines } });
+      this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 25, 5, 120)), score: this.score, best: this.best, summary: `ล้างไป ${this.lines} แถว`, stats: { lines: this.lines } });
     }
   }
 
@@ -266,7 +272,8 @@ class BlastGame implements GameInstance {
     this.trayY = this.by + this.cell * N + 18;
     this.trayCell = Math.floor(Math.min(this.cell * 0.55, (w - 40) / 3 / 5.2, (h - this.trayY - 16) / 5.2));
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    this.sprites = COLORS.map((col) => makeSprite(this.cell, this.cell, dpr, (c) => drawBlock(c, this.cell, col)));
+    const skin = wallet.equipped("blockSkin");
+    this.sprites = COLORS.map((col) => makeSprite(this.cell, this.cell, dpr, (c) => (skin && skin !== "block_classic" ? drawBlockSkin(c, this.cell, col, skin) : drawBlock(c, this.cell, col))));
     this.bg = makeSprite(w, h, dpr, (c) => {
       const g = c.createLinearGradient(0, 0, w, h);
       g.addColorStop(0, "#0d2f3d");
@@ -299,7 +306,42 @@ class BlastGame implements GameInstance {
       }
       return;
     }
-    if (p.type === "down" && !this.drag) {
+    if (p.type === "down" && !this.drag && !this.clearing) {
+      // Boosters
+      if (this.hammer.hit(p.x, p.y)) {
+        if (this.hammer.active) this.hammer.active = false;
+        else if (this.hammer.available() && this.board.some((row) => row.some((v) => v !== null))) this.hammer.active = true;
+        else this.hammer.consume();
+        this.env.sfx.tone({ freq: 600, dur: 0.05, vol: 0.05 });
+        return;
+      }
+      if (this.reroll.hit(p.x, p.y)) {
+        if (this.reroll.consume()) {
+          this.deal();
+          this.env.sfx.chime(pentatonic(6), 0.08);
+          for (let i = 0; i < 3; i++) {
+            const sl = this.traySlot(i);
+            this.particles.burst(sl.cx, sl.cy, "#a78bfa", 14, { speed: 140, size: 3, gravity: 0 });
+          }
+        }
+        return;
+      }
+      if (this.hammer.active) {
+        const gx = Math.floor((p.x - this.bx) / this.cell);
+        const gy = Math.floor((p.y - this.by) / this.cell);
+        if (gx >= 0 && gy >= 0 && gx < N && gy < N && this.board[gy][gx] !== null && this.hammer.consume()) {
+          // Smash the 3×3 around the tapped cell
+          for (let y = gy - 1; y <= gy + 1; y++)
+            for (let x = gx - 1; x <= gx + 1; x++) {
+              if (x < 0 || y < 0 || x >= N || y >= N || this.board[y][x] === null) continue;
+              this.particles.burst(this.bx + (x + 0.5) * this.cell, this.by + (y + 0.5) * this.cell, COLORS[this.board[y][x]!], 10, { speed: 160, size: 3, gravity: 300 });
+              this.board[y][x] = null;
+            }
+          this.env.sfx.noise({ dur: 0.25, vol: 0.12, freq: 500, type: "lowpass" });
+        }
+        this.hammer.active = false;
+        return;
+      }
       if (p.y < this.trayY - 10) return;
       const slotW = (this.w - 24) / 3;
       const i = clamp(Math.floor((p.x - 12) / slotW), 0, 2);
@@ -332,6 +374,8 @@ class BlastGame implements GameInstance {
     this.floaters.update(dt);
     this.startBtn.update(dt);
     this.againBtn.update(dt);
+    this.hammer.update(dt);
+    this.reroll.update(dt);
     for (const m of this.motes) {
       m.y -= m.s * dt;
       if (m.y < -0.05) m.y = 1.05;
@@ -375,6 +419,18 @@ class BlastGame implements GameInstance {
     ctx.font = `800 36px ${FONT_DISPLAY}`;
     ctx.fillStyle = "#ffffff";
     ctx.fillText(Math.round(this.shown).toLocaleString(), w / 2, 28);
+    if (this.state === "play") {
+      this.hammer.place(32, 48, 21);
+      this.reroll.place(w - 32, 48, 21);
+      this.hammer.render(ctx, this.time);
+      this.reroll.render(ctx, this.time);
+      if (this.hammer.active) {
+        ctx.font = `600 12px ${FONT_BODY}`;
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#fde68a";
+        ctx.fillText("แตะบล็อกบนกระดานเพื่อทุบ (3×3)", w / 2, 68);
+      }
+    }
 
     // Board
     const c = this.cell;
@@ -467,7 +523,7 @@ class BlastGame implements GameInstance {
         chips: [`${this.lines} แถว`, `สถิติ ${this.best.toLocaleString()}`],
         accent: this.newBest ? "#ffc634" : "#22b8cf",
         buttons: [this.againBtn],
-        appear: this.stateT * 2.5,
+        appear: this.stateT * 2.5, coins: this.earned,
       });
     }
   }

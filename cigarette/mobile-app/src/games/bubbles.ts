@@ -6,10 +6,15 @@ import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engin
 import { Particles, Floaters, makeSprite, clamp, TAU, FONT_DISPLAY, FONT_BODY, rng, shade } from "./engine/fx";
 import { Button, drawCard, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
+import { coinsFor } from "./engine/economy";
+import { BoosterButton, drawBoosterIcon } from "./engine/booster";
 
 const COLS = 10;
 const ROWS_MAX = 13;
 const COLORS = ["#ff5a7a", "#ffc93c", "#3ddc84", "#3d9bff", "#b06cff", "#ff8a3d"];
+/** Special shots from boosters. */
+const RAINBOW = 100;
+const BOMB = 101;
 
 interface Flyer {
   x: number;
@@ -100,6 +105,7 @@ export const bubblesGame: GameDefinition = {
 type State = "intro" | "play" | "win" | "over";
 
 class BubblesGame implements GameInstance {
+  private earned = 0;
   private w = 0;
   private h = 0;
   private R = 18;
@@ -132,6 +138,9 @@ class BubblesGame implements GameInstance {
   private againBtn = new Button("เล่นอีกครั้ง", "#2f8cff");
   private rand = rng(Date.now() % 24680);
   private ambient: { x: number; y: number; r: number; v: number }[] = [];
+  private bRainbow = new BoosterButton("boost_rainbow");
+  private rainbowPair = false;
+  private bBomb = new BoosterButton("boost_bomb");
 
   constructor(private env: GameEnv) {
     this.best = parseInt(env.store.get("best") || "0", 10) || 0;
@@ -221,8 +230,62 @@ class BubblesGame implements GameInstance {
     }
     if (!best) return;
     const [r, c] = best;
-    this.grid[r][c] = color;
     this.shots++;
+    if (color === BOMB) {
+      // Blow up everything within two bubbles of the impact
+      const at = this.cellXY(r, c);
+      let n = 0;
+      for (let a = 0; a < ROWS_MAX; a++)
+        for (let b = 0; b < this.rowLen(a); b++) {
+          if (this.grid[a][b] < 0) continue;
+          const p = this.cellXY(a, b);
+          if (Math.hypot(p.x - at.x, p.y - at.y) <= this.R * 4.3) {
+            this.pops.push({ x: p.x, y: p.y, t: 0, color: this.grid[a][b] });
+            this.particles.burst(p.x, p.y, COLORS[this.grid[a][b]], 6, { speed: 200, size: 3, gravity: 200, life: 0.6 });
+            this.grid[a][b] = -1;
+            n++;
+          }
+        }
+      this.particles.burst(at.x, at.y, "#fbbf24", 40, { speed: 320, size: 4, gravity: 0, life: 0.7 });
+      this.env.sfx.noise({ dur: 0.5, vol: 0.14, freq: 700, sweepTo: 80, type: "lowpass" });
+      const dropped = this.dropFloating();
+      const gained = n * 10 + dropped * 20;
+      this.score += gained;
+      this.floaters.add(`ตูม! +${gained}`, at.x, at.y, "#fde68a", 24);
+      this.env.emit({ type: "score", score: this.score });
+      if (this.shots % 7 === 0) this.pushRow();
+      this.checkEnd();
+      return;
+    }
+    if (color === RAINBOW) {
+      // Become whichever touching colour makes the biggest group
+      let bestColor = -1;
+      let bestSize = 0;
+      for (const [a, b] of this.neighbors(r, c)) {
+        const col = this.grid[a][b];
+        if (col < 0) continue;
+        this.grid[r][c] = col;
+        const seen2 = new Set<string>();
+        const st: [number, number][] = [[r, c]];
+        let size = 0;
+        while (st.length) {
+          const [x, y] = st.pop()!;
+          const k = `${x},${y}`;
+          if (seen2.has(k) || this.grid[x][y] !== col) continue;
+          seen2.add(k);
+          size++;
+          st.push(...this.neighbors(x, y));
+        }
+        if (size > bestSize) {
+          bestSize = size;
+          bestColor = col;
+        }
+      }
+      color = bestColor >= 0 ? bestColor : this.pickColor();
+      // A rainbow always pops, even with only one matching neighbour
+      if (bestSize === 2) this.rainbowPair = true;
+    }
+    this.grid[r][c] = color;
     // Match
     const group: [number, number][] = [];
     const seen = new Set<string>();
@@ -235,7 +298,9 @@ class BubblesGame implements GameInstance {
       group.push([a, b]);
       stack.push(...this.neighbors(a, b));
     }
-    if (group.length >= 3) {
+    const pair = this.rainbowPair;
+    this.rainbowPair = false;
+    if (group.length >= 3 || (pair && group.length >= 2)) {
       for (const [a, b] of group) {
         const p = this.cellXY(a, b);
         this.pops.push({ x: p.x, y: p.y, t: 0, color: this.grid[a][b] });
@@ -308,7 +373,7 @@ class BubblesGame implements GameInstance {
       [0, 2, 4, 7, 9].forEach((s, i) => this.env.sfx.chime(pentatonic(s + 5), 0.1, i * 0.08));
       const r = bestScore(this.env.store, "best", this.score);
       this.best = r.best;
-      this.env.emit({ type: "end", score: this.score, best: this.best, summary: `ผ่านด่าน ${this.level}`, stats: { level: this.level } });
+      this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 20, 5, 150)), score: this.score, best: this.best, summary: `ผ่านด่าน ${this.level}`, stats: { level: this.level } });
       return;
     }
     const s = this.shooter();
@@ -328,7 +393,7 @@ class BubblesGame implements GameInstance {
     this.best = r.best;
     this.newBest = r.isNew;
     this.env.sfx.tone({ freq: 330, dur: 0.6, vol: 0.09, glideTo: 180 });
-    this.env.emit({ type: "end", score: this.score, best: this.best, summary: `ถึงด่าน ${this.level}`, stats: { level: this.level } });
+    this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 20, 5, 150)), score: this.score, best: this.best, summary: `ถึงด่าน ${this.level}`, stats: { level: this.level } });
   }
 
   private start(level: number) {
@@ -409,6 +474,20 @@ class BubblesGame implements GameInstance {
       return;
     }
     const s = this.shooter();
+    if (p.type === "down") {
+      for (const [btn, kind] of [
+        [this.bRainbow, RAINBOW],
+        [this.bBomb, BOMB],
+      ] as const) {
+        if (!btn.hit(p.x, p.y)) continue;
+        if (this.current < 100 && !this.flyer && btn.consume()) {
+          this.next = this.current;
+          this.current = kind;
+          this.env.sfx.chime(pentatonic(8), 0.08);
+        }
+        return;
+      }
+    }
     // Tap the waiting bubble to swap it with the next one
     if (p.type === "down" && Math.hypot(p.x - (s.x + this.R * 3), p.y - s.y) < this.R * 1.4) {
       [this.current, this.next] = [this.next, this.current];
@@ -447,6 +526,8 @@ class BubblesGame implements GameInstance {
     this.particles.update(dt);
     this.floaters.update(dt);
     for (const b of [this.startBtn, this.nextBtn, this.againBtn]) b.update(dt);
+    this.bRainbow.update(dt);
+    this.bBomb.update(dt);
     for (const a of this.ambient) {
       a.y -= a.v * dt;
       a.x += Math.sin(this.time + a.y * 10) * 0.002 * dt;
@@ -498,6 +579,16 @@ class BubblesGame implements GameInstance {
   }
 
   /** Dotted aim path with one bounce off a side wall. */
+  private drawBubble(color: number, x: number, y: number, d: number) {
+    const { ctx } = this.env;
+    if (color >= 100) {
+      ctx.save();
+      ctx.translate(x, y);
+      drawBoosterIcon(ctx, color === RAINBOW ? "boost_rainbow" : "boost_bomb", d * 1.35, this.time);
+      ctx.restore();
+    } else ctx.drawImage(this.sprites[color], x - d / 2, y - d / 2, d, d);
+  }
+
   private drawAim() {
     const { ctx } = this.env;
     const s = this.shooter();
@@ -577,7 +668,7 @@ class BubblesGame implements GameInstance {
 
     if (this.state === "play") {
       if (this.aiming && !this.flyer) this.drawAim();
-      if (this.flyer) ctx.drawImage(this.sprites[this.flyer.color], this.flyer.x - this.R, this.flyer.y - this.R, D, D);
+      if (this.flyer) this.drawBubble(this.flyer.color, this.flyer.x, this.flyer.y, D);
       // Shooter base
       ctx.fillStyle = "rgba(255,255,255,0.12)";
       ctx.beginPath();
@@ -593,14 +684,20 @@ class BubblesGame implements GameInstance {
       ctx.lineTo(6, -this.R * 1.6);
       ctx.fill();
       ctx.restore();
-      if (!this.flyer) ctx.drawImage(this.sprites[this.current], s.x - this.R, s.y - this.R, D, D);
+      if (!this.flyer) this.drawBubble(this.current, s.x, s.y, D);
       ctx.globalAlpha = 0.85;
-      ctx.drawImage(this.sprites[this.next], s.x + this.R * 3 - this.R * 0.75, s.y - this.R * 0.75, D * 0.75, D * 0.75);
+      this.drawBubble(this.next, s.x + this.R * 3, s.y, D * 0.75);
       ctx.globalAlpha = 1;
       ctx.font = `500 11px ${FONT_BODY}`;
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(255,255,255,0.6)";
       ctx.fillText("แตะเพื่อสลับ", s.x + this.R * 3, s.y + this.R * 1.4);
+      this.bRainbow.place(30, s.y - this.R * 3.2, 20);
+      this.bBomb.place(this.w - 30, s.y - this.R * 3.2, 20);
+      this.bRainbow.render(ctx, this.time);
+      this.bBomb.render(ctx, this.time);
+      ctx.font = `500 11px ${FONT_BODY}`;
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
       const left = 7 - (this.shots % 7);
       ctx.fillText(`อีก ${left} นัด แถวใหม่จะลงมา`, s.x - this.R * 4, s.y + this.R * 1.4);
     }
@@ -638,7 +735,7 @@ class BubblesGame implements GameInstance {
         chips: this.best ? [`สถิติ ${this.best.toLocaleString()}`] : undefined,
       });
     } else if (this.state === "win") {
-      drawCard(ctx, w, h, { title: `ผ่านด่าน ${this.level}!`, subtitle: "เคลียร์ทะเลได้หมดแล้ว +200", bigValue: this.score.toLocaleString(), bigLabel: "คะแนน", accent: "#2f8cff", buttons: [this.nextBtn], appear: this.stateT * 2.5, icon });
+      drawCard(ctx, w, h, { title: `ผ่านด่าน ${this.level}!`, subtitle: "เคลียร์ทะเลได้หมดแล้ว +200", bigValue: this.score.toLocaleString(), bigLabel: "คะแนน", accent: "#2f8cff", buttons: [this.nextBtn], appear: this.stateT * 2.5, coins: this.earned, icon });
     } else if (this.state === "over") {
       drawCard(ctx, w, h, {
         title: this.newBest ? "สถิติใหม่!" : "บับเบิลลงมาถึงเส้นแล้ว",
@@ -648,7 +745,7 @@ class BubblesGame implements GameInstance {
         chips: [`ด่าน ${this.level}`, `สถิติ ${this.best.toLocaleString()}`],
         accent: this.newBest ? "#ffc634" : "#2f8cff",
         buttons: [this.againBtn],
-        appear: this.stateT * 2.5,
+        appear: this.stateT * 2.5, coins: this.earned,
       });
     }
   }

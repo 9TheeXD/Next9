@@ -19,6 +19,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import MissionBubble from "@/components/MissionBubble";
 import DailyMissionModal from "@/components/DailyMissionModal";
 import { useAdaptiveMission } from "@/hooks/useAdaptiveMission";
+import { wallet } from "@/games/engine/economy";
 
 export default function TrackerScreen() {
   const { user } = useAuth();
@@ -141,6 +142,11 @@ export default function TrackerScreen() {
   const handleSaveLog = async (count: number) => {
     const newBadges = await saveLog(count);
     completeDailyMission('dailyLog');
+    // Coins for the games shop: most for a smoke-free day, some for smoking less than before
+    if (Platform.OS === "web") {
+      if (count === 0) wallet.addDaily("log_free", 50);
+      else if (baseline && count < baseline) wallet.addDaily("log_less", 15);
+    }
     if (newBadges && newBadges.length > 0) {
       setEarnedBadgesQueue(newBadges);
     }
