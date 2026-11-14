@@ -7,7 +7,7 @@ push เข้า branch production ของ Vercel แล้ว Vercel จะ 
 
 ```
 ┌──────────────────────────┐   /api/* (rewrite)   ┌───────────────────────────┐
-│ ciga-app  (Vercel)       │ ───────────────────▶ │ ciga-admin  (Vercel)      │
+│ ciga-app  (Vercel)       │ ───────────────────▶ │ ciga-next9  (Vercel)      │
 │ Root: cigarette/mobile-app│                      │ Root: cigarette/admin-web │
 │ Expo export → static PWA │                      │ Next.js: API + dashboard  │
 └──────────────────────────┘                      └────────────┬──────────────┘
@@ -18,20 +18,20 @@ push เข้า branch production ของ Vercel แล้ว Vercel จะ 
                  (Singapore, pooler 6543)   ไฟล์เสียงที่อัปโหลด      push notification    เรียก /api/cron/*
 ```
 
-| Vercel project | Root Directory | Framework | Build |
-|---|---|---|---|
-| ciga-admin | `cigarette/admin-web` | Next.js | `npm run build` = `prisma generate && next build` |
-| ciga-app | `cigarette/mobile-app` | Other | ตั้งไว้ใน `mobile-app/vercel.json` (`npm run build`, output `dist`) |
+| Vercel project | URL | Root Directory | Framework | Build |
+|---|---|---|---|---|
+| `ciga-next9` (API + dashboard) | https://ciga-next9.vercel.app | `cigarette/admin-web` | Next.js | `npm run build` = `prisma generate && next build` |
+| `app-ciga-next9` (แอป) | https://app-ciga-next9.vercel.app | `cigarette/mobile-app` | Other | ตั้งไว้ใน `mobile-app/vercel.json` (`npm run build`, output `dist`) |
 
-- function ของ ciga-admin อยู่ที่ `sin1` (Singapore) ใน `admin-web/vercel.json` ให้ใกล้ Supabase
-- แอปเรียก API ผ่าน path เดียวกัน (`/api`) แล้ว `mobile-app/vercel.json` rewrite ต่อไปที่ ciga-admin
-  ถ้าโดเมนของ ciga-admin เปลี่ยน ให้แก้ปลายทาง rewrite นั้นบรรทัดเดียว
+- function ของ ciga-next9 อยู่ที่ `sin1` (Singapore) ใน `admin-web/vercel.json` ให้ใกล้ Supabase
+- แอปเรียก API ผ่าน path เดียวกัน (`/api`) แล้ว `mobile-app/vercel.json` rewrite ต่อไปที่ `https://ciga-next9.vercel.app/api/*`
+  ถ้าโดเมนของ ciga-next9 เปลี่ยน ให้แก้ปลายทาง rewrite นั้นบรรทัดเดียว
 
 ## Environment Variables
 
 ตั้งใน Vercel → Project → Settings → Environment Variables รายการเต็มอยู่ใน `.env.example` ของแต่ละ project
 
-**ciga-admin** (`admin-web/.env.example`)
+**ciga-next9** (`admin-web/.env.example`)
 - `DATABASE_URL` — Supabase "Transaction pooler" (port 6543) ต่อท้าย `?sslmode=no-verify`
 - `PG_POOL_MAX` — ขนาด pool ต่อ instance (ค่าแนะนำ 3)
 - `JWT_SECRET` — ห้ามเปลี่ยน ถ้าเปลี่ยนผู้ใช้ทุกคนจะหลุด login
@@ -100,9 +100,9 @@ cd cigarette/mobile-app && npm run build    # tsc --noEmit + expo export + servi
 
 ## ตรวจหลัง deploy
 
-- Vercel → Deployments → ดู build log และ Runtime Logs ของ ciga-admin
+- Vercel → Deployments → ดู build log และ Runtime Logs ของ ciga-next9
 - เปิดแอป → login → บันทึกวันนี้ → เปิด SOS เล่นเกม 1 เกม
-- เปิด `/dashboard` ของ ciga-admin ด้วยบัญชี admin
+- เปิด `/dashboard` ของ ciga-next9 ด้วยบัญชี admin
 
 ## ไม่ใช้แล้ว
 
