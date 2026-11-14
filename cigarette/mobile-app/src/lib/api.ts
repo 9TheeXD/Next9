@@ -113,6 +113,12 @@ export const api = {
 
   postXP: (data: { amount: number }) => request<{ xp: number }>("/profile/xp", { method: "POST", body: JSON.stringify(data) }),
 
+  // ── Game progress (coins, shop, best scores) ─────
+  getGameState: () => request<{ state: unknown; updatedAt: string | null }>("/game-state"),
+
+  putGameState: (data: unknown) =>
+    request<{ updatedAt: string }>("/game-state", { method: "PUT", body: JSON.stringify(data) }),
+
   getRank: (userId: string) => request<{ rank: number }>(`/profile/rank?userId=${userId}`),
 
   updateFcmToken: (fcmToken: string) => request("/profile/fcm-token", { method: "POST", body: JSON.stringify({ fcmToken }) }),

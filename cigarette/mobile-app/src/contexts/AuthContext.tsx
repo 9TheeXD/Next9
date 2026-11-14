@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNetwork } from "@/contexts/NetworkContext";
 import type { UserProfile, APIResponse, AuthResponse, UserRole } from "@/types";
 import { Alert, Platform, DeviceEventEmitter } from "react-native";
+import { startGameSync, stopGameSync, flushGameSync } from "@/lib/gameSync";
 import { getDeviceKey, claimDeviceKeyOnce, authErrorMessage } from "@/lib/deviceKey";
 
 const OFFLINE_USER_KEY = "@ciga_offline_user";
@@ -157,6 +158,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     init();
   }, [fetchProfile]);
 
+  // Game progress (coins, shop, best scores) follows the signed-in account.
+  useEffect(() => {
+    if (user?.id) void startGameSync(user.id);
+    else stopGameSync();
+  }, [user?.id]);
+
   const login = useCallback(async (phoneNumber: string) => {
     const response = (await api.login({ phoneNumber })) as APIResponse<AuthResponse>;
     if (!response.success || !response.data) {
@@ -208,6 +215,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn("Failed to remember account on logout:", e);
     }
 
+    await flushGameSync().catch(() => {});
     await clearToken();
     await AsyncStorage.removeItem(OFFLINE_USER_KEY);
     await AsyncStorage.removeItem("ciga_display_id");

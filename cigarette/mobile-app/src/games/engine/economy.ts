@@ -1,8 +1,11 @@
-// Coins, items and upgrades shared by every game and the shop. Kept on the device (localStorage),
-// like best scores. Coins come from finishing games and, worth more, from real quit actions
+// Coins, items and upgrades shared by every game and the shop. Kept on the device (localStorage) and
+// copied to the signed-in user's account by lib/gameSync.ts, like best scores. Coins come from finishing games and, worth more, from real quit actions
 // (getting through a craving, a logged smoke-free day), so the game economy rewards quitting.
 
-const KEY = "nb_wallet_v1";
+import { syncBus } from "./syncbus";
+
+export const WALLET_KEY = "nb_wallet_v1";
+const KEY = WALLET_KEY;
 const EVENT = "nb-wallet";
 
 export interface WalletData {
@@ -13,6 +16,7 @@ export interface WalletData {
   boosters: Record<string, number>;
   upgrades: Record<string, number>;
   daily: Record<string, string>; // reward id -> yyyy-mm-dd last given
+  ts?: number; // last local change (ms), used to pick the newer copy when syncing
 }
 
 const EMPTY: WalletData = { coins: 0, lifetime: 0, owned: [], equipped: {}, boosters: {}, upgrades: {}, daily: {} };
@@ -30,13 +34,15 @@ function load(): WalletData {
       boosters: d.boosters && typeof d.boosters === "object" ? d.boosters : {},
       upgrades: d.upgrades && typeof d.upgrades === "object" ? d.upgrades : {},
       daily: d.daily && typeof d.daily === "object" ? d.daily : {},
+      ts: Math.max(0, Math.floor(Number(d.ts) || 0)),
     };
   } catch {
     return { ...EMPTY, owned: [], equipped: {}, boosters: {}, upgrades: {}, daily: {} };
   }
 }
 
-function save(d: WalletData) {
+function save(d: WalletData, silent = false) {
+  if (!silent) d.ts = Date.now();
   try {
     localStorage.setItem(KEY, JSON.stringify(d));
   } catch {
@@ -47,6 +53,7 @@ function save(d: WalletData) {
   } catch {
     /* no window (static render) */
   }
+  if (!silent) syncBus.changed();
 }
 
 function today() {
@@ -57,6 +64,10 @@ function today() {
 export const wallet = {
   data(): WalletData {
     return load();
+  },
+  /** Replaces the wallet with a copy that came from the server (does not trigger an upload). */
+  replace(d: WalletData) {
+    save({ ...d }, true);
   },
   coins(): number {
     return load().coins;

@@ -15,7 +15,7 @@ Layout:
   (register it in `src/games/index.ts`, add a cover in `assets/images/games/` and to `COVERS` in
   `src/components/GameLibrary.tsx`). Shared art: `src/games/art/`.
   `src/components/GameHost.tsx` mounts a game in a `<canvas>` (web only).
-  - `engine/economy.ts` — coins wallet (localStorage), shop items, boosters, unlimited upgrades.
+  - `engine/economy.ts` — coins wallet, shop items, boosters, unlimited upgrades. Stored on the device and copied to the signed-in user (`lib/gameSync.ts` → `GET/PUT /api/game-state`, table `GameSave`), so progress follows the account.
     Coins come from finished games (`coins` on the `end` event) and from quit actions.
   - `engine/menu.ts`, `engine/duel.ts`, `engine/turnduel.ts` — setup screen (bot level / friend mode),
     player bars and a base class for two-player board games. `logic/chessRules.ts` is a full chess engine.
