@@ -59,8 +59,20 @@ export async function POST(request: NextRequest) {
             { status: 401 }
           );
         }
+      } else {
+        // App users sign in by display ID + device key (/api/auth/register). Signing in here by
+        // phone number alone would let anyone who knows the number take over the account.
+        const isValid =
+          typeof password === "string" && password.length > 0 && user.passwordHash
+            ? await comparePassword(password, user.passwordHash)
+            : false;
+        if (!isValid) {
+          return NextResponse.json<APIResponse<never>>(
+            { success: false, error: "รหัสผ่านไม่ถูกต้อง" },
+            { status: 401 }
+          );
+        }
       }
-      // For normal users, no password required, just login
     }
 
     // Create JWT

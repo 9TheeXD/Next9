@@ -1,15 +1,22 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { authenticateRequest } from '@/lib/auth';
 
-export async function PUT(req: Request, context: { params: Promise<{ id: string }> }) {
+const unauthorized = () =>
+  NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const auth = authenticateRequest(req);
+  if (!auth) return unauthorized();
   try {
     const { id } = await context.params;
     const body = await req.json();
-    const { userId, content } = body;
+    const userId = auth.userId;
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
 
-    if (!userId || (!content && content !== '')) {
+    if (!content || content.length > 1000) {
       return NextResponse.json(
-        { success: false, error: 'User ID and content are required' },
+        { success: false, error: 'Content is required (max 1000 characters)' },
         { status: 400 }
       );
     }
@@ -35,7 +42,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     const updatedMessage = await prisma.chatMessage.update({
       where: { id },
       data: {
-        content: content.trim(),
+        content,
         isEdited: true,
       },
       include: {
@@ -57,27 +64,18 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
   } catch (error: any) {
     console.error('Edit chat message error:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to edit message' },
+      { success: false, error: 'Failed to edit message' },
       { status: 500 }
     );
   }
 }
 
-export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const auth = authenticateRequest(req);
+  if (!auth) return unauthorized();
   try {
     const { id } = await context.params;
-    // To verify user, we should ideally get userId from body or query,
-    // Since DELETE body is sometimes ignored, we can pass userId in searchParams or rely on an auth token.
-    // For simplicity with fetch, we'll accept it in searchParams.
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
-
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'User ID is required' },
-        { status: 400 }
-      );
-    }
+    const userId = auth.userId;
 
     const existingMessage = await prisma.chatMessage.findUnique({
       where: { id },
@@ -90,7 +88,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       );
     }
 
-    if (existingMessage.userId !== userId) {
+    if (existingMessage.userId !== userId && auth.role !== 'ADMIN') {
       return NextResponse.json(
         { success: false, error: 'Unauthorized to unsend this message' },
         { status: 403 }
@@ -122,7 +120,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   } catch (error: any) {
     console.error('Unsend chat message error:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to unsend message' },
+      { success: false, error: 'Failed to unsend message' },
       { status: 500 }
     );
   }

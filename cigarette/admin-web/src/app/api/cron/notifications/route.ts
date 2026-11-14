@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { rejectUnlessCron } from "@/lib/cron";
 import { messaging, sendPushNotification } from "@/lib/firebase";
 
 const ENCOURAGEMENT_MESSAGES = [
@@ -30,7 +31,8 @@ function isTimeInRange(rangeStr: string): boolean {
 }
 
 export async function GET(request: NextRequest) {
-  // Ensure the cron is called with a secure method if needed, but for simplicity here it's open.
+  const denied = rejectUnlessCron(request);
+  if (denied) return denied;
   try {
     const smokers = await prisma.user.findMany({
       where: { role: "SMOKER", fcmToken: { not: null } }

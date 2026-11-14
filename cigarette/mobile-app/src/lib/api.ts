@@ -89,7 +89,11 @@ export const api = {
     displayId: string;
     role: string;
     targetDisplayId?: string;
+    deviceKey?: string;
   }) => request("/auth/register", { method: "POST", body: JSON.stringify(data) }),
+
+  claimDeviceKey: (deviceKey: string) =>
+    request("/auth/device-key", { method: "POST", body: JSON.stringify({ deviceKey }) }),
 
   login: (data: { phoneNumber: string }) =>
     request("/auth/login", { method: "POST", body: JSON.stringify(data) }),

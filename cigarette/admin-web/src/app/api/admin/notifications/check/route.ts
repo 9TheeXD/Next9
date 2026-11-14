@@ -1,17 +1,12 @@
 import { NextResponse } from "next/server";
+import { rejectUnlessCron } from "@/lib/cron";
 import { prisma } from "@/lib/prisma";
 import { messaging } from "@/lib/firebase";
 
 export async function POST(request: Request) {
   try {
-    // Basic API Key protection for cron job
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      // Return 401 if unauthorized, but for demo/testing we might bypass if CRON_SECRET is not set
-      if (process.env.CRON_SECRET) {
-        return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-      }
-    }
+    const denied = rejectUnlessCron(request);
+    if (denied) return denied;
 
     if (!messaging) {
       return NextResponse.json({ success: false, error: "Firebase not configured" }, { status: 500 });
