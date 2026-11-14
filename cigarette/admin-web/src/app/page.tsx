@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 
 // The Next Breath app (mobile-app project on Vercel).
-const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://next9-ciga-app.vercel.app").replace(/\/+$/, "");
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://app-ciga-next9.vercel.app").replace(/\/+$/, "");
 
 interface Stats {
   users: number;

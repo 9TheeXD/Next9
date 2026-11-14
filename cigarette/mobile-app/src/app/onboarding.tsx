@@ -497,7 +497,7 @@ export default function OnboardingWizard() {
           }
           showAlert({ message: "ขอบคุณที่ให้ข้อมูล", type: "success" });
           if (Platform.OS === 'web') {
-            window.location.href = process.env.EXPO_PUBLIC_ADMIN_URL || 'https://next9-ciga-admin.vercel.app/';
+            window.location.href = process.env.EXPO_PUBLIC_ADMIN_URL || 'https://ciga-next9.vercel.app/';
           } else {
             router.replace('/');
           }
