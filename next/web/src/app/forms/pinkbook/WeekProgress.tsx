@@ -1,13 +1,32 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { isRoomSub, roomOptions, type RoomsConfig } from "./pinkbook";
+import { formatWeekRanges, isRoomSub, roomOptions, type RoomsConfig } from "./pinkbook";
 
 // "Sent so far this week": every room of every grade for the chosen week, coloured by the result
 // already in the database (neat / messy / not yet), plus the rooms waiting in this inspector's table.
 
 type Report = { grade: string; room: string | number; group_name: string; issues: string | null };
 type Pending = { grade: string; room: string; group_name: string };
+type Log = { id: number; action: string; action_by?: string; status?: string; issues?: string; unsubmitted_weeks?: string; diff_summary?: string; created_at?: string };
+
+function thaiDateTime(s?: string) {
+  if (!s) return "-";
+  const d = new Date(s.replace(" ", "T") + (s.includes("Z") ? "" : "Z"));
+  if (isNaN(d.getTime())) return s;
+  const m = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear() + 543} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function unsubText(v?: string) {
+  try {
+    const a = JSON.parse(v || "[]");
+    return Array.isArray(a) && a.length ? formatWeekRanges(a.map(Number)) : "";
+  } catch {
+    return "";
+  }
+}
 
 export function WeekProgress({
   week,
@@ -26,6 +45,20 @@ export function WeekProgress({
 }) {
   const [data, setData] = useState<Report[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [logs, setLogs] = useState<{ title: string; list: Log[] | null; error?: boolean } | null>(null);
+
+  async function openLogs(grade: string, room: string, grp: string) {
+    const title = `${grade}/${room}${grp !== "-" ? ` กลุ่ม ${grp}` : ""} · สัปดาห์ที่ ${week}`;
+    setLogs({ title, list: null });
+    try {
+      const j = await (
+        await fetch(`/api/pinkbook/logs?week=${encodeURIComponent(week)}&grade=${encodeURIComponent(grade)}&room=${encodeURIComponent(room)}&group=${encodeURIComponent(grp)}&term=${encodeURIComponent(term)}`)
+      ).json();
+      setLogs({ title, list: j.success && Array.isArray(j.data) ? j.data : [] });
+    } catch {
+      setLogs({ title, list: [], error: true });
+    }
+  }
 
   useEffect(() => {
     if (!week || !term) return;
@@ -105,13 +138,15 @@ export function WeekProgress({
                     <span className="pb-prog-num">{room}</span>
                     <span className="pb-prog-parts">
                       {parts.map(({ grp, res, pend }) => (
-                        <span
+                        <button
+                          type="button"
                           key={grp}
                           className={`pb-prog-cell${res ? ` is-${res}` : pend ? " is-pend" : ""}`}
-                          title={`${grade}/${room}${grp !== "-" ? ` กลุ่ม ${grp}` : ""}: ${label(res, pend)}`}
+                          title={`${grade}/${room}${grp !== "-" ? ` กลุ่ม ${grp}` : ""}: ${label(res, pend)} (แตะเพื่อดูประวัติ)`}
+                          onClick={() => openLogs(grade, room, grp)}
                         >
                           {grp !== "-" ? grp : ""}
-                        </span>
+                        </button>
                       ))}
                     </span>
                   </div>
@@ -119,7 +154,45 @@ export function WeekProgress({
               </div>
             </div>
           ))}
+        {data && <p className="t-muted pb-prog-tip">แตะช่องห้องเพื่อดูประวัติการบันทึก</p>}
       </div>
+      {logs && (
+        <div className="t-modal" onClick={(e) => e.target === e.currentTarget && setLogs(null)}>
+          <div className="t-modal-card pb-log-sheet">
+            <div className="pb-log-head">
+              <b>ประวัติการบันทึก · {logs.title}</b>
+              <button type="button" className="t-icon-btn" onClick={() => setLogs(null)} aria-label="ปิด"><i className="fas fa-xmark" aria-hidden /></button>
+            </div>
+            {logs.list === null ? (
+              <div className="t-empty"><i className="fas fa-spinner fa-spin" aria-hidden />กำลังโหลดประวัติ...</div>
+            ) : logs.error ? (
+              <div className="t-empty">โหลดประวัติไม่สำเร็จ</div>
+            ) : logs.list.length === 0 ? (
+              <div className="t-empty"><i className="far fa-folder-open" aria-hidden />ยังไม่มีการบันทึกห้องนี้ในสัปดาห์นี้</div>
+            ) : (
+              logs.list.map((log) => {
+                const act = { submit: "ส่งข้อมูล", delete: "ลบข้อมูล", revert: "ย้อนกลับ" }[log.action] || "แก้ไข";
+                const st = log.status || "ไม่ระบุ";
+                const unsub = unsubText(log.unsubmitted_weeks);
+                return (
+                  <div key={log.id} className={`pb-tl is-${log.action}`}>
+                    <span className="pb-tl-dot"><i className={`fas ${{ submit: "fa-cloud-arrow-up", delete: "fa-trash-can", revert: "fa-rotate-left" }[log.action] || "fa-pen-to-square"}`} aria-hidden /></span>
+                    <div className="pb-tl-card">
+                      <div className="pb-tl-top">
+                        <b>{act} · <span className={st === "เรียบร้อย" ? "pb-log-good" : st === "ยังไม่ส่ง" ? "pb-log-bad" : "pb-log-warn"}>{st}</span></b>
+                        <time>{thaiDateTime(log.created_at)}</time>
+                      </div>
+                      <div className="t-muted pb-tl-meta"><i className="far fa-user" aria-hidden /> {log.action_by || "แอดมิน"}{log.diff_summary ? ` · ${log.diff_summary}` : ""}</div>
+                      {log.issues && log.issues !== "-" && <div className="pb-tl-issues">{log.issues.split(/,<br>|<br>/).join(" · ")}</div>}
+                      {unsub && <div className="t-muted pb-tl-meta">สัปดาห์ที่ขาดส่ง: {unsub}</div>}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
