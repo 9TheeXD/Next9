@@ -6,6 +6,8 @@ import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engin
 import { Particles, Floaters, makeSprite, clamp, TAU, FONT_DISPLAY, FONT_BODY, rng, glow } from "./engine/fx";
 import { Button, drawCard, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
+import { coinsFor, wallet } from "./engine/economy";
+import { bladeColors } from "./art/skins";
 import { drawFruit, drawFruitHalf, FRUITS } from "./art/fruits";
 
 const ROUND = 75;
@@ -60,12 +62,14 @@ export const sliceGame: GameDefinition = {
 type State = "intro" | "play" | "over";
 
 class SliceGame implements GameInstance {
+  private earned = 0;
   private w = 0;
   private h = 0;
   private things: Thing[] = [];
   private halves: Half[] = [];
   private splats: Splat[] = [];
   private trail: { x: number; y: number; t: number }[] = [];
+  private blade = wallet.equipped("bladeSkin");
   private touching = false;
   private sprites: HTMLCanvasElement[] = [];
   private bg: HTMLCanvasElement | null = null;
@@ -191,7 +195,7 @@ class SliceGame implements GameInstance {
     this.best = r.best;
     this.newBest = r.isNew;
     [0, 2, 4].forEach((s, i) => this.env.sfx.chime(pentatonic(s + 5), 0.09, i * 0.1));
-    this.env.emit({ type: "end", score: this.score, best: this.best, summary: `หั่นไป ${this.sliced} ลูก`, stats: { sliced: this.sliced, combo: this.bestCombo } });
+    this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 2, 5, 120)), score: this.score, best: this.best, summary: `หั่นไป ${this.sliced} ลูก`, stats: { sliced: this.sliced, combo: this.bestCombo } });
   }
 
   resize(w: number, h: number) {
@@ -411,15 +415,17 @@ class SliceGame implements GameInstance {
         const a = this.trail[i - 1];
         const b = this.trail[i];
         const k = i / this.trail.length;
-        ctx.strokeStyle = `rgba(200,240,255,${0.35 * k})`;
+        const col = bladeColors(this.blade, this.time, k);
+        ctx.strokeStyle = col.outer;
         ctx.lineWidth = 14 * k;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
         ctx.stroke();
-        ctx.strokeStyle = `rgba(255,255,255,${0.95 * k})`;
+        ctx.strokeStyle = col.core;
         ctx.lineWidth = 5 * k;
         ctx.stroke();
+        if (col.spark && i === this.trail.length - 1 && Math.random() < 0.5) this.particles.burst(b.x, b.y, col.spark, 1, { speed: 60, size: 2, life: 0.3, gravity: 120 });
       }
       ctx.restore();
     }
@@ -481,7 +487,7 @@ class SliceGame implements GameInstance {
         chips: [`หั่น ${this.sliced} ลูก`, `คอมโบ ${this.bestCombo}`, `สถิติ ${this.best}`],
         accent: this.newBest ? "#ffc634" : "#ff5d73",
         buttons: [this.againBtn],
-        appear: this.stateT * 2.5,
+        appear: this.stateT * 2.5, coins: this.earned,
       });
     }
   }

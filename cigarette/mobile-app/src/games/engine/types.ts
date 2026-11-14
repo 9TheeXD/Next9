@@ -16,7 +16,7 @@ export interface PointerInfo {
 export type GameEvent =
   | { type: "start" }
   | { type: "score"; score: number }
-  | { type: "end"; score: number; best: number; summary: string; stats?: Record<string, number> };
+  | { type: "end"; score: number; best: number; summary: string; stats?: Record<string, number>; coins?: number };
 
 export interface GameEnv {
   canvas: HTMLCanvasElement;
@@ -44,7 +44,7 @@ export interface GameInstance {
   destroy?(): void;
 }
 
-export type GameCategory = "puzzle" | "brain" | "action" | "calm";
+export type GameCategory = "puzzle" | "brain" | "action" | "calm" | "duel" | "party";
 
 export interface GameDefinition {
   id: string;

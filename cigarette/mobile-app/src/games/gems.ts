@@ -6,6 +6,7 @@ import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engin
 import { Particles, Floaters, rgba, shade, makeSprite, roundRectPath, clamp, ease, TAU, FONT_DISPLAY, FONT_BODY, glow, rng } from "./engine/fx";
 import { Button, drawCard, glassPanel, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
+import { coinsFor } from "./engine/economy";
 
 const COLS = 7;
 const ROWS = 8;
@@ -152,6 +153,7 @@ type Phase = "idle" | "swap" | "swapBack" | "clear" | "fall";
 type State = "intro" | "play" | "over";
 
 class GemsGame implements GameInstance {
+  private earned = 0;
   private w = 0;
   private h = 0;
   private cell = 40;
@@ -472,7 +474,7 @@ class GemsGame implements GameInstance {
     this.newBest = r.isNew;
     [0, 2, 4, 7, 9].forEach((s, i) => this.env.sfx.chime(pentatonic(s + 3), 0.09, i * 0.1));
     this.env.emit({
-      type: "end",
+      type: "end", coins: (this.earned = coinsFor(this.score, 80, 5, 120)),
       score: this.score,
       best: this.best,
       summary: `3 นาทีผ่านไปแล้ว · ต่อเนื่องสูงสุด x${this.biggestCombo}`,
@@ -738,7 +740,7 @@ class GemsGame implements GameInstance {
         chips: [`ต่อเนื่อง x${this.biggestCombo}`, `สถิติ ${this.best.toLocaleString()}`],
         accent: this.newBest ? "#ffc634" : "#ff4d8d",
         buttons: [this.againBtn],
-        appear: this.stateT * 2.5,
+        appear: this.stateT * 2.5, coins: this.earned,
       });
     }
   }

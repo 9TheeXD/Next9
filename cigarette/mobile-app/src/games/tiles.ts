@@ -6,6 +6,7 @@ import { Particles, Floaters, makeSprite, roundRectPath, clamp, ease, FONT_DISPL
 import { Button, drawCard, glassPanel } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { drawFruit } from "./art/fruits";
+import { BoosterButton } from "./engine/booster";
 
 const TRAY = 7;
 
@@ -43,6 +44,7 @@ export const tilesGame: GameDefinition = {
 type State = "intro" | "play" | "win" | "lose";
 
 class TilesGame implements GameInstance {
+  private earned = 0;
   private w = 0;
   private h = 0;
   private tile = 48;
@@ -53,6 +55,9 @@ class TilesGame implements GameInstance {
   private tray: Tile[] = [];
   private history: Tile[] = [];
   private level = 0;
+  /** Tray size; the shop's extra-slot booster makes it 8 for one level. */
+  private trayCap = TRAY;
+  private bSlot = new BoosterButton("boost_slot");
   private state: State = "intro";
   private stateT = 0;
   private time = 0;
@@ -159,12 +164,12 @@ class TilesGame implements GameInstance {
 
   private slotPos(i: number) {
     const sw = this.slotW();
-    const total = sw * TRAY;
+    const total = sw * this.trayCap;
     return { x: (this.w - total) / 2 + i * sw + (sw - this.tile * 0.86) / 2, y: this.trayY + 10 };
   }
 
   private slotW() {
-    return Math.min(this.tile * 0.98, (this.w - 28) / TRAY);
+    return Math.min(this.tile * 0.98, (this.w - 28) / this.trayCap);
   }
 
   private take(t: Tile) {
@@ -217,12 +222,12 @@ class TilesGame implements GameInstance {
       [0, 2, 4, 7, 9].forEach((s, i) => this.env.sfx.chime(pentatonic(s + 5), 0.1, i * 0.09));
       const passed = this.level + 1;
       if (this.level < LEVELS.length - 1) this.env.store.set("level", String(this.level + 1));
-      this.env.emit({ type: "end", score: passed, best: passed, summary: `ผ่านด่าน ${passed}`, stats: { level: passed } });
-    } else if (this.tray.filter((t) => t.state === "tray").length >= TRAY) {
+      this.env.emit({ type: "end", coins: (this.earned = 30 + this.level * 15), score: passed, best: passed, summary: `ผ่านด่าน ${passed}`, stats: { level: passed } });
+    } else if (this.tray.filter((t) => t.state === "tray").length >= this.trayCap) {
       this.state = "lose";
       this.stateT = 0;
       this.env.sfx.tone({ freq: 300, dur: 0.5, vol: 0.08, glideTo: 180 });
-      this.env.emit({ type: "end", score: this.cleared / 3, best: this.level + 1, summary: `ด่าน ${this.level + 1}: เก็บได้ ${this.cleared / 3} ชุด`, stats: { level: this.level + 1 } });
+      this.env.emit({ type: "end", coins: (this.earned = 5 + this.cleared / 3), score: this.cleared / 3, best: this.level + 1, summary: `ด่าน ${this.level + 1}: เก็บได้ ${this.cleared / 3} ชุด`, stats: { level: this.level + 1 } });
     }
   }
 
@@ -252,6 +257,7 @@ class TilesGame implements GameInstance {
 
   private start(level: number) {
     this.level = Math.min(level, LEVELS.length - 1);
+    this.trayCap = TRAY;
     this.build();
     this.state = "play";
     this.stateT = 0;
@@ -332,6 +338,14 @@ class TilesGame implements GameInstance {
       return;
     }
     if (p.type === "down") {
+      if (this.bSlot.hit(p.x, p.y)) {
+        if (this.trayCap === TRAY && this.bSlot.consume()) {
+          this.trayCap = TRAY + 1;
+          this.env.sfx.chime(pentatonic(7), 0.08);
+          this.floaters.add("ถาดเพิ่มเป็น 8 ช่อง!", this.w / 2, this.trayY - 16, "#86efac", 20);
+        }
+        return;
+      }
       for (const b of [this.undoBtn, this.shuffleBtn]) if (b.hit(p.x, p.y)) b.pressed = true;
     }
     if (p.type !== "up") return;
@@ -341,7 +355,7 @@ class TilesGame implements GameInstance {
       this.undoBtn.pressed = this.shuffleBtn.pressed = false;
       return;
     }
-    if (this.tray.filter((t) => t.state !== "gone").length >= TRAY) return;
+    if (this.tray.filter((t) => t.state !== "gone").length >= this.trayCap) return;
     // Topmost free tile under the finger
     const s = this.tile * 0.86;
     const hits = this.tiles
@@ -379,6 +393,7 @@ class TilesGame implements GameInstance {
     this.particles.update(dt);
     this.floaters.update(dt);
     for (const b of [this.startBtn, this.nextBtn, this.retryBtn, this.undoBtn, this.shuffleBtn]) b.update(dt);
+    this.bSlot.update(dt);
     let landed = false;
     for (const t of this.tiles) {
       if (t.state !== "flying") continue;
@@ -418,6 +433,9 @@ class TilesGame implements GameInstance {
       ctx.globalAlpha = this.shuffles ? 1 : 0.4;
       this.shuffleBtn.render(ctx);
       ctx.globalAlpha = 1;
+      this.bSlot.place(w - 212, 35, 19);
+      this.bSlot.active = this.trayCap > TRAY;
+      this.bSlot.render(ctx, this.time);
     }
 
     // Board tiles, lower layers first
@@ -439,16 +457,16 @@ class TilesGame implements GameInstance {
 
     // Tray
     const sw = this.slotW();
-    const tw = sw * TRAY + 16;
+    const tw = sw * this.trayCap + 16;
     glassPanel(ctx, (w - tw) / 2, this.trayY, tw, s * 1.12 + 22, 16, 0.12);
-    for (let i = 0; i < TRAY; i++) {
+    for (let i = 0; i < this.trayCap; i++) {
       const p = this.slotPos(i);
       ctx.fillStyle = "rgba(0,0,0,0.22)";
       roundRectPath(ctx, p.x, p.y, s, s * 1.12, s * 0.16);
       ctx.fill();
     }
     const filled = this.tray.filter((t) => t.state !== "gone").length;
-    if (filled >= TRAY - 2 && this.state === "play") {
+    if (filled >= this.trayCap - 2 && this.state === "play") {
       ctx.strokeStyle = `rgba(255,120,120,${0.4 + 0.4 * Math.sin(this.time * 8)})`;
       ctx.lineWidth = 2;
       roundRectPath(ctx, (w - tw) / 2, this.trayY, tw, s * 1.12 + 22, 16);
@@ -492,7 +510,7 @@ class TilesGame implements GameInstance {
         subtitle: "เก่งมาก ใจเย็นและแม่นยำ",
         accent: "#e0a526",
         buttons: [this.nextBtn],
-        appear: this.stateT * 2.5,
+        appear: this.stateT * 2.5, coins: this.earned,
         icon: iconFn,
       });
     } else if (this.state === "lose") {
@@ -503,7 +521,7 @@ class TilesGame implements GameInstance {
         bigLabel: "ชุดที่เก็บได้",
         accent: "#e0a526",
         buttons: [this.retryBtn],
-        appear: this.stateT * 2.5,
+        appear: this.stateT * 2.5, coins: this.earned,
       });
     }
   }

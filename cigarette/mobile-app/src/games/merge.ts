@@ -6,6 +6,8 @@ import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engin
 import { Particles, Floaters, makeSprite, roundRectPath, clamp, TAU, FONT_DISPLAY, FONT_BODY, rng } from "./engine/fx";
 import { Button, drawCard, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
+import { coinsFor } from "./engine/economy";
+import { BoosterButton } from "./engine/booster";
 import { drawFruit, FRUITS } from "./art/fruits";
 
 const LEVELS = FRUITS.length;
@@ -38,6 +40,7 @@ export const mergeGame: GameDefinition = {
 type State = "intro" | "play" | "over";
 
 class MergeGame implements GameInstance {
+  private earned = 0;
   private w = 0;
   private h = 0;
   private jar = { x: 0, y: 0, w: 0, h: 0 };
@@ -66,6 +69,8 @@ class MergeGame implements GameInstance {
   private againBtn = new Button("เล่นอีกครั้ง", "#ff7a59");
   private rand = rng(Date.now() % 77777);
   private clouds: { x: number; y: number; s: number; v: number }[] = [];
+  private bShake = new BoosterButton("boost_shake");
+  private bPick = new BoosterButton("boost_pick");
 
   constructor(private env: GameEnv) {
     this.best = parseInt(env.store.get("best") || "0", 10) || 0;
@@ -204,7 +209,7 @@ class MergeGame implements GameInstance {
     this.best = r.best;
     this.newBest = r.isNew;
     this.env.sfx.tone({ freq: 330, dur: 0.6, vol: 0.09, glideTo: 180 });
-    this.env.emit({ type: "end", score: this.score, best: this.best, summary: `ผลไม้ใหญ่สุด: ${FRUITS[this.biggest].name}`, stats: { biggest: this.biggest } });
+    this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 15, 5, 150)), score: this.score, best: this.best, summary: `ผลไม้ใหญ่สุด: ${FRUITS[this.biggest].name}`, stats: { biggest: this.biggest } });
   }
 
   resize(w: number, h: number) {
@@ -277,6 +282,31 @@ class MergeGame implements GameInstance {
       }
       return;
     }
+    if (p.type === "down" && this.bShake.hit(p.x, p.y)) {
+      if (this.bodies.length && this.bShake.consume()) {
+        // Jolt every fruit up and sideways so the pile can resettle
+        for (const b of this.bodies) {
+          b.vy -= 260 + this.rand() * 320;
+          b.vx += (this.rand() - 0.5) * 360;
+        }
+        this.dangerT = 0;
+        this.env.sfx.noise({ dur: 0.4, vol: 0.08, freq: 600, type: "bandpass" });
+      }
+      return;
+    }
+    if (p.type === "down" && this.bPick.hit(p.x, p.y)) {
+      if (this.bodies.length && this.bPick.consume()) {
+        const smallest = [...this.bodies].sort((a, b) => a.level - b.level).slice(0, 3);
+        for (const b of smallest) {
+          b.dead = true;
+          this.particles.burst(b.x, b.y, "#ffffff", 12, { speed: 140, size: 3, gravity: -60, life: 0.6 });
+        }
+        this.bodies = this.bodies.filter((b) => !b.dead);
+        this.dangerT = 0;
+        this.env.sfx.chime(pentatonic(7), 0.08);
+      }
+      return;
+    }
     if (p.type === "down") {
       this.aiming = true;
       this.aimX = p.x;
@@ -312,6 +342,8 @@ class MergeGame implements GameInstance {
     this.floaters.update(dt);
     this.startBtn.update(dt);
     this.againBtn.update(dt);
+    this.bShake.update(dt);
+    this.bPick.update(dt);
     for (const c of this.clouds) {
       c.x += c.v * dt;
       if (c.x > 1.2) c.x = -0.2;
@@ -439,6 +471,13 @@ class MergeGame implements GameInstance {
     drawFruit(ctx, this.next, nr, true);
     ctx.restore();
 
+    if (this.state === "play") {
+      this.bShake.place(w / 2 - 32, 44, 19);
+      this.bPick.place(w / 2 + 32, 44, 19);
+      this.bShake.render(ctx, this.time);
+      this.bPick.render(ctx, this.time);
+    }
+
     // Evolution strip under the HUD
     const stripY = 98;
     const n = LEVELS;
@@ -479,7 +518,7 @@ class MergeGame implements GameInstance {
         chips: [`สถิติ ${this.best.toLocaleString()}`],
         accent: this.newBest ? "#ffc634" : "#ff7a59",
         buttons: [this.againBtn],
-        appear: this.stateT * 2.5,
+        appear: this.stateT * 2.5, coins: this.earned,
       });
     }
   }

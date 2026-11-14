@@ -9,6 +9,8 @@ import {
 } from "./engine/fx";
 import { Button, drawCard, glassPanel, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
+import { coinsFor, wallet } from "./engine/economy";
+import { drawBlockSkin } from "./art/skins";
 
 const COLS = 10;
 const ROWS = 20;
@@ -106,6 +108,7 @@ export const blocksGame: GameDefinition = {
 type State = "intro" | "play" | "over";
 
 class BlocksGame implements GameInstance {
+  private earned = 0;
   private w = 0;
   private h = 0;
   private cell = 24;
@@ -366,7 +369,7 @@ class BlocksGame implements GameInstance {
     this.newBest = r.isNew;
     this.env.sfx.tone({ freq: 392, dur: 0.6, vol: 0.1, glideTo: 196 });
     this.env.emit({
-      type: "end",
+      type: "end", coins: (this.earned = coinsFor(this.score, 60, 5, 120)),
       score: this.score,
       best: this.best,
       summary: `ล้างไป ${this.lines} แถว · เลเวล ${this.level}`,
@@ -401,10 +404,13 @@ class BlocksGame implements GameInstance {
     this.by = Math.round(top + (h - top - bottom - this.cell * ROWS) / 2);
     this.sideX = this.bx + boardW + 10;
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    // Block look bought in the shop (classic is the original jelly block)
+    const skin = wallet.equipped("blockSkin");
+    const paint = (c: CanvasRenderingContext2D, size: number, col: string) => (skin && skin !== "block_classic" ? drawBlockSkin(c, size, col, skin) : drawBlock(c, size, col));
     for (const k of KINDS) {
-      this.sprites[k] = makeSprite(this.cell, this.cell, dpr, (c) => drawBlock(c, this.cell, COLORS[k]));
+      this.sprites[k] = makeSprite(this.cell, this.cell, dpr, (c) => paint(c, this.cell, COLORS[k]));
       const m = Math.round(this.cell * 0.62);
-      this.miniSprites[k] = makeSprite(m, m, dpr, (c) => drawBlock(c, m, COLORS[k]));
+      this.miniSprites[k] = makeSprite(m, m, dpr, (c) => paint(c, m, COLORS[k]));
     }
     this.bg = makeSprite(w, h, dpr, (c) => {
       const g = c.createLinearGradient(0, 0, 0, h);
@@ -631,7 +637,7 @@ class BlocksGame implements GameInstance {
         chips: [`${this.lines} แถว`, `เลเวล ${this.level}`, `สถิติ ${this.best.toLocaleString()}`],
         accent: this.newBest ? "#ffcf3a" : "#7c5cff",
         buttons: [this.againBtn],
-        appear: this.stateT * 2.5,
+        appear: this.stateT * 2.5, coins: this.earned,
       });
     }
   }
