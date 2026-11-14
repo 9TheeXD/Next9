@@ -718,3 +718,7 @@
 .pb-log-bad {
   color: #c0263d;
 }
+.pb-log-sheet .pb-tl-top {
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
