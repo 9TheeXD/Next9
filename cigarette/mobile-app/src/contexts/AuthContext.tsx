@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNetwork } from "@/contexts/NetworkContext";
 import type { UserProfile, APIResponse, AuthResponse, UserRole } from "@/types";
 import { Alert, Platform, DeviceEventEmitter } from "react-native";
+import { getDeviceKey, claimDeviceKeyOnce, authErrorMessage } from "@/lib/deviceKey";
 
 const OFFLINE_USER_KEY = "@ciga_offline_user";
 
@@ -72,6 +73,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(response.data);
         AsyncStorage.setItem(OFFLINE_USER_KEY, JSON.stringify(response.data)).catch(console.error);
         setIsOfflineMode(false); // Reset offline mode
+        if (response.data.displayId && response.data.role !== "ADMIN") {
+          claimDeviceKeyOnce(response.data.displayId, (deviceKey) => api.claimDeviceKey(deviceKey));
+        }
       } else {
         // Real unauthorized error from server
         setUser(null);
@@ -169,9 +173,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role: string;
       targetDisplayId?: string;
     }) => {
-      const response = (await api.register(data)) as APIResponse<AuthResponse>;
+      let response: APIResponse<AuthResponse>;
+      try {
+        const deviceKey = await getDeviceKey(data.displayId);
+        response = (await api.register({ ...data, deviceKey })) as APIResponse<AuthResponse>;
+      } catch (e: any) {
+        throw new Error(authErrorMessage(e?.message || "Registration failed"));
+      }
       if (!response.success || !response.data) {
-        throw new Error(response.error || "Registration failed");
+        throw new Error(authErrorMessage(response.error || "Registration failed"));
       }
       await setToken(response.data.token);
       setUser(response.data.user);

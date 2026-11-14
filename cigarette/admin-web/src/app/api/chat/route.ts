@@ -1,10 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { authenticateRequest } from '@/lib/auth';
 
-export async function GET(req: Request) {
+const unauthorized = () =>
+  NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+const MAX_LENGTH = 1000;
+
+export async function GET(req: NextRequest) {
+  if (!authenticateRequest(req)) return unauthorized();
   try {
     const { searchParams } = new URL(req.url);
-    const take = parseInt(searchParams.get('take') || '30', 10);
+    const take = Math.min(Math.max(parseInt(searchParams.get('take') || '30', 10) || 30, 1), 100);
     const cursor = searchParams.get('cursor');
 
     const query: any = {
@@ -42,20 +48,31 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error('Fetch chat messages error:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to fetch messages' },
+      { success: false, error: 'Failed to fetch messages' },
       { status: 500 }
     );
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = authenticateRequest(req);
+  if (!auth) return unauthorized();
   try {
     const body = await req.json();
-    const { userId, content, alias } = body;
+    // The sender is always the logged-in user; a userId in the body is ignored.
+    const userId = auth.userId;
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+    const alias = typeof body.alias === 'string' ? body.alias.trim().slice(0, 40) : null;
 
-    if (!userId || (!content && content !== '')) {
+    if (!content) {
       return NextResponse.json(
-        { success: false, error: 'User ID and content are required' },
+        { success: false, error: 'Content is required' },
+        { status: 400 }
+      );
+    }
+    if (content.length > MAX_LENGTH) {
+      return NextResponse.json(
+        { success: false, error: 'Message is too long' },
         { status: 400 }
       );
     }
@@ -63,7 +80,7 @@ export async function POST(req: Request) {
     const newMessage = await prisma.chatMessage.create({
       data: {
         userId,
-        content: content.trim(),
+        content,
         alias: alias || null,
       },
       include: {
@@ -85,7 +102,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error('Send chat message error:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to send message' },
+      { success: false, error: 'Failed to send message' },
       { status: 500 }
     );
   }

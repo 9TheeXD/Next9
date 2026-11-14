@@ -1,599 +1,307 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, Pressable, Linking, Alert, Platform, DeviceEventEmitter, BackHandler } from "react-native";
-import { useFocusEffect, useRouter, useNavigation } from "expo-router";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, Pressable, Linking, Platform, DeviceEventEmitter, BackHandler } from "react-native";
+import { useFocusEffect, useNavigation, useLocalSearchParams, useRouter } from "expo-router";
+import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useAlert } from "@/contexts/AlertContext";
-import BreathingExercise from "@/components/BreathingExercise";
-import DistractionGame from "@/components/DistractionGame";
-import MemoryMatchGame from "@/components/MemoryMatchGame";
-import MathRushGame from "@/components/MathRushGame";
-import DinoRunnerGame from "@/components/DinoRunnerGame";
-import TapChallengeGame from "@/components/TapChallengeGame";
-import TetrisGame from "@/components/TetrisGame";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAppSounds } from "@/hooks/useAppSounds";
-import TapReactionGame from "@/components/TapReactionGame";
+import { api } from "@/lib/api";
+import { loadPlan, insights, type Insights } from "@/lib/quitPlan";
+import { findGame, type GameDefinition } from "@/games";
 import CravingJournal from "@/components/CravingJournal";
 import VoiceMessages from "@/components/VoiceMessages";
-import { api } from "@/lib/api";
 import AlternativeActivities from "@/components/AlternativeActivities";
+import GameLibrary from "@/components/GameLibrary";
+import GameHost from "@/components/GameHost";
+import CravingRescue from "@/components/CravingRescue";
+import MoveBreak from "@/components/MoveBreak";
+import SlipRecovery from "@/components/SlipRecovery";
 
-import { useGamification } from "@/contexts/GamificationContext";
-import { useAuth } from "@/contexts/AuthContext";
+type SOSView = "MENU" | "RESCUE" | "GAME" | "MOVE" | "SLIP" | "JOURNAL" | "VOICE_MSG" | "ACTIVITIES";
+const VIEWS: SOSView[] = ["MENU", "RESCUE", "GAME", "MOVE", "SLIP", "JOURNAL", "VOICE_MSG", "ACTIVITIES"];
 
-type SOSView = "MENU" | "BREATHING" | "GAME_STROOP" | "GAME_MEMORY" | "GAME_MATH" | "GAME_REACTION" | "GAME_DINO" | "GAME_TAP_CHALLENGE" | "GAME_TETRIS" | "JOURNAL" | "VOICE_MSG" | "ACTIVITIES";
+const TAB_BAR = {
+  backgroundColor: "#f0fdfa",
+  borderTopColor: "rgba(0,0,0,0.04)",
+  borderTopWidth: 1,
+  height: 65,
+  paddingBottom: 8,
+  paddingTop: 6,
+};
 
 export default function SOSScreen() {
   const { showAlert } = useAlert();
-  const [currentView, setCurrentView] = useState<SOSView>("MENU");
-  const router = useRouter();
+  const { user } = useAuth();
+  const { playClick } = useAppSounds();
   const navigation = useNavigation();
+  const params = useLocalSearchParams<{ view?: string; game?: string }>();
+  const [currentView, setCurrentView] = useState<SOSView>("MENU");
+  const [game, setGame] = useState<GameDefinition | null>(null);
+  const [stats, setStats] = useState<Insights | null>(null);
+  const router = useRouter();
 
+  // Full-screen tools hide the tab bar
   useEffect(() => {
-    navigation.setOptions({
-      tabBarStyle: { 
-        display: currentView === "MENU" ? "flex" : "none",
-        backgroundColor: "#f0fdfa",
-        borderTopColor: "rgba(0,0,0,0.04)",
-        borderTopWidth: 1,
-        height: 65,
-        paddingBottom: 8,
-        paddingTop: 6,
-      }
-    });
+    navigation.setOptions({ tabBarStyle: { ...TAB_BAR, display: currentView === "MENU" ? "flex" : "none" } } as any);
   }, [currentView, navigation]);
 
-  // Handle hardware back on Web (popstate)
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      const handlePop = () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const v = urlParams.get('view') as SOSView;
-        changeView(v || "MENU");
-      };
-      window.addEventListener('popstate', handlePop);
-      return () => window.removeEventListener('popstate', handlePop);
-    }
-  }, []);
-
-  const changeView = (v: SOSView) => {
+  const changeView = useCallback((v: SOSView) => {
     if (v === "MENU") {
-      if (Platform.OS === 'web' && currentView !== "MENU") {
+      if (Platform.OS === "web" && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("view")) {
         window.history.back();
       }
       setCurrentView("MENU");
+      setGame(null);
     } else {
-      if (Platform.OS === 'web') {
-        window.history.pushState({}, "", `?view=${v}`);
-      }
+      if (Platform.OS === "web" && typeof window !== "undefined") window.history.pushState({}, "", `?view=${v}`);
       setCurrentView(v);
     }
-  };
+  }, []);
 
-  const { playClick, playNav } = useAppSounds();
-  const { completeDailyMission } = useGamification();
-  const { user } = useAuth();
+  // Open straight into a view, e.g. /sos?view=RESCUE from the home screen. The param is cleared
+  // afterwards so the next link with the same view opens it again.
+  useEffect(() => {
+    const v = (params.view || "").toUpperCase() as SOSView;
+    if (!v || !VIEWS.includes(v) || v === "MENU") return;
+    if (v === "GAME") {
+      const g = findGame(params.game || "blocks");
+      if (!g) return;
+      setGame(g);
+    }
+    setCurrentView(v);
+    router.setParams({ view: undefined, game: undefined } as any);
+  }, [params.view, params.game, router]);
+
+  // Browser back button returns to the menu
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const onPop = () => {
+      const v = (new URLSearchParams(window.location.search).get("view") || "MENU") as SOSView;
+      setCurrentView(VIEWS.includes(v) ? v : "MENU");
+      if (v === "MENU") setGame(null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('reset_tab_sos', () => {
-      if (currentView !== "MENU") changeView("MENU");
-    });
+    const sub = DeviceEventEmitter.addListener("reset_tab_sos", () => changeView("MENU"));
     return () => sub.remove();
-  }, [currentView, router]);
+  }, [changeView]);
 
   useFocusEffect(
     useCallback(() => {
-      const onBackPress = () => {
+      loadPlan(user?.id).then((p) => setStats(insights(p)));
+      const onBack = () => {
         if (currentView !== "MENU") {
           changeView("MENU");
           return true;
         }
         return false;
       };
-      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      const sub = BackHandler.addEventListener("hardwareBackPress", onBack);
       return () => sub.remove();
-    }, [currentView, router])
+    }, [currentView, changeView, user?.id])
   );
 
-  if (currentView === "BREATHING") {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.subViewHeader}>
-          <Pressable onPress={() => changeView("MENU")} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← กลับ</Text>
-          </Pressable>
-          <Text style={styles.subViewTitle}>การฝึกหายใจ</Text>
-        </View>
-        <BreathingExercise />
-      </SafeAreaView>
-    );
-  }
-
-  if (currentView === "GAME_STROOP") {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.subViewHeader}>
-          <Pressable onPress={() => changeView("MENU")} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← กลับ</Text>
-          </Pressable>
-          <Text style={styles.subViewTitle}>เกมแยกประสาทสี (Stroop)</Text>
-        </View>
-        <View style={{flex: 1}}><DistractionGame /></View>
-      </SafeAreaView>
-    );
-  }
-
-  if (currentView === "GAME_MEMORY") {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.subViewHeader}>
-          <Pressable onPress={() => changeView("MENU")} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← กลับ</Text>
-          </Pressable>
-          <Text style={styles.subViewTitle}>เกมจับคู่ความจำ</Text>
-        </View>
-        <View style={{flex: 1}}><MemoryMatchGame /></View>
-      </SafeAreaView>
-    );
-  }
-
-  if (currentView === "GAME_MATH") {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.subViewHeader}>
-          <Pressable onPress={() => changeView("MENU")} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← กลับ</Text>
-          </Pressable>
-          <Text style={styles.subViewTitle}>เกมคณิตคิดเร็ว</Text>
-        </View>
-        <View style={{flex: 1}}><MathRushGame /></View>
-      </SafeAreaView>
-    );
-  }
-
-  if (currentView === "GAME_REACTION") {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.subViewHeader}>
-          <Pressable onPress={() => changeView("MENU")} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← กลับ</Text>
-          </Pressable>
-          <Text style={styles.subViewTitle}>เกมทดสอบปฏิกิริยา</Text>
-        </View>
-        <View style={{flex: 1}}><TapReactionGame /></View>
-      </SafeAreaView>
-    );
-  }
-
-  if (currentView === "GAME_DINO") {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.subViewHeader}>
-          <Pressable onPress={() => changeView("MENU")} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← กลับ</Text>
-          </Pressable>
-          <Text style={styles.subViewTitle}>ไดโนวิ่ง</Text>
-        </View>
-        <View style={{flex: 1}}>
-          <DinoRunnerGame />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (currentView === "GAME_TAP_CHALLENGE") {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.subViewHeader}>
-          <Pressable onPress={() => changeView("MENU")} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← กลับ</Text>
-          </Pressable>
-          <Text style={styles.subViewTitle}>ชาเลนจ์แตะ</Text>
-        </View>
-        <View style={{flex: 1}}>
-          <TapChallengeGame />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (currentView === "GAME_TETRIS") {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.subViewHeader}>
-          <Pressable onPress={() => changeView("MENU")} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← กลับ</Text>
-          </Pressable>
-          <Text style={styles.subViewTitle}>Tetris</Text>
-        </View>
-        <View style={{flex: 1}}>
-          <TetrisGame />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (currentView === "JOURNAL") {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.subViewHeader}>
-          <Pressable onPress={() => changeView("MENU")} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← กลับ</Text>
-          </Pressable>
-          <Text style={styles.subViewTitle}>บันทึกพฤติกรรม</Text>
-        </View>
-        <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} >
-          <CravingJournal onLogComplete={() => changeView("MENU")} />
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  if (currentView === "VOICE_MSG") {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.subViewHeader}>
-          <Pressable onPress={() => changeView("MENU")} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← กลับ</Text>
-          </Pressable>
-          <Text style={styles.subViewTitle}>กำลังใจจากเรา</Text>
-        </View>
-        <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} >
-          <VoiceMessages onClose={() => changeView("MENU")} />
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  if (currentView === "ACTIVITIES") {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.subViewHeader}>
-          <Pressable onPress={() => changeView("MENU")} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← กลับ</Text>
-          </Pressable>
-          <Text style={styles.subViewTitle}>กิจกรรมเบี่ยงเบนความสนใจ</Text>
-        </View>
-        <AlternativeActivities onClose={() => changeView("MENU")} />
-      </SafeAreaView>
-    );
-  }
+  const openGame = (g: GameDefinition) => {
+    playClick();
+    setGame(g);
+    changeView("GAME");
+  };
 
   const handleFamilyAlert = async () => {
     try {
       await api.sendFamilyAlert();
-      showAlert({ title: "ส่งแจ้งเตือนครอบครัวแล้ว", message: "ระบบได้ส่งข้อความขอความช่วยเหลือไปยังผู้ติดต่อฉุกเฉินของคุณเรียบร้อยแล้ว", type: "success" });
-    } catch (e) {
-      showAlert({ title: "เกิดข้อผิดพลาด", message: "ไม่สามารถส่งแจ้งเตือนได้ หรือยังไม่มีผู้ติดตาม", type: "error" });
+      showAlert({ title: "ส่งแจ้งเตือนครอบครัวแล้ว", message: "แจ้งคนที่ติดตามคุณแล้วว่าตอนนี้ต้องการกำลังใจ", type: "success" });
+    } catch {
+      showAlert({ title: "ส่งไม่ได้", message: "ยังไม่มีครอบครัวที่ติดตามคุณ หรือเครือข่ายขัดข้อง", type: "error" });
     }
   };
 
   const handleQuickCall = () => {
-    playClick();
     if (!user?.emergencyContact) {
-      showAlert({ 
-        title: "ยังไม่มีเบอร์ติดต่อ", 
-        message: "กรุณาตั้งค่าเบอร์คนสนิทในหน้า Profile ก่อนครับ", 
-        type: "warning" 
-      });
+      showAlert({ title: "ยังไม่มีเบอร์คนสนิท", message: "ตั้งค่าเบอร์คนสนิทได้ในหน้าโปรไฟล์", type: "warning" });
       return;
-    };
+    }
     Linking.openURL(`tel:${user.emergencyContact.trim()}`);
   };
 
-  const handle1600Call = () => {
-    Linking.openURL('tel:1600');
-  };
+  // ── Full-screen views ─────────────────────────────────────────────────────
+  if (currentView === "RESCUE") {
+    return (
+      <View style={styles.full}>
+        <CravingRescue onClose={() => changeView("MENU")} />
+      </View>
+    );
+  }
+  if (currentView === "GAME" && game) {
+    return (
+      <View style={styles.full}>
+        <GameHost game={game} onExit={() => changeView("MENU")} />
+      </View>
+    );
+  }
+  if (currentView === "MOVE" || currentView === "SLIP") {
+    return (
+      <LinearGradient colors={["#0b1027", "#1e1b4b", "#0f3b47"]} style={styles.full}>
+        <View style={styles.darkHeader}>
+          <Pressable onPress={() => changeView("MENU")} style={styles.darkBack} accessibilityRole="button" accessibilityLabel="กลับ">
+            <Feather name="chevron-left" size={22} color="#fff" />
+            <Text style={styles.darkBackText}>กลับ</Text>
+          </Pressable>
+          <Text style={styles.darkTitle}>{currentView === "MOVE" ? "ขยับร่างกาย 4 นาที" : "เผลอสูบไป"}</Text>
+          <View style={{ width: 70 }} />
+        </View>
+        {currentView === "MOVE" ? <MoveBreak onDone={() => changeView("MENU")} /> : <SlipRecovery onDone={() => changeView("MENU")} />}
+      </LinearGradient>
+    );
+  }
+  if (currentView === "JOURNAL" || currentView === "VOICE_MSG" || currentView === "ACTIVITIES") {
+    const title = currentView === "JOURNAL" ? "บันทึกความอยาก" : currentView === "VOICE_MSG" ? "ข้อความให้กำลังใจ" : "กิจกรรมทดแทน";
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.subViewHeader}>
+          <Pressable onPress={() => changeView("MENU")} style={styles.backButton} accessibilityRole="button">
+            <Feather name="chevron-left" size={22} color="#0f766e" />
+            <Text style={styles.backButtonText}>กลับ</Text>
+          </Pressable>
+          <Text style={styles.subViewTitle}>{title}</Text>
+        </View>
+        {currentView === "ACTIVITIES" ? (
+          <AlternativeActivities onClose={() => changeView("MENU")} />
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {currentView === "JOURNAL" ? (
+              <CravingJournal onLogComplete={() => changeView("MENU")} />
+            ) : (
+              <VoiceMessages onClose={() => changeView("MENU")} />
+            )}
+          </ScrollView>
+        )}
+      </SafeAreaView>
+    );
+  }
 
-  const handle1323Call = () => {
-    Linking.openURL('tel:1323');
-  };
-
+  // ── Menu ──────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <Feather name="alert-triangle" size={28} color="#f59e0b" />
-            <Text style={styles.title}>ช่วยเหลือฉุกเฉิน (SOS)</Text>
-          </View>
-          <Text style={styles.subtitle}>
-            เลือกวิธีรับมือกับความอยากบุหรี่ที่เหมาะกับคุณในตอนนี้
-          </Text>
-        </View>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        <Text style={styles.title}>ช่วยเหลือตอนอยากสูบ</Text>
+        <Text style={styles.subtitle}>ความอยากแต่ละครั้งมักเบาลงภายในไม่กี่นาที เลือกวิธีที่ช่วยให้ผ่านช่วงนี้ไปได้</Text>
 
-        <Text style={styles.sectionHeader}>เครื่องมือช่วยเหลือ</Text>
-
-        {/* Breathing Exercise */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); changeView("BREATHING"); }}>
-          <View style={styles.sosIconContainer}>
-            <Feather name="wind" size={24} color="#7dd3fc" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>ฝึกหายใจ 1 นาที</Text>
-            <Text style={styles.sosDesc}>
-              ทำตามการฝึกหายใจเพื่อสงบความอยาก
-            </Text>
-          </View>
+        <Pressable
+          onPress={() => {
+            playClick();
+            changeView("RESCUE");
+          }}
+          style={({ pressed }) => [styles.heroWrap, pressed && { transform: [{ scale: 0.985 }] }]}
+          accessibilityRole="button"
+          accessibilityLabel="ฉันอยากสูบตอนนี้ เริ่มขั้นตอนรับมือ"
+        >
+          <LinearGradient colors={["#4f46e5", "#7c3aed", "#db2777"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+            <View style={styles.heroIcon}>
+              <Feather name="life-buoy" size={30} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.heroTitle}>ฉันอยากสูบตอนนี้</Text>
+              <Text style={styles.heroSub}>ทำทีละขั้น วัดความอยากก่อน-หลัง ใช้เวลาราว 3–5 นาที</Text>
+            </View>
+            <Feather name="arrow-right" size={24} color="#fff" />
+          </LinearGradient>
         </Pressable>
 
-        {/* Voice Messages */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); changeView("VOICE_MSG"); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(16, 185, 129, 0.15)" }]}>
-            <Feather name="mic" size={24} color="#10b981" />
+        {stats && stats.total > 0 ? (
+          <View style={styles.statsRow}>
+            <Stat value={`${stats.resisted}`} label="ครั้งที่ผ่านความอยาก" color="#0f766e" />
+            <Stat value={stats.avgDrop !== null ? `−${stats.avgDrop.toFixed(1)}` : "–"} label="ความอยากลดลงเฉลี่ย" color="#7c3aed" />
+            <Stat value={`${stats.thisWeek}`} label="ครั้งในสัปดาห์นี้" color="#db2777" />
           </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>ข้อความให้กำลังใจ</Text>
-            <Text style={styles.sosDesc}>
-              ฟังเสียงให้กำลังใจเมื่อคุณรู้สึกท้อแท้
-            </Text>
-          </View>
-        </Pressable>
+        ) : null}
 
-        <Text style={styles.sectionHeader}>เบี่ยงเบนความสนใจ</Text>
+        <Text style={styles.sectionHeader}>เกมเบี่ยงความสนใจ</Text>
+        <GameLibrary onPlay={openGame} />
 
-        {/* Distraction: Stroop */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); completeDailyMission('minigame'); api.postLog({ gamesPlayed: 1 }).catch(() => {}); changeView("GAME_STROOP"); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(251,191,36,0.15)" }]}>
-            <Feather name="aperture" size={24} color="#fbbf24" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>เกมแยกประสาทสี (Stroop)</Text>
-            <Text style={styles.sosDesc}>
-              เบี่ยงเบนความคิดด้วยเกมจิตวิทยาที่ต้องใช้สมาธิสูง
-            </Text>
-          </View>
-        </Pressable>
+        <Text style={styles.sectionHeader}>เครื่องมืออื่นๆ</Text>
+        <Row icon="activity" color="#14b8a6" title="ขยับร่างกาย 4 นาที" desc="6 ท่าง่ายๆ ในห้อง ออกกำลังสั้นๆ ช่วยลดความอยาก" onPress={() => { playClick(); changeView("MOVE"); }} />
+        <Row icon="mic" color="#10b981" title="ข้อความให้กำลังใจ" desc="ฟังเสียงให้กำลังใจเมื่อรู้สึกท้อ" onPress={() => { playClick(); changeView("VOICE_MSG"); }} />
+        <Row icon="edit-3" color="#0ea5e9" title="บันทึกความอยาก" desc="จดสิ่งกระตุ้นและความรู้สึก เพื่อรู้ทันตัวเอง" onPress={() => { playClick(); changeView("JOURNAL"); }} />
+        <Row icon="coffee" color="#f59e0b" title="กิจกรรมทดแทน" desc="ไอเดียสิ่งที่ทำแทนการสูบ" onPress={() => { playClick(); changeView("ACTIVITIES"); }} />
+        <Row icon="refresh-ccw" color="#f43f5e" title="เผลอสูบไป" desc="ไม่ต้องโทษตัวเอง มาวางแผนรับมือครั้งหน้ากัน" onPress={() => { playClick(); changeView("SLIP"); }} />
 
-        {/* Distraction: Memory */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); completeDailyMission('minigame'); api.postLog({ gamesPlayed: 1 }).catch(() => {}); api.postActionLog({ action: "GAME_PLAYED", details: `เล่นเกมเพื่อเบี่ยงเบนความสนใจ` }).catch(() => {}); changeView("GAME_MEMORY"); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(52, 211, 153, 0.15)" }]}>
-            <Feather name="grid" size={24} color="#34d399" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>เกมจับคู่ความจำ (Memory)</Text>
-            <Text style={styles.sosDesc}>
-              ฝึกความจำระยะสั้น ดึงจุดโฟกัสออกจากความอยากบุหรี่
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* Distraction: Math */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); completeDailyMission('minigame'); api.postLog({ gamesPlayed: 1 }).catch(() => {}); api.postActionLog({ action: "GAME_PLAYED", details: `เล่นเกมเพื่อเบี่ยงเบนความสนใจ` }).catch(() => {}); changeView("GAME_MATH"); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(244, 114, 182, 0.15)" }]}>
-            <Feather name="hash" size={24} color="#f472b6" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>เกมคณิตคิดเร็ว (Math Rush)</Text>
-            <Text style={styles.sosDesc}>
-              กระตุ้นสมองซีกซ้ายด้วยการบวกเลขแบบรวดเร็ว
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* Distraction: Reaction */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); completeDailyMission('minigame'); api.postLog({ gamesPlayed: 1 }).catch(() => {}); api.postActionLog({ action: "GAME_PLAYED", details: `เล่นเกมเพื่อเบี่ยงเบนความสนใจ` }).catch(() => {}); changeView("GAME_REACTION"); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(167, 139, 250, 0.15)" }]}>
-            <Feather name="zap" size={24} color="#7dd3fc" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>ทดสอบปฏิกิริยา (Reaction)</Text>
-            <Text style={styles.sosDesc}>
-              วัดความไวในการตอบสนอง ช่วยเบี่ยงเบนความสนใจได้ดีเยี่ยม
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* Distraction: Dino Runner */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); completeDailyMission('minigame'); api.postLog({ gamesPlayed: 1 }).catch(() => {}); api.postActionLog({ action: "GAME_PLAYED", details: `เล่นเกมเพื่อเบี่ยงเบนความสนใจ` }).catch(() => {}); changeView("GAME_DINO"); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(34, 197, 94, 0.15)" }]}>
-            <MaterialCommunityIcons name="google-downasaur" size={24} color="#22c55e" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>ไดโนวิ่ง (Dino Runner)</Text>
-            <Text style={styles.sosDesc}>
-              กระโดดหลบสิ่งกีดขวาง! เกมในตำนานของ Chrome
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* Distraction: Tap Challenge */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); completeDailyMission('minigame'); api.postLog({ gamesPlayed: 1 }).catch(() => {}); api.postActionLog({ action: "GAME_PLAYED", details: `เล่นเกมเพื่อเบี่ยงเบนความสนใจ` }).catch(() => {}); changeView("GAME_TAP_CHALLENGE"); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(239, 68, 68, 0.15)" }]}>
-            <Feather name="target" size={24} color="#ef4444" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>ชาเลนจ์แตะ (Tap Challenge)</Text>
-            <Text style={styles.sosDesc}>
-              กดปุ่มตามคำสั่งให้ถูกต้อง! ฝึกสมาธิและความจำ
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* Distraction: Tetris */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); completeDailyMission('minigame'); api.postLog({ gamesPlayed: 1 }).catch(() => {}); api.postActionLog({ action: "GAME_PLAYED", details: `เล่นเกมเพื่อเบี่ยงเบนความสนใจ` }).catch(() => {}); changeView("GAME_TETRIS"); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(168, 85, 247, 0.15)" }]}>
-            <MaterialCommunityIcons name="wall" size={24} color="#a855f7" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>Tetris</Text>
-            <Text style={styles.sosDesc}>
-              ต่อบล็อกทำลายแถว คลาสสิกและเพลินสุดๆ
-            </Text>
-          </View>
-        </Pressable>
-
-
-
-        {/* Alternative Activities */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); changeView("ACTIVITIES"); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(245, 158, 11, 0.15)" }]}>
-            <Feather name="coffee" size={24} color="#f59e0b" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>กิจกรรมทางเลือกอื่นๆ</Text>
-            <Text style={styles.sosDesc}>
-              คำแนะนำการทำกิจกรรมต่างๆ ทดแทนการสูบบุหรี่
-            </Text>
-          </View>
-        </Pressable>
-
-        <Text style={styles.sectionHeader}>ติดต่อฉุกเฉิน</Text>
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); changeView("JOURNAL"); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(56, 189, 248, 0.15)" }]}>
-            <Feather name="edit-3" size={24} color="#38bdf8" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>บันทึกความอยาก (Journal)</Text>
-            <Text style={styles.sosDesc}>
-              จดบันทึกตัวกระตุ้นและความรู้สึกเพื่อทำความเข้าใจตัวเอง
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* 1600 Call */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); handle1600Call(); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(220, 38, 38, 0.15)" }]}>
-            <Feather name="phone-call" size={24} color="#dc2626" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>โทรสายด่วน 1600</Text>
-            <Text style={styles.sosDesc}>
-              สายด่วนเลิกบุหรี่แห่งชาติ โทรฟรี 
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* 1323 Call */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); handle1323Call(); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(139, 92, 246, 0.15)" }]}>
-            <Feather name="heart" size={24} color="#8b5cf6" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>สายด่วนสุขภาพจิต 1323</Text>
-            <Text style={styles.sosDesc}>
-              ปรึกษาปัญหาความเครียดและสุขภาพจิต โทรฟรี
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* Quick Call */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); handleQuickCall(); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(59, 130, 246, 0.15)" }]}>
-            <Feather name="smartphone" size={24} color="#3b82f6" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>โทรด่วนคนสนิท</Text>
-            <Text style={styles.sosDesc}>
-              โทรหาผู้ติดต่อฉุกเฉินที่คุณตั้งไว้ในโปรไฟล์
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* Family Alert */}
-        <Pressable style={styles.sosCard} onPress={() => { playClick(); handleFamilyAlert(); }}>
-          <View style={[styles.sosIconContainer, { backgroundColor: "rgba(239, 68, 68, 0.15)" }]}>
-            <Feather name="alert-circle" size={24} color="#ef4444" />
-          </View>
-          <View style={styles.sosContent}>
-            <Text style={styles.sosTitle}>ส่งแจ้งเตือนครอบครัว</Text>
-            <Text style={styles.sosDesc}>
-              ส่งข้อความขอความช่วยเหลือไปยังครอบครัว
-            </Text>
-          </View>
-        </Pressable>
-
+        <Text style={styles.sectionHeader}>คุยกับคน</Text>
+        <Row icon="phone-call" color="#dc2626" title="โทร 1600 สายเลิกบุหรี่" desc="โทรฟรี ผู้เชี่ยวชาญช่วยวางแผนเลิกและให้กำลังใจ" onPress={() => Linking.openURL("tel:1600")} />
+        <Row icon="smartphone" color="#3b82f6" title="โทรหาคนสนิท" desc="ผู้ติดต่อที่คุณตั้งไว้ในโปรไฟล์" onPress={() => { playClick(); handleQuickCall(); }} />
+        <Row icon="bell" color="#ea580c" title="ขอกำลังใจจากครอบครัว" desc="ส่งแจ้งเตือนไปหาคนที่ติดตามคุณในแอป" onPress={() => { playClick(); handleFamilyAlert(); }} />
+        <Row icon="heart" color="#8b5cf6" title="สายด่วนสุขภาพจิต 1323" desc="เครียด กังวล หรือรู้สึกไม่ไหว โทรฟรี" onPress={() => Linking.openURL("tel:1323")} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+function Stat({ value, label, color }: { value: string; label: string; color: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function Row({ icon, color, title, desc, onPress }: { icon: string; color: string; title: string; desc: string; onPress: () => void }) {
+  return (
+    <Pressable style={({ pressed }) => [styles.sosCard, pressed && { opacity: 0.8 }]} onPress={onPress} accessibilityRole="button">
+      <View style={[styles.sosIconContainer, { backgroundColor: color + "22" }]}>
+        <Feather name={icon as any} size={22} color={color} />
+      </View>
+      <View style={styles.sosContent}>
+        <Text style={styles.sosTitle}>{title}</Text>
+        <Text style={styles.sosDesc}>{desc}</Text>
+      </View>
+      <Feather name="chevron-right" size={18} color="#94a3b8" />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f0fdfa",
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  header: {
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#1e293b",
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#475569",
-    marginTop: 4,
-    lineHeight: 20,
-  },
-  sectionHeader: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1e293b",
-    marginTop: 24,
-    marginBottom: 16,
-    letterSpacing: -0.3,
-  },
+  full: { flex: 1 },
+  safeArea: { flex: 1, backgroundColor: "#f0fdfa" },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 20, paddingBottom: 48 },
+  title: { fontSize: 26, fontWeight: "800", color: "#1e293b", letterSpacing: -0.3, marginTop: 4 },
+  subtitle: { fontSize: 14, color: "#475569", marginTop: 6, lineHeight: 21 },
+  heroWrap: { marginTop: 18, borderRadius: 24, shadowColor: "#7c3aed", shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
+  hero: { flexDirection: "row", alignItems: "center", gap: 14, padding: 20, borderRadius: 24 },
+  heroIcon: { width: 56, height: 56, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
+  heroTitle: { color: "#fff", fontSize: 21, fontWeight: "800" },
+  heroSub: { color: "rgba(255,255,255,0.88)", fontSize: 13, marginTop: 3, lineHeight: 18 },
+  statsRow: { flexDirection: "row", gap: 10, marginTop: 14 },
+  stat: { flex: 1, backgroundColor: "#fff", borderRadius: 16, padding: 12, borderWidth: 1, borderColor: "rgba(0,0,0,0.06)" },
+  statValue: { fontSize: 22, fontWeight: "900" },
+  statLabel: { fontSize: 11, color: "#64748b", marginTop: 2, lineHeight: 15 },
+  sectionHeader: { fontSize: 18, fontWeight: "800", color: "#1e293b", marginTop: 28, marginBottom: 12 },
   sosCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 18,
+    padding: 14,
     borderRadius: 16,
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
-    marginBottom: 12,
-    gap: 16,
+    borderColor: "rgba(0,0,0,0.06)",
+    marginBottom: 10,
+    gap: 14,
   },
-  sosIconContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: "rgba(56,189,248,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sosContent: {
-    flex: 1,
-  },
-  sosTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1e293b",
-  },
-  sosDesc: {
-    fontSize: 12,
-    color: "#475569",
-    marginTop: 4,
-    lineHeight: 17,
-  },
-  subViewHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.08)",
-  },
-  backButton: {
-    padding: 8,
-  },
-  backButtonText: {
-    color: "#7dd3fc",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  subViewTitle: {
-    color: "#1e293b",
-    fontSize: 18,
-    fontWeight: "700",
-    marginLeft: 16,
-  },
+  sosIconContainer: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  sosContent: { flex: 1 },
+  sosTitle: { fontSize: 15, fontWeight: "700", color: "#1e293b" },
+  sosDesc: { fontSize: 12, color: "#64748b", marginTop: 3, lineHeight: 17 },
+  subViewHeader: { flexDirection: "row", alignItems: "center", padding: 12, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.08)" },
+  backButton: { flexDirection: "row", alignItems: "center", padding: 6 },
+  backButtonText: { color: "#0f766e", fontSize: 16, fontWeight: "700" },
+  subViewTitle: { color: "#1e293b", fontSize: 18, fontWeight: "800", marginLeft: 10 },
+  darkHeader: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingTop: 10 },
+  darkBack: { flexDirection: "row", alignItems: "center", padding: 8, width: 70 },
+  darkBackText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  darkTitle: { flex: 1, textAlign: "center", color: "#fff", fontSize: 16, fontWeight: "800" },
 });

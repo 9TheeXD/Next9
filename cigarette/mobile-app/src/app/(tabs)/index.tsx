@@ -226,6 +226,34 @@ export default function TrackerScreen() {
           </View>
         </View>
 
+        {/* Craving help: one tap from home */}
+        <Pressable
+          onPress={() => { playClick(); router.push("/sos?view=RESCUE" as any); }}
+          style={({ pressed }) => [styles.rescueWrap, pressed && { transform: [{ scale: 0.985 }] }]}
+          accessibilityRole="button"
+          accessibilityLabel="อยากสูบตอนนี้ เริ่มขั้นตอนรับมือ"
+        >
+          <LinearGradient colors={["#4f46e5", "#7c3aed", "#db2777"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.rescueCard}>
+            <View style={styles.rescueIcon}>
+              <Feather name="life-buoy" size={26} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rescueTitle}>อยากสูบตอนนี้?</Text>
+              <Text style={styles.rescueSub}>กดเลย เราจะพาผ่านไปทีละขั้นใน 3–5 นาที</Text>
+            </View>
+            <Feather name="arrow-right" size={22} color="#fff" />
+          </LinearGradient>
+        </Pressable>
+        <Pressable
+          onPress={() => { playClick(); router.push("/knowledge?tab=MINE" as any); }}
+          style={styles.planLink}
+          accessibilityRole="button"
+        >
+          <Feather name="git-branch" size={16} color="#0f766e" />
+          <Text style={styles.planLinkText}>แผนรับมือและเหตุผลของฉัน</Text>
+          <Feather name="chevron-right" size={16} color="#0f766e" />
+        </Pressable>
+
         <View style={{ height: 40 }} />
       </ScrollView>
 
@@ -285,6 +313,13 @@ export default function TrackerScreen() {
 }
 
 const styles = StyleSheet.create({
+  rescueWrap: { marginTop: 18, borderRadius: 22, shadowColor: "#7c3aed", shadowOpacity: 0.3, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+  rescueCard: { flexDirection: "row", alignItems: "center", gap: 14, padding: 18, borderRadius: 22 },
+  rescueIcon: { width: 50, height: 50, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
+  rescueTitle: { color: "#fff", fontSize: 19, fontWeight: "800" },
+  rescueSub: { color: "rgba(255,255,255,0.88)", fontSize: 13, marginTop: 2 },
+  planLink: { flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "center", marginTop: 12, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, backgroundColor: "rgba(15,118,110,0.08)" },
+  planLinkText: { color: "#0f766e", fontWeight: "700", fontSize: 14 },
   safeArea: {
     flex: 1,
     backgroundColor: "#f0fdfa",

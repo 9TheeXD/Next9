@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { rejectUnlessCron } from "@/lib/cron";
 
 // This endpoint should be triggered by an external cron service (e.g. Vercel Cron, node-cron)
 // Example trigger: Every hour
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = rejectUnlessCron(request);
+  if (denied) return denied;
   try {
     // 1. Fetch all smokers who have FCM tokens
     const smokers = await prisma.user.findMany({

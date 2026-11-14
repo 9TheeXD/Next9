@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { authenticateRequest } from '@/lib/auth';
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  if (!authenticateRequest(req)) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(req.url);
     const after = searchParams.get('after');
@@ -35,7 +39,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error('Fetch unread count error:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to fetch unread count' },
+      { success: false, error: 'Failed to fetch unread count' },
       { status: 500 }
     );
   }

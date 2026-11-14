@@ -118,6 +118,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       } else if (action.action === "LOG_CRAVING") {
         iconType = "craving";
         desc = "บันทึกความอยาก";
+      } else if (action.action === "CRAVING_RESCUE") {
+        iconType = "craving";
+        desc = "รับมือความอยาก (SOS)";
+      } else if (action.action === "CRAVING_SLIP" || action.action === "SLIP") {
+        iconType = "craving";
+        desc = "เผลอสูบ · วางแผนรับมือใหม่";
       } else if (action.action.startsWith("GAME")) {
         iconType = "quiz";
         desc = "กิจกรรมเล่นเกม";
@@ -141,7 +147,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       } else if (action.action.startsWith("READ") && action.details) {
         desc = action.details;
         action.details = "";
-      } else if (action.action === "GAME_PLAYED" && action.details) {
+      } else if ((action.action === "GAME_PLAYED" || action.action === "GAME_FINISHED") && action.details) {
         desc = action.details;
         action.details = "";
       } else if (action.action.startsWith("QUIZ") && action.details) {

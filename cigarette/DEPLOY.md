@@ -1,129 +1,111 @@
-# Cigarette Quitting App — Deployment Guide
+# Next Breath — Deployment (Vercel)
 
-## ⚠️ สำคัญ: โปรเจ็คนี้รันผ่าน Docker (ต้องใช้ sudo)
+ระบบนี้รันบน **Vercel ทั้งหมด** ไม่มี VPS, Docker, PM2 หรือ nginx อีกแล้ว
+push เข้า branch production ของ Vercel แล้ว Vercel จะ build และ deploy ให้เอง
 
-**อย่าไปใช้ PM2, npm start, หรือ next start โดยตรง** — ทุกอย่างรันใน Docker container
-
----
-
-## Architecture
+## โครงสร้าง
 
 ```
-┌─────────────────────────────────────────┐
-│  VPS (Ubuntu)                           │
-│                                         │
-│  ┌─────────────────────────────────┐    │
-│  │ Docker: ciga-next9              │    │
-│  │ Image: ciga-next9-img           │    │
-│  │ Port: 7011 (--network host)     │    │
-│  │ Role: Next.js API server        │    │
-│  │ Source: ./admin-web              │    │
-│  └─────────────────────────────────┘    │
-│                                         │
-│  ┌─────────────────────────────────┐    │
-│  │ Docker: nextbreath-db           │    │
-│  │ Image: postgres:16-alpine       │    │
-│  │ Port: 127.0.0.1:5432            │    │
-│  │ Role: PostgreSQL database       │    │
-│  └─────────────────────────────────┘    │
-│                                         │
-│  ┌─────────────────────────────────┐    │
-│  │ Static files (Nginx/Coolify)    │    │
-│  │ Source: ./mobile-app/dist/      │    │
-│  │ Role: PWA mobile app            │    │
-│  └─────────────────────────────────┘    │
-└─────────────────────────────────────────┘
+┌──────────────────────────┐   /api/* (rewrite)   ┌───────────────────────────┐
+│ ciga-app  (Vercel)       │ ───────────────────▶ │ ciga-admin  (Vercel)      │
+│ Root: cigarette/mobile-app│                      │ Root: cigarette/admin-web │
+│ Expo export → static PWA │                      │ Next.js: API + dashboard  │
+└──────────────────────────┘                      └────────────┬──────────────┘
+                                                               │
+                         ┌─────────────────────────┬───────────┴──────────┬────────────────────┐
+                         ▼                         ▼                      ▼                    ▼
+                 Supabase Postgres          Cloudflare R2           Firebase (FCM)       cron-job.org
+                 (Singapore, pooler 6543)   ไฟล์เสียงที่อัปโหลด      push notification    เรียก /api/cron/*
 ```
 
----
+| Vercel project | Root Directory | Framework | Build |
+|---|---|---|---|
+| ciga-admin | `cigarette/admin-web` | Next.js | `npm run build` = `prisma generate && next build` |
+| ciga-app | `cigarette/mobile-app` | Other | ตั้งไว้ใน `mobile-app/vercel.json` (`npm run build`, output `dist`) |
 
-## Deploy Commands (ต้องใช้ sudo ทุกคำสั่ง Docker)
+- function ของ ciga-admin อยู่ที่ `sin1` (Singapore) ใน `admin-web/vercel.json` ให้ใกล้ Supabase
+- แอปเรียก API ผ่าน path เดียวกัน (`/api`) แล้ว `mobile-app/vercel.json` rewrite ต่อไปที่ ciga-admin
+  ถ้าโดเมนของ ciga-admin เปลี่ยน ให้แก้ปลายทาง rewrite นั้นบรรทัดเดียว
 
-### 1. Admin-web (API Server) — Docker rebuild
+## Environment Variables
+
+ตั้งใน Vercel → Project → Settings → Environment Variables รายการเต็มอยู่ใน `.env.example` ของแต่ละ project
+
+**ciga-admin** (`admin-web/.env.example`)
+- `DATABASE_URL` — Supabase "Transaction pooler" (port 6543) ต่อท้าย `?sslmode=no-verify`
+- `PG_POOL_MAX` — ขนาด pool ต่อ instance (ค่าแนะนำ 3)
+- `JWT_SECRET` — ห้ามเปลี่ยน ถ้าเปลี่ยนผู้ใช้ทุกคนจะหลุด login
+- `ADMIN_PASSWORD` — รหัสผ่าน admin dashboard
+- `CORS_ORIGIN` — โดเมนของแอป
+- `NEXT_PUBLIC_APP_URL` — ลิงก์ไปแอปจากหน้า landing
+- `FIREBASE_SERVICE_ACCOUNT` — JSON ของ service account ทั้งไฟล์ (บรรทัดเดียว)
+- `CRON_SECRET` — กุญแจของ cron ทุกตัว (ดูหัวข้อ Cron)
+- `CF_ACCOUNT_ID`, `R2_ACCESS_KEY`, `R2_SECRET_KEY`, `R2_BUCKET` — เก็บไฟล์เสียงที่ admin อัปโหลด
+
+**ciga-app** (`mobile-app/.env.example`) — อ่านตอน build เท่านั้น
+- `EXPO_PUBLIC_API_URL=/api`
+- `EXPO_PUBLIC_ADMIN_URL`, `EXPO_PUBLIC_APP_URL` (ไม่บังคับ)
+
+แก้ env แล้วต้อง **Redeploy** ค่าใหม่ถึงจะมีผล
+
+## Cron
+
+Vercel Hobby ไม่มี cron ถี่ จึงใช้ cron-job.org เรียก endpoint พร้อมกุญแจ `CRON_SECRET`
+ส่งกุญแจได้สองแบบ: `?key=<CRON_SECRET>` หรือ header `Authorization: Bearer <CRON_SECRET>`
+
+| Endpoint | ความถี่ | หน้าที่ |
+|---|---|---|
+| `/api/cron/smart-push?key=…` | ทุก 5 นาที | แจ้งเตือนรายวันตามเวลาที่ผู้ใช้เลือก |
+| `/api/cron/craving-push?key=…` | ไม่บังคับ | แจ้งเตือนช่วงเวลาเสี่ยงอยากสูบ |
+| `/api/cron/notifications?key=…` | ไม่บังคับ | แจ้งเตือนแบบเดิม (สำรอง) |
+
+ถ้าไม่มีกุญแจหรือกุญแจผิด endpoint จะตอบ 401 และไม่ส่งอะไรออกไป
+
+## ฐานข้อมูล (Prisma + Supabase)
+
+Vercel build รันแค่ `prisma generate` **ไม่ได้แก้ schema ของฐานข้อมูลให้**
+ถ้าแก้ `admin-web/prisma/schema.prisma` ต้อง push schema เองจากเครื่องที่มี `DATABASE_URL`:
 
 ```bash
-cd /home/cmp/sdh-council/cigarette/admin-web
-
-# Build image + recreate container (one-liner)
-sudo docker build -t ciga-next9-img . && \
-sudo docker rm -f ciga-next9 && \
-sudo docker run -d --restart always --name ciga-next9 --network host --env-file .env.local \
-  -v /home/cmp/sdh-council/cigarette/admin-web/persistent-sounds:/app/public/sounds \
-  ciga-next9-img
-
-# ตรวจสอบว่ารันสำเร็จ
-sudo docker logs --tail 10 ciga-next9
+cd cigarette/admin-web
+npm install
+DATABASE_URL="<Supabase direct/session connection>" npx prisma db push
 ```
 
-### 2. Mobile-app (PWA) — Expo export + Service Worker
+ทำก่อน deploy โค้ดที่ใช้ตารางหรือคอลัมน์ใหม่ ไม่งั้น API จะ error
+
+## ทำงานในเครื่อง
 
 ```bash
-cd /home/cmp/sdh-council/cigarette/mobile-app
+# API + dashboard
+cd cigarette/admin-web
+cp .env.example .env.local   # ใส่ค่า
+npm install
+npm run dev                  # http://localhost:3000
 
-# Export static files
-sudo npx expo export --platform web
-
-# Generate service worker
-node scripts/generate-sw.js
-
-# ไฟล์จะอยู่ใน ./dist/ — Nginx/Coolify จะ serve อัตโนมัติ
+# แอป (อีก terminal)
+cd cigarette/mobile-app
+npm install
+EXPO_PUBLIC_API_URL=http://localhost:3000/api npx expo start --web
 ```
 
-### 3. Database — Prisma
+ก่อน push ให้เช็คว่า build ผ่าน:
 
 ```bash
-cd /home/cmp/sdh-council/cigarette/admin-web
-
-# Generate Prisma client (ทำก่อน build)
-npx prisma generate
-
-# Push schema changes to DB
-npx prisma db push
-
-# Migrate (production)
-npx prisma migrate deploy
+cd cigarette/admin-web && npm run build
+cd cigarette/mobile-app && npm run build    # tsc --noEmit + expo export + service worker
 ```
 
----
+`mobile-app` รัน `tsc --noEmit` ตอน build ถ้ามี type error Vercel จะ build ไม่ผ่าน
 
-## Environment
+## ตรวจหลัง deploy
 
-- **Docker env file:** `admin-web/.env.local`
-- **Database:** PostgreSQL 16 (container: `nextbreath-db`, user: `nextbreath`)
-- **Node version in Docker:** 20-alpine
-- **Prisma config:** `admin-web/prisma/schema.prisma`
+- Vercel → Deployments → ดู build log และ Runtime Logs ของ ciga-admin
+- เปิดแอป → login → บันทึกวันนี้ → เปิด SOS เล่นเกม 1 เกม
+- เปิด `/dashboard` ของ ciga-admin ด้วยบัญชี admin
 
----
+## ไม่ใช้แล้ว
 
-## Full Deploy Workflow (ทำตามลำดับ)
-
-```bash
-# 1. Generate Prisma client
-cd /home/cmp/sdh-council/cigarette/admin-web
-npx prisma generate
-
-# 2. Rebuild & restart API container
-sudo docker build -t ciga-next9-img . && \
-sudo docker rm -f ciga-next9 && \
-sudo docker run -d --restart always --name ciga-next9 --network host --env-file .env.local \
-  -v /home/cmp/sdh-council/cigarette/admin-web/persistent-sounds:/app/public/sounds \
-  ciga-next9-img
-
-# 3. Export mobile app
-cd /home/cmp/sdh-council/cigarette/mobile-app
-sudo npx expo export --platform web
-node scripts/generate-sw.js
-
-# 4. Verify
-sudo docker ps | grep ciga
-sudo docker logs --tail 5 ciga-next9
-```
-
----
-
-## ❌ สิ่งที่ห้ามทำ
-
-- ❌ ห้ามใช้ `pm2 restart` — PM2 ไม่ได้ใช้สำหรับโปรเจ็คนี้
-- ❌ ห้ามใช้ `npm start` หรือ `next start` โดยตรง — ต้องรันผ่าน Docker เท่านั้น
-- ❌ ห้ามแก้ไขไฟล์ใน container โดยตรง — ต้อง rebuild image ใหม่
-- ❌ ห้ามลืม `sudo` ก่อนคำสั่ง `docker`
+- Docker (`ciga-next9`, `nextbreath-db`), `docker-compose`, `sudo`, PM2, nginx/Coolify
+- โฟลเดอร์ `admin-web/persistent-sounds/` เป็นสำเนาไฟล์เสียงสมัย VPS (ตอนนี้เสียงอยู่ใน R2)
+  อัปโหลดเข้า R2 ด้วย `node admin-web/scripts/upload-sounds.mjs persistent-sounds`
