@@ -1,6 +1,7 @@
 // "Four Corners Party" — up to four people around one phone or tablet, each owning a corner.
 // Empty seats are filled by bots. Six quick mini-games, played free-for-all, two-versus-two
-// (bottom vs top) or all together against the game. Laughing with others is one of the best ways
+// (bottom vs top) or all together against the game. After the setup a picker lists every game:
+// pick one, let the phone pick, or play them all in a row; scores carry over between picks. Laughing with others is one of the best ways
 // to ride out a craving, and nobody can smoke while both hands are busy tapping.
 
 import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engine/types";
@@ -8,6 +9,7 @@ import { Particles, clamp, TAU, FONT_DISPLAY, FONT_BODY, rng, glow, roundRectPat
 import { SetupMenu } from "./engine/menu";
 import { DuelOver } from "./engine/duel";
 import { pentatonic } from "./engine/audio";
+import { Button, wrapText, drawCoin } from "./engine/ui";
 
 export const partyGame: GameDefinition = {
   id: "party",
@@ -22,7 +24,7 @@ export const partyGame: GameDefinition = {
 };
 
 type Mode = "ffa" | "team" | "coop";
-type Phase = "menu" | "intro" | "count" | "play" | "result" | "final";
+type Phase = "menu" | "pick" | "intro" | "play" | "result" | "final";
 
 const COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#eab308"];
 const SEAT_NAMES = ["น้ำเงิน", "แดง", "เขียว", "เหลือง"];
@@ -42,6 +44,16 @@ interface Rect {
 abstract class Mini {
   abstract name: string;
   abstract howTo: string;
+  /** Headline rule on the read-the-rules screen. */
+  abstract rule: string;
+  /** One line for the game picker card. */
+  abstract blurb: string;
+  /** How co-op stars are earned. */
+  abstract coopGoal: string;
+  /** Card colour in the picker. */
+  abstract color: string;
+  /** How many times the game is played when picked on its own. */
+  reps = 1;
   modes: Mode[] = ["ffa", "team", "coop"];
   done = false;
   t = 0;
@@ -78,7 +90,12 @@ abstract class Mini {
 
 class RocketMash extends Mini {
   name = "จรวดแตะรัว";
-  howTo = "แตะมุมของตัวเองให้เร็วที่สุด จรวดใครพุ่งสูงสุดชนะ";
+  howTo = "แตะมุมของตัวเองให้เร็วที่สุดภายใน 6 วินาที จรวดใครพุ่งสูงสุดชนะ";
+  rule = "ทุกคนแตะมุมของตัวเองเร็วๆ";
+  blurb = "แตะรัว 6 วิ จรวดใครพุ่งสูงสุดชนะ";
+  coopGoal = "รวมกันให้ได้ 110 / 150 / 190 ครั้ง = 1 / 2 / 3 ดาว";
+  color = "#f97316";
+  reps = 3;
   unit = "ครั้ง";
   private botT = [0, 0, 0, 0];
   private flame = [0, 0, 0, 0];
@@ -192,6 +209,10 @@ function drawRocket(c: CanvasRenderingContext2D, x: number, y: number, s: number
 class QuickDraw extends Mini {
   name = "ไฟเขียวไวสุด";
   howTo = "รอให้ไฟเปลี่ยนเป็นสีเขียวแล้วแตะทันที ถ้าแตะตอนไฟแดงจะโดนพักรอบนั้น";
+  rule = "รอไฟเขียว แล้วแตะทันที!";
+  blurb = "ห้ามแตะตอนไฟแดง ใครไวสุดได้แต้ม";
+  coopGoal = "ทุกคนแตะทันใน 0.75 วิ และไม่มีใครแตะก่อน = ได้ดาว";
+  color = "#22c55e";
   unit = "รอบ";
   private round = 0;
   private sub: "wait" | "go" | "show" = "wait";
@@ -217,6 +238,7 @@ class QuickDraw extends Mini {
     c.fill();
   }
   start() {
+    if (this.P.single) this.rounds = 5;
     this.nextRound();
   }
   private nextRound() {
@@ -281,7 +303,7 @@ class QuickDraw extends Mini {
     }
   }
   stars() {
-    return this.coopOk;
+    return Math.min(3, Math.round((this.coopOk * 3) / this.rounds));
   }
   renderArena(c: CanvasRenderingContext2D, a: Rect) {
     const cx = a.x + a.w / 2;
@@ -330,7 +352,12 @@ class QuickDraw extends Mini {
 
 class Tug extends Mini {
   name = "ชักเย่อ";
-  howTo = "แตะรัวๆ เพื่อดึงเชือกมาฝั่งตัวเอง";
+  howTo = "แตะมุมตัวเองรัวๆ เพื่อดึงเชือกมาฝั่งตัวเอง ดึงถึงเส้นก่อนชนะ";
+  rule = "แตะรัวๆ ดึงเชือกมาทางเรา";
+  blurb = "ดึงปมเชือกเข้าหามุมหรือฝั่งทีมตัวเอง";
+  coopGoal = "ช่วยกันดึงเชือกลงมาให้ถึงเส้นก่อนหมดเวลา";
+  color = "#eab308";
+  reps = 2;
   private pos = 0; // team / coop: -1 top … 1 bottom
   private knot = { x: 0, y: 0 }; // ffa: normalised, corners at (±1, ±1)
   private botT = [0, 0, 0, 0];
@@ -563,7 +590,11 @@ function drawShape(c: CanvasRenderingContext2D, shape: string, x: number, y: num
 
 class Snap extends Mini {
   name = "จับคู่เหมือน";
-  howTo = "ถ้ารูปซ้ายกับขวาเหมือนกันทั้งรูปทรงและสี ให้แตะทันที! แตะผิดเสียแต้ม";
+  howTo = "ถ้ารูปซ้ายกับขวาเหมือนกันทั้งรูปทรงและสี ให้แตะทันที คนแรกได้ 2 แต้ม แตะผิดเสียแต้ม";
+  rule = "รูปเหมือนกันเป๊ะ แตะเลย!";
+  blurb = "รูปทรงและสีตรงกันค่อยแตะ แตะผิดเสียแต้ม";
+  coopGoal = "แตะให้ทันทุกคู่ที่เหมือน และอย่าแตะคู่ที่ไม่เหมือน";
+  color = "#ec4899";
   private cards: { a: [number, number]; b: [number, number]; match: boolean }[] = [];
   private idx = -1;
   private cardT = 0;
@@ -693,6 +724,10 @@ class Snap extends Mini {
 class CoreGuard extends Mini {
   name = "เฝ้าต้นไม้กลางวง";
   howTo = "ก้อนควันพุ่งเข้าหาต้นไม้จากมุมของทุกคน แตะมุมตัวเองเพื่อยิงก้อนที่อยู่ฝั่งตัวเอง";
+  rule = "แตะยิงควันที่เข้ามาฝั่งเรา";
+  blurb = "ยิงก้อนควันปกป้องต้นไม้กลางวง";
+  coopGoal = "ต้นไม้เหลือ 9 ขึ้นไป = 3 ดาว · 6 ขึ้นไป = 2 ดาว";
+  color = "#10b981";
   private blobs: { x: number; y: number; seat: number; v: number; dead: boolean }[] = [];
   private spawnT = 0.6;
   private cd = [0, 0, 0, 0];
@@ -845,6 +880,10 @@ class CoreGuard extends Mini {
 class HotPotato extends Mini {
   name = "ระเบิดเวลา";
   howTo = "ระเบิดอยู่ที่ใคร ให้แตะ 2 ครั้งเพื่อส่งต่อ ใครถือตอนระเบิดตูมเสียแต้ม";
+  rule = "ระเบิดอยู่ที่เรา แตะ 2 ทีส่งต่อ";
+  blurb = "ส่งระเบิดต่อไว ใครถือตอนตูมเสียแต้ม";
+  coopGoal = "";
+  color = "#ef4444";
   modes: Mode[] = ["ffa", "team"];
   private holder = 0;
   private taps = 0;
@@ -970,7 +1009,33 @@ class HotPotato extends Mini {
 
 // ── The party itself ────────────────────────────────────────────────────────
 
-const MINIS: (new (p: PartyGame) => Mini)[] = [RocketMash, QuickDraw, Tug, Snap, CoreGuard, HotPotato];
+type MiniCtor = new (p: PartyGame) => Mini;
+const MINIS: MiniCtor[] = [RocketMash, QuickDraw, Tug, Snap, CoreGuard, HotPotato];
+const MODE_LIST: Mode[] = ["ffa", "team", "coop"];
+const MODE_SHORT: Record<Mode, string> = { ffa: "แข่ง", team: "ทีม", coop: "ร่วมมือ" };
+const MODE_NAME: Record<Mode, string> = { ffa: "ต่างคนต่างแข่ง", team: "ทีม 2:2", coop: "ร่วมมือกัน" };
+const MODE_GOAL: Record<"ffa" | "team", string> = {
+  ffa: "ที่ 1 ได้ 4 แต้ม · ที่ 2 ได้ 2 · ที่ 3 ได้ 1",
+  team: "ทีมล่าง (น้ำเงิน+แดง) ปะทะ ทีมบน (เขียว+เหลือง)",
+};
+
+interface PickCard {
+  kind: "game" | "random" | "all";
+  idx: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface Roll {
+  t: number;
+  times: number[];
+  start: number;
+  pool: number[];
+  target: number;
+  shown: number;
+}
 
 class PartyGame implements GameInstance {
   w = 0;
@@ -981,26 +1046,50 @@ class PartyGame implements GameInstance {
   mode: Mode = "ffa";
   level = 1;
   humans = [true, false, false, false];
+  /** True while a game picked on its own is running; false during "play every game". */
+  single = true;
   private menu: SetupMenu;
   private over: DuelOver;
-  private rounds = 5;
-  private roundNo = 0;
-  private queue: (new (p: PartyGame) => Mini)[] = [];
+  /** One instance of each mini-game, for names, icons and supported modes in the picker. */
+  private protos: Mini[];
+  private playlist: MiniCtor[] = [];
+  private plTotal = 0;
+  private plBase = [0, 0, 0, 0];
+  private plStarsBase = 0;
+  private current: MiniCtor = RocketMash;
+  private repsLeft = 0;
+  private repNo = 0;
+  private repTotal = 1;
   private mini: Mini | null = null;
   points = [0, 0, 0, 0];
   private gained = [0, 0, 0, 0];
+  private pickGain = [0, 0, 0, 0];
+  private pickStars = 0;
   private stars = 0;
   private lastStars = 0;
   private resultText = "";
   private earned = 0;
+  private live = false;
   private particles = new Particles();
   private seatFlash = [0, 0, 0, 0];
+  private ready = [false, false, false, false];
+  private played = [0, 0, 0, 0, 0, 0];
+  private banner: { text: string; coins: number } | null = null;
+  // Picker
+  private cards: PickCard[] = [];
+  private setupBtn = new Button("ตั้งค่าผู้เล่น", "#f59e0b", "ghost");
+  private pickScroll = 0;
+  private pickMax = 0;
+  private drag: { x: number; y: number; s: number; moved: boolean; id: number } | null = null;
+  private pressedCard: PickCard | null = null;
+  private roll: Roll | null = null;
 
   constructor(public env: GameEnv) {
     this.menu = new SetupMenu(env, {
       title: "ปาร์ตี้ 4 มุม",
       subtitle: "วางเครื่องกลางวง แต่ละคนจับคนละมุม",
       accent: "#f59e0b",
+      startLabel: "ไปเลือกเกม",
       rows: [
         {
           key: "humans",
@@ -1031,15 +1120,6 @@ class PartyGame implements GameInstance {
           ],
           when: (v) => v.humans !== "4",
         },
-        {
-          key: "rounds",
-          label: "จำนวนเกม",
-          choices: [
-            { value: "4", label: "4 เกม" },
-            { value: "6", label: "6 เกม" },
-            { value: "10", label: "10 เกม" },
-          ],
-        },
       ],
       icon: (c, t) => {
         for (let i = 0; i < 4; i++) {
@@ -1052,6 +1132,8 @@ class PartyGame implements GameInstance {
       },
     });
     this.over = new DuelOver("#f59e0b");
+    this.over.setup.label = "กลับไปเลือกเกม";
+    this.protos = MINIS.map((M) => new M(this));
   }
 
   isBot(i: number) {
@@ -1104,6 +1186,9 @@ class PartyGame implements GameInstance {
     this.particles.burst(r.x + r.w / 2, r.y + r.h / 2, color, n, { speed: 220, size: 3, gravity: 0, life: 0.8 });
   }
 
+  // ── Flow ─────────────────────────────────────────────────────────────────
+
+  /** From the setup menu: seats and mode are fixed, scores start at zero, then the picker opens. */
   private start() {
     const v = this.menu.values;
     const n = +v.humans || 1;
@@ -1113,27 +1198,108 @@ class PartyGame implements GameInstance {
     for (let k = 0; k < n; k++) this.humans[order[k]] = true;
     this.mode = (v.mode as Mode) || "ffa";
     this.level = +v.level || 0;
-    this.rounds = +v.rounds || 6;
     this.points = [0, 0, 0, 0];
     this.stars = 0;
-    this.roundNo = 0;
-    this.queue = [];
-    this.nextMini();
-    this.env.emit({ type: "start" });
+    this.played = [0, 0, 0, 0, 0, 0];
+    this.banner = null;
+    this.pickScroll = 0;
+    this.toPick();
   }
 
-  private nextMini() {
-    if (!this.queue.length) {
-      const pool = MINIS.filter((M) => new M(this).modes.includes(this.mode));
-      // Shuffle, avoiding the same game twice in a row
-      const last = this.mini?.constructor;
-      this.queue = pool.sort(() => Math.random() - 0.5);
-      if (this.queue[0] === last && this.queue.length > 1) this.queue.push(this.queue.shift()!);
+  private toPick() {
+    this.phase = "pick";
+    this.phaseT = 0;
+    this.mini = null;
+    this.roll = null;
+    this.pressedCard = null;
+  }
+
+  private eligible(i: number) {
+    return this.protos[i].modes.includes(this.mode);
+  }
+
+  private pickGame(i: number) {
+    if (!this.eligible(i)) return;
+    this.single = true;
+    this.current = MINIS[i];
+    this.repTotal = this.protos[i].reps;
+    this.repsLeft = this.repTotal;
+    this.repNo = 0;
+    this.pickGain = [0, 0, 0, 0];
+    this.pickStars = 0;
+    this.env.sfx.tone({ freq: 523, dur: 0.12, vol: 0.06, glideTo: 784 });
+    this.nextRep();
+  }
+
+  private pickRandom() {
+    const pool = MINIS.map((_, i) => i).filter((i) => this.eligible(i));
+    // Favour games played the fewest times this session
+    const least = Math.min(...pool.map((i) => this.played[i]));
+    const fresh = pool.filter((i) => this.played[i] === least);
+    const target = fresh[Math.floor(Math.random() * fresh.length)];
+    const times: number[] = [];
+    let t = 0;
+    let iv = 0.055;
+    while (t < 1.7) {
+      times.push(t);
+      t += iv;
+      iv *= 1.12;
     }
-    const M = this.queue.shift()!;
-    this.mini = new M(this);
+    const pos = pool.indexOf(target);
+    const len = pool.length;
+    const start = (((pos - (times.length - 1)) % len) + len) % len;
+    this.roll = { t: 0, times, start, pool, target, shown: -1 };
+  }
+
+  private playAll() {
+    this.single = false;
+    const pool = MINIS.filter((_, i) => this.eligible(i));
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    this.playlist = pool;
+    this.plTotal = pool.length;
+    this.plBase = this.points.slice();
+    this.plStarsBase = this.stars;
+    this.env.sfx.tone({ freq: 523, dur: 0.12, vol: 0.06, glideTo: 784 });
+    this.nextInPlaylist();
+  }
+
+  private nextInPlaylist() {
+    this.current = this.playlist.shift()!;
+    this.repTotal = 1;
+    this.repsLeft = 1;
+    this.repNo = 0;
+    this.pickGain = [0, 0, 0, 0];
+    this.pickStars = 0;
+    this.nextRep();
+  }
+
+  /** A fresh round of the current game, starting with its rules screen. */
+  private nextRep() {
+    this.mini = new this.current(this);
+    this.repsLeft--;
+    this.repNo++;
+    this.ready = this.humans.map((h) => !h);
     this.phase = "intro";
     this.phaseT = 0;
+  }
+
+  private introLimit() {
+    return this.repNo === 1 ? 14 : 7;
+  }
+
+  /** Rules have been read: set the round up and count 3-2-1 before anything moves. */
+  private go() {
+    const m = this.mini!;
+    m.start();
+    this.phase = "play";
+    this.phaseT = 0;
+    if (!this.live) {
+      this.live = true;
+      this.env.emit({ type: "start" }); // the runtime shows its 3-2-1 for this
+    } else this.env.countdown(3, m.name);
   }
 
   private settle() {
@@ -1142,6 +1308,7 @@ class PartyGame implements GameInstance {
     if (this.mode === "coop") {
       this.lastStars = m.stars();
       this.stars += this.lastStars;
+      this.pickStars += this.lastStars;
       this.resultText = this.lastStars ? `ได้ ${this.lastStars} ดาว` : "พลาดไปนิด ไม่ได้ดาว";
       if (this.lastStars) [0, 3, 5].slice(0, this.lastStars).forEach((s, k) => this.env.sfx.chime(pentatonic(s + 4), 0.1, k * 0.12));
     } else if (this.mode === "team") {
@@ -1164,29 +1331,90 @@ class PartyGame implements GameInstance {
     }
     for (let i = 0; i < 4; i++) {
       this.points[i] += this.gained[i];
+      this.pickGain[i] += this.gained[i];
       if (this.gained[i] >= 3) this.burstAtSeat(i);
     }
-    this.roundNo++;
     this.phase = "result";
     this.phaseT = 0;
   }
 
+  private afterResult() {
+    if (this.single) {
+      if (this.repsLeft > 0) this.nextRep();
+      else this.finishPick();
+    } else {
+      this.played[MINIS.indexOf(this.current)]++;
+      if (this.playlist.length) this.nextInPlaylist();
+      else this.finish();
+    }
+  }
+
+  /** A game picked on its own is over: pay out, then back to the picker with the scores. */
+  private finishPick() {
+    const idx = MINIS.indexOf(this.current);
+    const name = this.protos[idx].name;
+    this.played[idx]++;
+    let text: string;
+    let humanWon = false;
+    if (this.mode === "coop") {
+      const avg = Math.round(this.pickStars / this.repTotal);
+      this.earned = 6 + avg * 2;
+      text = `${name}: ได้ ${this.pickStars} ดาว`;
+    } else if (this.mode === "team") {
+      const a = this.pickGain[0] + this.pickGain[1];
+      const b = this.pickGain[2] + this.pickGain[3];
+      const win = a === b ? -1 : a > b ? 0 : 1;
+      humanWon = win >= 0 && [0, 1, 2, 3].some((i) => this.humans[i] && teamOf(i) === win);
+      text = win < 0 ? `${name}: เสมอ` : `${name}: ${TEAM_NAMES[win]} ชนะ`;
+    } else {
+      const best = Math.max(...this.pickGain);
+      const winners = [0, 1, 2, 3].filter((i) => this.pickGain[i] === best);
+      humanWon = winners.some((i) => this.humans[i]);
+      text = winners.length > 1 ? `${name}: เสมอ` : `${name}: ${SEAT_NAMES[winners[0]]} ชนะ`;
+    }
+    if (this.mode !== "coop") this.earned = 8 + (humanWon ? 5 : 0);
+    this.live = false;
+    this.env.emit({
+      type: "end",
+      coins: this.earned,
+      score: this.mode === "coop" ? this.pickStars : Math.max(...this.pickGain),
+      best: 0,
+      summary: text,
+      stats: { game: idx, humans: this.humans.filter(Boolean).length, rounds: this.repTotal },
+    });
+    this.banner = { text, coins: this.earned };
+    this.toPick();
+  }
+
+  /** "Play every game" is over: the final card with the ranking of this run. */
   private finish() {
     this.phase = "final";
     this.phaseT = 0;
     this.over.t = 0;
+    const pts = this.points.map((p, i) => p - this.plBase[i]);
+    const stars = this.stars - this.plStarsBase;
     let summary: string;
     if (this.mode === "coop") {
-      this.earned = Math.min(50, 6 + this.stars * 3);
-      summary = `ร่วมมือ ${this.rounds} เกม ได้ ${this.stars}/${this.rounds * 3} ดาว`;
+      this.earned = Math.min(40, 6 + stars * 2);
+      summary = `ร่วมมือ ${this.plTotal} เกม ได้ ${stars}/${this.plTotal * 3} ดาว`;
     } else {
-      const best = Math.max(...this.points);
-      const humanBest = Math.max(...this.points.filter((_, i) => this.humans[i]));
-      this.earned = Math.min(50, 6 + this.rounds * 2 + (humanBest === best ? 12 : 0));
-      summary = this.mode === "team" ? `ทีมล่าง ${this.points[0] + this.points[1]} – ${this.points[2] + this.points[3]} ทีมบน` : `${SEAT_NAMES[this.points.indexOf(best)]} ชนะด้วย ${best} แต้ม`;
+      const best = Math.max(...pts);
+      const humanBest = Math.max(...pts.filter((_, i) => this.humans[i]));
+      this.earned = Math.min(40, 6 + this.plTotal * 2 + (humanBest === best ? 10 : 0));
+      summary = this.mode === "team" ? `ทีมล่าง ${pts[0] + pts[1]} – ${pts[2] + pts[3]} ทีมบน` : `${SEAT_NAMES[pts.indexOf(best)]} ชนะด้วย ${best} แต้ม`;
     }
+    this.banner = { text: `เล่นครบทุกเกม: ${summary}`, coins: this.earned };
     [0, 2, 4, 7, 9].forEach((s, k) => this.env.sfx.chime(pentatonic(s + 3), 0.1, k * 0.1));
-    this.env.emit({ type: "end", coins: this.earned, score: Math.max(...this.points, this.stars), best: 0, summary, stats: { humans: this.humans.filter(Boolean).length, rounds: this.rounds } });
+    this.live = false;
+    this.env.emit({ type: "end", coins: this.earned, score: Math.max(...pts, stars), best: 0, summary, stats: { humans: this.humans.filter(Boolean).length, rounds: this.plTotal } });
+  }
+
+  private leave() {
+    if (this.live) {
+      this.live = false;
+      this.env.emit({ type: "end", coins: 0, score: 0, best: 0, summary: "ออกกลางเกม" });
+    }
+    this.toPick();
   }
 
   // ── Input ────────────────────────────────────────────────────────────────
@@ -1199,36 +1427,85 @@ class PartyGame implements GameInstance {
     return -1;
   }
 
+  private markReady(seat: number) {
+    if (this.phase !== "intro" || seat < 0 || !this.humans[seat] || this.ready[seat] || this.phaseT < 0.8) return;
+    this.ready[seat] = true;
+    this.seatFlash[seat] = 1;
+    this.env.sfx.tone({ freq: 660 + seat * 80, dur: 0.1, vol: 0.06, type: "triangle" });
+  }
+
   pointer(p: PointerInfo) {
     if (this.phase === "menu") {
       if (this.menu.pointer(p)) this.start();
       return;
     }
+    if (this.phase === "pick") return this.pickPointer(p);
     if (this.phase === "final") {
       const a = this.over.pointer(p.type, p.x, p.y);
-      if (a === "again") this.start();
-      if (a === "setup") {
-        this.phase = "menu";
-        this.menu.reset();
-      }
+      if (a === "again") this.playAll();
+      if (a === "setup") this.toPick();
       return;
     }
     if (p.type !== "down") return;
-    const seat = this.seatAt(p.x, p.y);
-    if (this.phase === "intro" && this.phaseT > 1.2) {
-      this.phase = "count";
-      this.phaseT = 0;
+    // Leave button on the right edge of the arena
+    const a = this.arena();
+    if (Math.hypot(p.x - (a.x + a.w - 18), p.y - (a.y + a.h / 2)) < 22) {
+      this.leave();
       return;
     }
+    const seat = this.seatAt(p.x, p.y);
+    if (this.phase === "intro") this.markReady(seat);
     if (this.phase === "play" && seat >= 0 && this.humans[seat]) {
       this.seatFlash[seat] = 1;
       this.mini!.tap(seat);
     }
-    // Corner menu button (centre of the arena edge) to leave
-    const a = this.arena();
-    if (Math.hypot(p.x - (a.x + a.w - 18), p.y - (a.y + a.h / 2)) < 18) {
-      this.phase = "menu";
-      this.menu.reset();
+  }
+
+  private cardAt(x: number, y: number) {
+    const top = this.pickTop();
+    if (y < top - 4 || y > this.h - 66) return null;
+    return this.cards.find((c) => x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) || null;
+  }
+
+  private pickPointer(p: PointerInfo) {
+    if (this.roll) return;
+    if (p.type === "down") {
+      if (this.setupBtn.hit(p.x, p.y)) {
+        this.setupBtn.pressed = true;
+        return;
+      }
+      this.drag = { x: p.x, y: p.y, s: this.pickScroll, moved: false, id: p.id };
+      this.pressedCard = this.cardAt(p.x, p.y);
+      return;
+    }
+    if (p.type === "move" && this.drag && this.drag.id === p.id) {
+      const dy = p.y - this.drag.y;
+      if (Math.abs(dy) > 8 || Math.abs(p.x - this.drag.x) > 12) this.drag.moved = true;
+      if (this.drag.moved) {
+        this.pressedCard = null;
+        this.pickScroll = clamp(this.drag.s - dy, 0, this.pickMax);
+      }
+      return;
+    }
+    if (p.type === "up" || p.type === "cancel") {
+      if (this.setupBtn.pressed) {
+        this.setupBtn.pressed = false;
+        if (p.type === "up" && this.setupBtn.hit(p.x, p.y)) {
+          this.phase = "menu";
+          this.menu.reset();
+        }
+        return;
+      }
+      const card = this.pressedCard;
+      const moved = this.drag?.moved;
+      this.drag = null;
+      this.pressedCard = null;
+      if (p.type !== "up" || moved || !card || this.phaseT < 0.3) return;
+      if (this.cardAt(p.x, p.y) !== card) return;
+      if (card.kind === "random") this.pickRandom();
+      else if (card.kind === "all") this.playAll();
+      else if (this.eligible(card.idx)) this.pickGame(card.idx);
+      else this.env.sfx.tone({ freq: 200, dur: 0.08, vol: 0.04, type: "triangle" });
     }
   }
 
@@ -1238,45 +1515,57 @@ class PartyGame implements GameInstance {
       this.start();
       return true;
     }
+    if (this.phase === "pick" && !this.roll) {
+      const m = /^Digit([1-6])$/.exec(code);
+      if (m) this.pickGame(+m[1] - 1);
+      else if (code === "KeyR") this.pickRandom();
+      else if (code === "KeyA") this.playAll();
+      else return false;
+      return true;
+    }
     // Keyboard seats for testing on a computer: Z, M, P, Q
     const seat = { KeyZ: 0, KeyM: 1, KeyP: 2, KeyQ: 3 }[code as "KeyZ"];
-    if (seat !== undefined && this.phase === "play" && this.humans[seat]) {
-      this.seatFlash[seat] = 1;
-      this.mini!.tap(seat);
+    if (seat !== undefined && this.humans[seat]) {
+      if (this.phase === "intro") this.markReady(seat);
+      if (this.phase === "play") {
+        this.seatFlash[seat] = 1;
+        this.mini!.tap(seat);
+      }
       return true;
     }
     return false;
   }
 
+  // ── Update ───────────────────────────────────────────────────────────────
+
   update(dt: number) {
     this.time += dt;
     this.phaseT += dt;
     this.particles.update(dt);
+    this.setupBtn.update(dt);
     for (let i = 0; i < 4; i++) this.seatFlash[i] = Math.max(0, this.seatFlash[i] - dt * 5);
     if (this.phase === "menu") this.menu.update(dt);
     if (this.phase === "final") this.over.update(dt);
-    if (this.phase === "intro" && this.phaseT > 6) {
-      this.phase = "count";
-      this.phaseT = 0;
+    if (this.phase === "pick" && this.roll) {
+      const r = this.roll;
+      r.t += dt;
+      const steps = r.times.filter((t) => t <= r.t).length;
+      const shown = r.pool[(r.start + Math.max(0, steps - 1)) % r.pool.length];
+      if (shown !== r.shown) {
+        r.shown = shown;
+        const last = steps >= r.times.length;
+        this.env.sfx.tone({ freq: last ? 880 : 600 + steps * 8, dur: last ? 0.2 : 0.04, vol: last ? 0.08 : 0.04, type: last ? "triangle" : "square" });
+      }
+      if (r.t > r.times[r.times.length - 1] + 0.75) this.pickGame(r.target);
     }
-    if (this.phase === "count" && this.phaseT >= 2.4) {
-      this.phase = "play";
-      this.phaseT = 0;
-      this.mini!.start();
-      this.env.sfx.tone({ freq: 784, dur: 0.2, vol: 0.08, type: "square" });
-    }
-    if (this.phase === "count") {
-      const n = Math.floor(this.phaseT / 0.8);
-      if (Math.floor((this.phaseT - dt) / 0.8) !== n && this.phaseT - dt >= 0) this.env.sfx.tone({ freq: 523, dur: 0.1, vol: 0.06, type: "square" });
+    if (this.phase === "intro") {
+      if ((this.ready.every(Boolean) && this.phaseT > 1.2) || this.phaseT > this.introLimit()) this.go();
     }
     if (this.phase === "play") {
       this.mini!.update(dt);
       if (this.mini!.done) this.settle();
     }
-    if (this.phase === "result" && this.phaseT > 3) {
-      if (this.roundNo >= this.rounds) this.finish();
-      else this.nextMini();
-    }
+    if (this.phase === "result" && this.phaseT > 3) this.afterResult();
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -1321,13 +1610,55 @@ class PartyGame implements GameInstance {
           c.font = `800 ${Math.round(h * 0.28)}px ${FONT_DISPLAY}`;
           c.fillStyle = this.gained[i] ? "#fde68a" : "rgba(255,255,255,0.5)";
           c.fillText(this.gained[i] ? `+${this.gained[i]}` : "+0", w / 2, h * 0.58);
-        } else if (this.phase === "intro" || this.phase === "count") {
-          c.font = `700 ${Math.round(h * 0.17)}px ${FONT_DISPLAY}`;
-          c.fillStyle = "rgba(255,255,255,0.85)";
-          c.fillText(this.humans[i] ? "มุมของคุณ" : "บอทพร้อม", w / 2, h * 0.6);
-        }
+        } else if (this.phase === "intro") this.renderReady(c, i, w, h);
       }
     });
+  }
+
+  /** Seat on the rules screen: the short rule, and tap-to-ready for people. */
+  private renderReady(c: CanvasRenderingContext2D, i: number, w: number, h: number) {
+    const m = this.mini!;
+    c.font = `600 ${Math.round(clamp(h * 0.11, 11, 14))}px ${FONT_BODY}`;
+    c.fillStyle = "rgba(255,255,255,0.8)";
+    c.fillText(m.rule, w / 2, h * 0.36, w - 16);
+    if (!this.humans[i]) {
+      c.font = `700 ${Math.round(h * 0.15)}px ${FONT_DISPLAY}`;
+      c.fillStyle = "rgba(255,255,255,0.6)";
+      c.fillText("บอทพร้อม", w / 2, h * 0.64);
+    } else if (this.ready[i]) {
+      const cx = w / 2 - 44;
+      const cy = h * 0.64;
+      c.fillStyle = "#22c55e";
+      c.beginPath();
+      c.arc(cx, cy, 13, 0, TAU);
+      c.fill();
+      c.strokeStyle = "#ffffff";
+      c.lineWidth = 3;
+      c.lineCap = "round";
+      c.lineJoin = "round";
+      c.beginPath();
+      c.moveTo(cx - 6, cy);
+      c.lineTo(cx - 1, cy + 5);
+      c.lineTo(cx + 7, cy - 5);
+      c.stroke();
+      c.font = `800 ${Math.round(h * 0.16)}px ${FONT_DISPLAY}`;
+      c.fillStyle = "#bbf7d0";
+      c.fillText("พร้อม!", w / 2 + 14, cy);
+    } else {
+      const k = 0.5 + 0.5 * Math.sin(this.time * 5);
+      c.strokeStyle = rgba("#ffffff", 0.3 + k * 0.4);
+      c.lineWidth = 2;
+      c.setLineDash([6, 6]);
+      roundRectPath(c, 10, h * 0.5, w - 20, h * 0.28, 12);
+      c.stroke();
+      c.setLineDash([]);
+      c.font = `800 ${Math.round(h * 0.13)}px ${FONT_DISPLAY}`;
+      c.fillStyle = "#ffffff";
+      c.fillText("แตะตรงนี้ถ้าพร้อม", w / 2, h * 0.64, w - 28);
+    }
+    c.font = `500 11px ${FONT_BODY}`;
+    c.fillStyle = "rgba(255,255,255,0.55)";
+    c.fillText(`เริ่มเองใน ${Math.max(0, Math.ceil(this.introLimit() - this.phaseT))} วิ`, w / 2, h * 0.9);
   }
 
   render() {
@@ -1339,7 +1670,8 @@ class PartyGame implements GameInstance {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
 
-    if (this.phase !== "menu" && this.mini) {
+    if (this.phase === "pick" || this.phase === "final") this.renderPicker(ctx);
+    else if (this.phase !== "menu" && this.mini) {
       const a = this.arena();
       ctx.fillStyle = "rgba(255,255,255,0.04)";
       roundRectPath(ctx, a.x, a.y, a.w, a.h, 22);
@@ -1347,34 +1679,19 @@ class PartyGame implements GameInstance {
       for (let i = 0; i < 4; i++) this.renderSeat(ctx, i);
       const m = this.mini;
       if (this.phase === "play") m.renderArena(ctx, a);
-      else if (this.phase === "intro" || this.phase === "count") {
-        // Game card readable from both sides
-        const cx = a.x + a.w / 2;
-        const cy = a.y + a.h / 2;
-        ctx.save();
-        ctx.translate(cx, cy);
-        glow(ctx, 0, 0, 70, "#f59e0b", 0.3);
-        m.icon(ctx, 70);
-        ctx.restore();
-        if (this.phase === "intro") {
-          this.arenaText(ctx, m.name, 24, "#fde68a", 62);
-          this.howTo(ctx, m.howTo, a);
-          const left = Math.max(0, 6 - this.phaseT);
-          ctx.font = `600 11px ${FONT_BODY}`;
-          ctx.fillStyle = "rgba(255,255,255,0.55)";
-          ctx.textAlign = "left";
-          ctx.textBaseline = "middle";
-          ctx.fillText(`เกม ${this.roundNo + 1}/${this.rounds} · แตะเพื่อเริ่ม (${Math.ceil(left)})`, a.x + 12, cy);
-        } else {
-          const n = 3 - Math.floor(this.phaseT / 0.8);
-          this.arenaText(ctx, n > 0 ? `${n}` : "เริ่ม!", 44, "#ffffff", 70);
-        }
-      } else if (this.phase === "result") {
+      else if (this.phase === "intro") this.renderRules(ctx, a);
+      else if (this.phase === "result") {
         this.arenaText(ctx, this.resultText, 26, "#fde68a", 30);
         if (this.mode === "coop") this.drawStars(ctx, a.x + a.w / 2, a.y + a.h / 2, this.lastStars, 3);
         if (this.mode === "team") this.arenaText(ctx, `ทีมล่าง ${this.points[0] + this.points[1]} : ${this.points[2] + this.points[3]} ทีมบน`, 15, "#ffffff", 70);
+        const next = this.single ? (this.repsLeft > 0 ? `ต่อไป รอบ ${this.repNo + 1}/${this.repTotal}` : "กลับไปเลือกเกม…") : this.playlist.length ? "เกมต่อไปกำลังมา…" : "สรุปผล…";
+        ctx.font = `600 12px ${FONT_BODY}`;
+        ctx.fillStyle = "rgba(255,255,255,0.6)";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(next, a.x + 12, a.y + a.h / 2);
       }
-      if (this.mode === "coop" && this.phase !== "final") {
+      if (this.mode === "coop") {
         ctx.font = `700 12px ${FONT_BODY}`;
         ctx.textAlign = "right";
         ctx.textBaseline = "top";
@@ -1398,52 +1715,400 @@ class PartyGame implements GameInstance {
     this.particles.render(ctx);
     if (this.phase === "menu") this.menu.render(ctx, w, h);
     if (this.phase === "final") {
-      const ranking = [0, 1, 2, 3].sort((a, b) => this.points[b] - this.points[a]);
+      const pts = this.points.map((p, i) => p - this.plBase[i]);
+      const stars = this.stars - this.plStarsBase;
+      const ranking = [0, 1, 2, 3].sort((a, b) => pts[b] - pts[a]);
       const title =
         this.mode === "coop"
-          ? `ได้ ${this.stars} ดาว จาก ${this.rounds * 3}`
+          ? `ได้ ${stars} ดาว จาก ${this.plTotal * 3}`
           : this.mode === "team"
-            ? this.points[0] + this.points[1] === this.points[2] + this.points[3]
+            ? pts[0] + pts[1] === pts[2] + pts[3]
               ? "เสมอกัน!"
-              : `${this.points[0] + this.points[1] > this.points[2] + this.points[3] ? TEAM_NAMES[0] : TEAM_NAMES[1]} ชนะ!`
+              : `${pts[0] + pts[1] > pts[2] + pts[3] ? TEAM_NAMES[0] : TEAM_NAMES[1]} ชนะ!`
             : `${SEAT_NAMES[ranking[0]]} ชนะ!`;
       this.over.render(ctx, w, h, {
         title,
-        subtitle: this.mode === "coop" ? "เก่งมากที่ช่วยกัน" : ranking.map((i) => `${SEAT_NAMES[i]} ${this.points[i]}`).join(" · "),
+        subtitle: this.mode === "coop" ? "เก่งมากที่ช่วยกัน" : ranking.map((i) => `${SEAT_NAMES[i]} ${pts[i]}`).join(" · "),
         coins: this.earned,
-        chips: [`${this.rounds} เกม`, this.mode === "ffa" ? "แข่งเดี่ยว" : this.mode === "team" ? "ทีม 2:2" : "ร่วมมือ"],
+        chips: [`ครบ ${this.plTotal} เกม`, MODE_NAME[this.mode]],
         accent: "#f59e0b",
       });
     }
   }
 
-  private howTo(c: CanvasRenderingContext2D, text: string, a: Rect) {
+  /** Read-the-rules screen in the arena, written twice so both ends of the table can read it. */
+  private renderRules(c: CanvasRenderingContext2D, a: Rect) {
+    const m = this.mini!;
     const cx = a.x + a.w / 2;
     const cy = a.y + a.h / 2;
+    const bob = this.env.reducedMotion ? 0 : Math.sin(this.time * 3) * 3;
     c.save();
-    c.font = `500 13px ${FONT_BODY}`;
-    c.textAlign = "center";
-    c.textBaseline = "top";
-    c.fillStyle = "rgba(255,255,255,0.85)";
-    const words = text.split(" ");
-    const lines: string[] = [];
-    let line = "";
-    for (const wd of words) {
-      const t = line ? `${line} ${wd}` : wd;
-      if (c.measureText(t).width > a.w - 60 && line) {
-        lines.push(line);
-        line = wd;
-      } else line = t;
-    }
-    if (line) lines.push(line);
+    c.translate(cx, cy + bob);
+    glow(c, 0, 0, 80, m.color, 0.4);
+    c.fillStyle = "rgba(15,10,40,0.6)";
+    c.beginPath();
+    c.arc(0, 0, 38, 0, TAU);
+    c.fill();
+    c.strokeStyle = rgba(m.color, 0.8);
+    c.lineWidth = 2;
+    c.stroke();
+    m.icon(c, 56);
+    c.restore();
+    const goal = this.mode === "coop" ? m.coopGoal : MODE_GOAL[this.mode];
+    const half = Math.min(a.h / 2 - 8, 230);
     for (const flip of [false, true]) {
       c.save();
       c.translate(cx, cy);
       if (flip) c.rotate(Math.PI);
-      lines.forEach((l, k) => c.fillText(l, 0, 84 + k * 18));
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      let y = 58;
+      c.font = `800 22px ${FONT_DISPLAY}`;
+      c.lineWidth = 4;
+      c.strokeStyle = "rgba(0,0,0,0.5)";
+      c.strokeText(m.name, 0, y);
+      c.fillStyle = "#fde68a";
+      c.fillText(m.name, 0, y);
+      y += 28;
+      c.font = `800 15px ${FONT_DISPLAY}`;
+      const rw = Math.min(a.w - 70, c.measureText(m.rule).width + 28);
+      c.fillStyle = rgba(m.color, 0.3);
+      roundRectPath(c, -rw / 2, y - 13, rw, 26, 13);
+      c.fill();
+      c.fillStyle = "#ffffff";
+      c.fillText(m.rule, 0, y + 1, a.w - 80);
+      y += 26;
+      c.font = `500 13px ${FONT_BODY}`;
+      c.fillStyle = "rgba(255,255,255,0.85)";
+      for (const line of wrapText(c, m.howTo, a.w - 80).slice(0, 3)) {
+        if (y > half - 22) break;
+        c.fillText(line, 0, y);
+        y += 18;
+      }
+      if (goal && y < half - 6) {
+        c.font = `600 12px ${FONT_BODY}`;
+        c.fillStyle = "#fcd34d";
+        c.fillText(goal, 0, y + 4, a.w - 60);
+      }
       c.restore();
     }
+    // Progress note at the left edge
+    c.font = `600 11px ${FONT_BODY}`;
+    c.fillStyle = "rgba(255,255,255,0.55)";
+    c.textAlign = "left";
+    c.textBaseline = "middle";
+    const note = this.single ? (this.repTotal > 1 ? `รอบ ${this.repNo}/${this.repTotal}` : "") : `เกม ${this.plTotal - this.playlist.length}/${this.plTotal}`;
+    if (note) c.fillText(note, a.x + 12, cy);
+  }
+
+  // ── Picker ───────────────────────────────────────────────────────────────
+
+  private pickTop() {
+    return this.banner ? 150 : 124;
+  }
+
+  private layoutPicker() {
+    const { w, h } = this;
+    const cw = Math.min(w - 24, 760);
+    const x0 = (w - cw) / 2;
+    const cols = cw >= 600 ? 3 : 2;
+    const gap = 10;
+    const top = this.pickTop();
+    const footer = 66;
+    const actH = 74;
+    const rows = Math.ceil(MINIS.length / cols);
+    const avail = h - top - footer - actH - gap * (rows + 1);
+    const cardH = clamp(avail / rows, 146, 172);
+    const cardW = (cw - gap * (cols - 1)) / cols;
+    const contentH = actH + gap + rows * (cardH + gap);
+    this.pickMax = Math.max(0, contentH - (h - top - footer));
+    this.pickScroll = clamp(this.pickScroll, 0, this.pickMax);
+    let y = top - this.pickScroll;
+    const aw = (cw - gap) / 2;
+    this.cards = [
+      { kind: "random", idx: -1, x: x0, y, w: aw, h: actH },
+      { kind: "all", idx: -1, x: x0 + aw + gap, y, w: aw, h: actH },
+    ];
+    y += actH + gap;
+    MINIS.forEach((_, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      this.cards.push({ kind: "game", idx: i, x: x0 + col * (cardW + gap), y: y + row * (cardH + gap), w: cardW, h: cardH });
+    });
+    return { cw, x0, top, footer };
+  }
+
+  private renderPicker(c: CanvasRenderingContext2D) {
+    const { w, h } = this;
+    const { cw, x0, top, footer } = this.layoutPicker();
+    const rollIdx = this.roll ? this.roll.shown : -1;
+    c.save();
+    c.beginPath();
+    c.rect(0, top - 6, w, h - footer - top + 6);
+    c.clip();
+    for (const card of this.cards) this.renderCard(c, card, rollIdx);
     c.restore();
+
+    // Header
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.font = `800 22px ${FONT_DISPLAY}`;
+    c.fillStyle = "#ffffff";
+    c.fillText("เลือกมินิเกม", w / 2, 28);
+    const n = this.humans.filter(Boolean).length;
+    c.font = `500 13px ${FONT_BODY}`;
+    c.fillStyle = "rgba(255,255,255,0.7)";
+    c.fillText(`${MODE_NAME[this.mode]} · คนจริง ${n}${n < 4 ? ` · บอท ${4 - n}` : ""}`, w / 2, 53);
+    // Scoreboard
+    const sy = 88;
+    const chips: { label: string; color: string }[] =
+      this.mode === "coop"
+        ? [{ label: `ดาวที่ช่วยกันเก็บ ${this.stars}`, color: "#f59e0b" }]
+        : this.mode === "team"
+          ? [
+              { label: `${TEAM_NAMES[0]} ${this.points[0] + this.points[1]}`, color: COLORS[0] },
+              { label: `${TEAM_NAMES[1]} ${this.points[2] + this.points[3]}`, color: COLORS[2] },
+            ]
+          : [0, 1, 2, 3].map((i) => ({ label: `${this.humans[i] ? "" : "บอท"}${SEAT_NAMES[i]} ${this.points[i]}`, color: COLORS[i] }));
+    const chipW = Math.min(150, (cw - 6 * (chips.length - 1)) / chips.length);
+    let cx = w / 2 - (chipW * chips.length + 6 * (chips.length - 1)) / 2;
+    const lead = this.mode === "ffa" && Math.max(...this.points) > 0 ? Math.max(...this.points) : -1;
+    chips.forEach((ch, k) => {
+      c.fillStyle = rgba(ch.color, 0.22);
+      roundRectPath(c, cx, sy - 16, chipW, 32, 16);
+      c.fill();
+      c.strokeStyle = rgba(ch.color, lead >= 0 && this.points[k] === lead ? 1 : 0.6);
+      c.lineWidth = lead >= 0 && this.points[k] === lead ? 2 : 1;
+      c.stroke();
+      c.fillStyle = ch.color;
+      c.beginPath();
+      c.arc(cx + 14, sy, 5, 0, TAU);
+      c.fill();
+      c.font = `700 ${chips.length > 2 ? 11 : 13}px ${FONT_DISPLAY}`;
+      c.fillStyle = "#ffffff";
+      c.textAlign = "center";
+      c.fillText(ch.label, cx + chipW / 2 + 7, sy + 1, chipW - 28);
+      cx += chipW + 6;
+    });
+    c.textAlign = "center";
+    c.font = `500 11px ${FONT_BODY}`;
+    c.fillStyle = "rgba(255,255,255,0.45)";
+    c.fillText(this.mode === "coop" ? "" : "แต้มรวมทุกเกมที่เล่นวันนี้", w / 2, sy + 24);
+    if (this.banner) {
+      const by = 130;
+      const text = this.banner.text;
+      c.font = `700 13px ${FONT_DISPLAY}`;
+      const tw = Math.min(cw - 20, c.measureText(text).width + 120);
+      c.fillStyle = "rgba(245,158,11,0.16)";
+      roundRectPath(c, w / 2 - tw / 2, by - 13, tw, 26, 13);
+      c.fill();
+      c.fillStyle = "#fde68a";
+      c.textAlign = "left";
+      c.fillText(text, w / 2 - tw / 2 + 12, by + 1, tw - 110);
+      drawCoin(c, w / 2 + tw / 2 - 74, by, 8);
+      c.fillStyle = "#ffd76a";
+      c.fillText(`+${this.banner.coins} เหรียญ`, w / 2 + tw / 2 - 62, by + 1);
+    }
+    // Footer
+    const fg = c.createLinearGradient(0, h - footer - 10, 0, h);
+    fg.addColorStop(0, "rgba(11,7,32,0)");
+    fg.addColorStop(0.3, "rgba(11,7,32,0.9)");
+    c.fillStyle = fg;
+    c.fillRect(0, h - footer - 10, w, footer + 10);
+    this.setupBtn.place(w / 2, h - 56, Math.min(260, cw), 46);
+    this.setupBtn.render(c);
+    if (this.pickMax > 0) {
+      // Scroll hint
+      const k = this.pickScroll / this.pickMax;
+      c.fillStyle = "rgba(255,255,255,0.25)";
+      roundRectPath(c, x0 + cw + 4, top + k * (h - footer - top - 40), 3, 40, 2);
+      c.fill();
+    }
+  }
+
+  private renderCard(c: CanvasRenderingContext2D, card: PickCard, rollIdx: number) {
+    const { x, y, w, h } = card;
+    if (y > this.h || y + h < 0) return;
+    const pressed = this.pressedCard === card;
+    const lit = card.kind === "game" && card.idx === rollIdx;
+    const ok = card.kind !== "game" || this.eligible(card.idx);
+    const m = card.kind === "game" ? this.protos[card.idx] : null;
+    const color = m ? m.color : card.kind === "random" ? "#a855f7" : "#f59e0b";
+    const appear = ease.outCubic(clamp(this.phaseT * 3 - (card.kind === "game" ? 0.15 + card.idx * 0.05 : 0), 0, 1));
+    c.save();
+    c.globalAlpha = appear * (this.roll && !lit && card.kind === "game" ? 0.55 : 1);
+    c.translate(x + w / 2, y + h / 2 + (1 - appear) * 16);
+    const s = pressed ? 0.97 : lit ? 1.04 : 1;
+    c.scale(s, s);
+    c.translate(-w / 2, -h / 2);
+    if (lit) glow(c, w / 2, h / 2, Math.max(w, h) * 0.8, color, 0.5);
+    const bg = c.createLinearGradient(0, 0, w, h);
+    bg.addColorStop(0, rgba(color, 0.32));
+    bg.addColorStop(0.55, "rgba(24,18,60,0.94)");
+    bg.addColorStop(1, "rgba(16,12,44,0.96)");
+    c.fillStyle = bg;
+    roundRectPath(c, 0, 0, w, h, 18);
+    c.fill();
+    c.strokeStyle = lit ? "#ffffff" : rgba(color, 0.7);
+    c.lineWidth = lit ? 3 : 1.5;
+    c.stroke();
+    // Sheen
+    const sh = c.createLinearGradient(0, 0, 0, h * 0.5);
+    sh.addColorStop(0, "rgba(255,255,255,0.08)");
+    sh.addColorStop(1, "rgba(255,255,255,0)");
+    c.fillStyle = sh;
+    roundRectPath(c, 2, 2, w - 4, h * 0.5, 16);
+    c.fill();
+
+    if (card.kind !== "game") {
+      const iy = h / 2;
+      c.save();
+      c.translate(30, iy);
+      glow(c, 0, 0, 34, color, 0.45);
+      if (card.kind === "random") this.drawDice(c);
+      else this.drawPlaylist(c);
+      c.restore();
+      const title = card.kind === "random" ? "สุ่มเกม" : "เล่นต่อเนื่องทุกเกม";
+      const sub = card.kind === "random" ? "ให้เครื่องเลือกให้" : `${MINIS.filter((_, i) => this.eligible(i)).length} เกมติดกัน สรุปผลตอนจบ`;
+      c.textAlign = "left";
+      c.textBaseline = "middle";
+      c.fillStyle = "#ffffff";
+      c.font = `800 ${this.fitFont(c, title, w - 66, 16, 12)}px ${FONT_DISPLAY}`;
+      c.fillText(title, 58, iy - 11);
+      c.font = `500 11px ${FONT_BODY}`;
+      c.fillStyle = "rgba(255,255,255,0.7)";
+      c.fillText(sub, 58, iy + 12, w - 66);
+      c.restore();
+      return;
+    }
+    const mm = m!;
+    // Icon
+    c.save();
+    c.translate(32, 32);
+    glow(c, 0, 0, 36, color, 0.45);
+    const ig = c.createRadialGradient(-6, -8, 2, 0, 0, 24);
+    ig.addColorStop(0, rgba(color, 0.55));
+    ig.addColorStop(1, "rgba(15,10,40,0.9)");
+    c.fillStyle = ig;
+    c.beginPath();
+    c.arc(0, 0, 24, 0, TAU);
+    c.fill();
+    c.strokeStyle = rgba(color, 0.9);
+    c.lineWidth = 1.5;
+    c.stroke();
+    mm.icon(c, 34);
+    c.restore();
+    // Number key / played count
+    c.textAlign = "right";
+    c.textBaseline = "middle";
+    c.font = `600 11px ${FONT_BODY}`;
+    c.fillStyle = "rgba(255,255,255,0.55)";
+    const played = this.played[card.idx];
+    c.fillText(played ? `เล่นแล้ว ${played}` : mm.reps > 1 ? `${mm.reps} รอบ` : "", w - 12, 22);
+    // Name and how-to
+    c.textAlign = "left";
+    c.fillStyle = "#ffffff";
+    c.font = `800 ${this.fitFont(c, mm.name, w - 24, 16, 12)}px ${FONT_DISPLAY}`;
+    c.fillText(mm.name, 12, 68);
+    c.font = `500 12px ${FONT_BODY}`;
+    c.fillStyle = "rgba(255,255,255,0.75)";
+    const lines = wrapText(c, mm.blurb, w - 24).slice(0, h > 165 ? 3 : 2);
+    lines.forEach((l, k) => c.fillText(l, 12, 89 + k * 16));
+    // Mode pills
+    const pw = (w - 24 - 8) / 3;
+    MODE_LIST.forEach((md, k) => {
+      const px = 12 + k * (pw + 4);
+      const py = h - 27;
+      const has = mm.modes.includes(md);
+      const now = md === this.mode;
+      c.fillStyle = has ? (now ? color : rgba(color, 0.2)) : "rgba(255,255,255,0.04)";
+      roundRectPath(c, px, py, pw, 18, 9);
+      c.fill();
+      if (!has) {
+        c.strokeStyle = "rgba(255,255,255,0.12)";
+        c.lineWidth = 1;
+        c.stroke();
+      }
+      c.font = `700 10px ${FONT_DISPLAY}`;
+      c.textAlign = "center";
+      c.fillStyle = has ? (now ? "#1a1033" : "rgba(255,255,255,0.9)") : "rgba(255,255,255,0.3)";
+      c.fillText(MODE_SHORT[md], px + pw / 2, py + 9.5);
+      if (!has) {
+        c.strokeStyle = "rgba(255,255,255,0.3)";
+        c.beginPath();
+        c.moveTo(px + pw * 0.25, py + 9);
+        c.lineTo(px + pw * 0.75, py + 9);
+        c.stroke();
+      }
+    });
+    if (!ok) {
+      c.fillStyle = "rgba(8,6,24,0.6)";
+      roundRectPath(c, 0, 0, w, h, 18);
+      c.fill();
+      c.font = `700 12px ${FONT_DISPLAY}`;
+      c.textAlign = "center";
+      c.fillStyle = "rgba(255,255,255,0.85)";
+      c.fillText(`ไม่มีในโหมด${MODE_SHORT[this.mode]}`, w / 2, h / 2 - 6);
+    }
+    c.restore();
+  }
+
+  private fitFont(c: CanvasRenderingContext2D, text: string, maxW: number, size: number, min: number) {
+    let s = size;
+    for (; s > min; s--) {
+      c.font = `800 ${s}px ${FONT_DISPLAY}`;
+      if (c.measureText(text).width <= maxW) break;
+    }
+    return s;
+  }
+
+  private drawDice(c: CanvasRenderingContext2D) {
+    const spin = this.roll ? this.roll.t * 12 : Math.sin(this.time * 2) * 0.15;
+    c.save();
+    c.rotate(spin);
+    const g = c.createLinearGradient(-16, -16, 16, 16);
+    g.addColorStop(0, "#ffffff");
+    g.addColorStop(1, "#d8b4fe");
+    c.fillStyle = g;
+    roundRectPath(c, -16, -16, 32, 32, 8);
+    c.fill();
+    c.fillStyle = "#6b21a8";
+    for (const [px, py] of [
+      [-8, -8],
+      [8, -8],
+      [0, 0],
+      [-8, 8],
+      [8, 8],
+    ])
+      c.beginPath(), c.arc(px, py, 3, 0, TAU), c.fill();
+    c.restore();
+  }
+
+  private drawPlaylist(c: CanvasRenderingContext2D) {
+    // Three mini cards fanned out, with a loop arrow
+    for (let k = 0; k < 3; k++) {
+      c.save();
+      c.rotate((k - 1) * 0.28);
+      c.fillStyle = [COLORS[0], COLORS[1], COLORS[3]][k];
+      roundRectPath(c, -9, -16, 18, 26, 4);
+      c.fill();
+      c.strokeStyle = "rgba(255,255,255,0.7)";
+      c.lineWidth = 1;
+      c.stroke();
+      c.restore();
+    }
+    c.strokeStyle = "#ffffff";
+    c.lineWidth = 2.5;
+    c.lineCap = "round";
+    c.beginPath();
+    c.arc(0, 4, 17, 0.3, Math.PI - 0.3);
+    c.stroke();
+    c.fillStyle = "#ffffff";
+    c.beginPath();
+    c.moveTo(-17, 2);
+    c.lineTo(-21, 10);
+    c.lineTo(-12, 9);
+    c.fill();
   }
 
   private drawStars(c: CanvasRenderingContext2D, x: number, y: number, n: number, max: number) {

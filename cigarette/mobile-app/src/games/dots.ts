@@ -18,6 +18,100 @@ export const dotsGame: GameDefinition = {
   create: (env) => new Dots(env),
 };
 
+// ── Board helpers and bot (pure, so they can be simulated outside the canvas) ─────────────────
+// Edge id: horizontal edges first ((n+1) rows × n), then vertical (n rows × (n+1)).
+
+/** Edge ids around box (r, c): top, bottom, left, right. */
+export function dotsBoxEdges(n: number, r: number, c: number) {
+  const h = (n + 1) * n;
+  return [r * n + c, (r + 1) * n + c, h + r * (n + 1) + c, h + r * (n + 1) + c + 1];
+}
+
+/** Boxes touching an edge. */
+export function dotsEdgeBoxes(n: number, e: number): [number, number][] {
+  const h = (n + 1) * n;
+  const out: [number, number][] = [];
+  if (e < h) {
+    const r = Math.floor(e / n);
+    const c = e % n;
+    if (r > 0) out.push([r - 1, c]);
+    if (r < n) out.push([r, c]);
+  } else {
+    const k = e - h;
+    const r = Math.floor(k / (n + 1));
+    const c = k % (n + 1);
+    if (c > 0) out.push([r, c - 1]);
+    if (c < n) out.push([r, c]);
+  }
+  return out;
+}
+
+function sidesOf(n: number, edges: number[], r: number, c: number) {
+  let s = 0;
+  for (const e of dotsBoxEdges(n, r, c)) if (edges[e]) s++;
+  return s;
+}
+
+/** How many boxes the next player could grab in a row after edge e is drawn. */
+function giveaway(n: number, src: number[], e: number) {
+  const edges = src.slice();
+  edges[e] = 9;
+  let taken = 0;
+  for (;;) {
+    let found = -1;
+    for (let r = 0; r < n && found < 0; r++)
+      for (let c = 0; c < n; c++) {
+        if (sidesOf(n, edges, r, c) === 3) {
+          found = dotsBoxEdges(n, r, c).find((x) => !edges[x])!;
+          break;
+        }
+      }
+    if (found < 0) break;
+    edges[found] = 9;
+    for (const [r, c] of dotsEdgeBoxes(n, found)) if (sidesOf(n, edges, r, c) === 4) taken++;
+  }
+  return taken;
+}
+
+/**
+ * Picks the bot's edge. Levels:
+ * 0 ง่าย  — skips an open box about 40% of the time, often draws a third side for no reason,
+ *           never counts chains. A careful beginner should win most games.
+ * 1 กลาง  — always takes open boxes, plays safe lines while there are any, then picks at random.
+ * 2 เก่ง  — as กลาง, but when every line gives something away it gives away the shortest chain.
+ */
+export function dotsBotMove(n: number, edges: number[], level: number, rand: () => number = Math.random): number {
+  const pick = (a: number[]) => a[Math.floor(rand() * a.length)];
+  const free: number[] = [];
+  for (let i = 0; i < edges.length; i++) if (!edges[i]) free.push(i);
+  const isCapture = (e: number) => dotsEdgeBoxes(n, e).some(([r, c]) => sidesOf(n, edges, r, c) === 3);
+  const isSafe = (e: number) => dotsEdgeBoxes(n, e).every(([r, c]) => sidesOf(n, edges, r, c) < 2);
+  const completes = free.filter(isCapture);
+  if (level <= 0) {
+    if (completes.length && rand() < 0.6) return pick(completes);
+    const rest = free.filter((e) => !isCapture(e));
+    if (!rest.length) return pick(free);
+    const safe = rest.filter(isSafe);
+    const opens = rest.filter((e) => !isSafe(e)); // draws a third side somewhere
+    if (opens.length && (!safe.length || rand() < 0.4)) return pick(opens);
+    return pick(safe.length ? safe : rest);
+  }
+  if (completes.length) return pick(completes);
+  const safe = free.filter(isSafe);
+  if (safe.length) return pick(safe);
+  if (level === 1) return pick(free);
+  let best = free[0];
+  let bestG = Infinity;
+  for (const e of free) {
+    const g = giveaway(n, edges, e) + rand() * 0.1;
+    if (g < bestG) {
+      bestG = g;
+      best = e;
+    }
+  }
+  return best;
+}
+
 const COLORS = ["#38bdf8", "#f87171", "#4ade80", "#facc15"];
 const NAMES = ["ฟ้า", "แดง", "เขียว", "เหลือง"];
 const LV = ["ง่าย", "กลาง", "เก่ง"];
@@ -123,33 +217,13 @@ class Dots implements GameInstance {
     return (this.n + 1) * this.n;
   }
 
-  /** Edge ids around box (r, c): top, bottom, left, right. */
-  private boxEdges(r: number, c: number) {
-    const n = this.n;
-    return [r * n + c, (r + 1) * n + c, this.hCount + r * (n + 1) + c, this.hCount + r * (n + 1) + c + 1];
-  }
-
   /** Boxes touching an edge. */
   private edgeBoxes(e: number): [number, number][] {
-    const n = this.n;
-    const out: [number, number][] = [];
-    if (e < this.hCount) {
-      const r = Math.floor(e / n);
-      const c = e % n;
-      if (r > 0) out.push([r - 1, c]);
-      if (r < n) out.push([r, c]);
-    } else {
-      const k = e - this.hCount;
-      const r = Math.floor(k / (n + 1));
-      const c = k % (n + 1);
-      if (c > 0) out.push([r, c - 1]);
-      if (c < n) out.push([r, c]);
-    }
-    return out;
+    return dotsEdgeBoxes(this.n, e);
   }
 
   private sides(edges: number[], r: number, c: number) {
-    return this.boxEdges(r, c).filter((e) => edges[e]).length;
+    return sidesOf(this.n, edges, r, c);
   }
 
   private start() {
@@ -228,49 +302,8 @@ class Dots implements GameInstance {
 
   // ── Bot ──────────────────────────────────────────────────────────────────
 
-  /** How many boxes the next player could grab in a row after edge e is drawn. */
-  private giveaway(e: number) {
-    const edges = this.edges.slice();
-    edges[e] = 9;
-    let taken = 0;
-    for (;;) {
-      let found = -1;
-      for (let r = 0; r < this.n && found < 0; r++)
-        for (let c = 0; c < this.n; c++) {
-          if (this.sides(edges, r, c) === 3) {
-            found = this.boxEdges(r, c).find((x) => !edges[x])!;
-            break;
-          }
-        }
-      if (found < 0) break;
-      edges[found] = 9;
-      for (const [r, c] of this.edgeBoxes(found)) if (this.sides(edges, r, c) === 4) taken++;
-    }
-    return taken;
-  }
-
   private botPlay() {
-    const free = this.edges.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0);
-    const completes = free.filter((e) => this.edgeBoxes(e).some(([r, c]) => this.sides(this.edges, r, c) === 3));
-    if (completes.length && (this.level > 0 || Math.random() < 0.6)) return this.play(completes[Math.floor(Math.random() * completes.length)]);
-    const safe = free.filter((e) => this.edgeBoxes(e).every(([r, c]) => this.sides(this.edges, r, c) < 2));
-    if (this.level === 0) {
-      const pool = safe.length && Math.random() < 0.5 ? safe : free;
-      return this.play(pool[Math.floor(Math.random() * pool.length)]);
-    }
-    if (safe.length) return this.play(safe[Math.floor(Math.random() * safe.length)]);
-    if (this.level === 1) return this.play(free[Math.floor(Math.random() * free.length)]);
-    // Give away as little as possible
-    let best = free[0];
-    let bestG = Infinity;
-    for (const e of free) {
-      const g = this.giveaway(e) + Math.random() * 0.1;
-      if (g < bestG) {
-        bestG = g;
-        best = e;
-      }
-    }
-    this.play(best);
+    this.play(dotsBotMove(this.n, this.edges, this.level));
   }
 
   // ── Input ────────────────────────────────────────────────────────────────

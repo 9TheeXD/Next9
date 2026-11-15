@@ -138,6 +138,61 @@ function drawPrism(c: CanvasRenderingContext2D, size: number, time: number) {
   c.restore();
 }
 
+// ── Match rules (pure, shared by the swap check, the hint and the "no moves" reshuffle) ───────────
+// Standard match-3 rules: a swap of two neighbours is valid when, after it, either moved gem sits in a
+// straight line of 3 or more of its colour, horizontally or vertically. The gem may land at the end
+// or in the middle of the line (X _ X filled), lines of 4 / 5 count, and an L or T shape counts both
+// of its lines. A prism swaps with anything; two light gems (row / column) swapped together fire a cross.
+
+type RC = [number, number];
+type GemLike = { t: number; sp: Special } | null;
+
+const isLineGem = (g: GemLike) => !!g && (g.sp === "row" || g.sp === "col");
+
+/** Length of the longest straight line through (r, c), reading types through `at` (-1 = never matches). */
+function lineAt(at: (r: number, c: number) => number, rows: number, cols: number, r: number, c: number) {
+  const t = at(r, c);
+  if (t < 0) return 0;
+  let h = 1;
+  for (let x = c - 1; x >= 0 && at(r, x) === t; x--) h++;
+  for (let x = c + 1; x < cols && at(r, x) === t; x++) h++;
+  let v = 1;
+  for (let y = r - 1; y >= 0 && at(y, c) === t; y--) v++;
+  for (let y = r + 1; y < rows && at(y, c) === t; y++) v++;
+  return Math.max(h, v);
+}
+
+/** True when swapping neighbours a and b makes a match (or fires a special). Does not change the grid. */
+export function gemSwapValid(grid: GemLike[][], a: RC, b: RC): boolean {
+  const rows = grid.length;
+  const cols = rows ? grid[0].length : 0;
+  const inside = (p: RC) => p[0] >= 0 && p[0] < rows && p[1] >= 0 && p[1] < cols;
+  if (!inside(a) || !inside(b) || Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) !== 1) return false;
+  const ga = grid[a[0]][a[1]];
+  const gb = grid[b[0]][b[1]];
+  if (!ga || !gb) return false;
+  if (ga.sp === "prism" || gb.sp === "prism") return true;
+  if (isLineGem(ga) && isLineGem(gb)) return true;
+  const at = (r: number, c: number) => {
+    const g = r === a[0] && c === a[1] ? gb : r === b[0] && c === b[1] ? ga : grid[r][c];
+    return g && g.t >= 0 ? g.t : -1;
+  };
+  return lineAt(at, rows, cols, a[0], a[1]) >= 3 || lineAt(at, rows, cols, b[0], b[1]) >= 3;
+}
+
+/** Every valid swap on the board (each pair once: right and down neighbours). */
+export function gemValidMoves(grid: GemLike[][]): [RC, RC][] {
+  const out: [RC, RC][] = [];
+  const rows = grid.length;
+  const cols = rows ? grid[0].length : 0;
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (c + 1 < cols && gemSwapValid(grid, [r, c], [r, c + 1])) out.push([[r, c], [r, c + 1]]);
+      if (r + 1 < rows && gemSwapValid(grid, [r, c], [r + 1, c])) out.push([[r, c], [r + 1, c]]);
+    }
+  return out;
+}
+
 export const gemsGame: GameDefinition = {
   id: "gems",
   title: "สวนอัญมณี",
@@ -178,7 +233,7 @@ class GemsGame implements GameInstance {
   private idleT = 0;
   private hint: [[number, number], [number, number]] | null = null;
   private sel: [number, number] | null = null;
-  private drag: { r: number; c: number; x: number; y: number; id: number } | null = null;
+  private drag: { r: number; c: number; x: number; y: number; id: number; tapSwap: boolean } | null = null;
   private particles = new Particles();
   private floaters = new Floaters();
   private startBtn = new Button("เริ่มรอบ 3 นาที", "#ff4d8d");
@@ -254,25 +309,14 @@ class GemsGame implements GameInstance {
     this.grid[b[0]][b[1]] = t;
   }
 
+  /** A valid swap (random among all of them, so the hint is not always the top-left one), or null. */
   private findMove(): [[number, number], [number, number]] | null {
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        if (this.grid[r][c]?.sp === "prism") {
-          const n: [number, number] = c + 1 < COLS ? [r, c + 1] : [r, c - 1];
-          return [[r, c], n];
-        }
-        for (const [dr, dc] of [[0, 1], [1, 0]]) {
-          const r2 = r + dr;
-          const c2 = c + dc;
-          if (r2 >= ROWS || c2 >= COLS) continue;
-          this.swapCells([r, c], [r2, c2]);
-          const ok = this.findRuns().length > 0;
-          this.swapCells([r, c], [r2, c2]);
-          if (ok) return [[r, c], [r2, c2]];
-        }
-      }
-    }
-    return null;
+    const moves = gemValidMoves(this.grid);
+    if (!moves.length) return null;
+    // Prefer plain matches for the hint; a prism is always "valid" but is not much of a tip.
+    const plain = moves.filter(([a, b]) => this.grid[a[0]][a[1]]?.sp !== "prism" && this.grid[b[0]][b[1]]?.sp !== "prism");
+    const pool = plain.length ? plain : moves;
+    return pool[Math.floor(Math.random() * pool.length)];
   }
 
   // ── Turn logic ───────────────────────────────────────────────────────────
@@ -295,6 +339,7 @@ class GemsGame implements GameInstance {
   private afterSwap() {
     const a = this.swapA!;
     const b = this.swapB!;
+    const valid = gemSwapValid(this.grid, a, b);
     this.swapCells(a, b);
     const ga = this.grid[a[0]][a[1]]!;
     const gb = this.grid[b[0]][b[1]]!;
@@ -312,7 +357,18 @@ class GemsGame implements GameInstance {
       this.startClear(this.expand(set), []);
       return;
     }
-    if (!this.findRuns().length) {
+    // Two light gems swapped together: a cross through the cell the dragged gem landed on.
+    if (isLineGem(ga) && isLineGem(gb)) {
+      const set = new Set<string>();
+      for (let x = 0; x < COLS; x++) set.add(`${b[0]},${x}`);
+      for (let y = 0; y < ROWS; y++) set.add(`${y},${b[1]}`);
+      set.add(`${a[0]},${a[1]}`);
+      this.floaters.add("กากบาท!", this.bx + (b[1] + 0.5) * this.cell, this.by + (b[0] + 0.5) * this.cell, "#ffffff", 26);
+      this.env.sfx.noise({ dur: 0.35, vol: 0.09, freq: 1600, sweepTo: 400, q: 2 });
+      this.startClear(this.expand(set), []);
+      return;
+    }
+    if (!valid || !this.findRuns().length) {
       this.swapCells(a, b); // put them back; the animation runs from swapped to original
       this.phase = "swapBack";
       this.phaseT = 0;
@@ -545,24 +601,31 @@ class GemsGame implements GameInstance {
         this.sel = null;
         return;
       }
-      if (this.sel && Math.abs(this.sel[0] - at[0]) + Math.abs(this.sel[1] - at[1]) === 1) {
-        this.trySwap(this.sel, at);
-        return;
+      // A press next to the selected gem may be a tap (swap the two) or the start of a drag of this gem
+      // in any direction: decide on release / movement, never on the press itself.
+      const besideSel = !!this.sel && Math.abs(this.sel[0] - at[0]) + Math.abs(this.sel[1] - at[1]) === 1;
+      this.drag = { r: at[0], c: at[1], x: p.x, y: p.y, id: p.id, tapSwap: besideSel };
+      if (!besideSel) {
+        this.sel = at;
+        this.env.sfx.tone({ freq: 660, dur: 0.05, vol: 0.04 });
       }
-      this.sel = at;
-      this.drag = { r: at[0], c: at[1], x: p.x, y: p.y, id: p.id };
-      this.env.sfx.tone({ freq: 660, dur: 0.05, vol: 0.04 });
     } else if (p.type === "move" && this.drag && this.drag.id === p.id) {
       const dx = p.x - this.drag.x;
       const dy = p.y - this.drag.y;
-      if (Math.max(Math.abs(dx), Math.abs(dy)) > this.cell * 0.38) {
+      // Wait for the board to settle: the finger stays down, so the swipe goes through once it is idle.
+      if (Math.max(Math.abs(dx), Math.abs(dy)) > this.cell * 0.38 && this.phase === "idle") {
         const a: [number, number] = [this.drag.r, this.drag.c];
         const b: [number, number] = Math.abs(dx) > Math.abs(dy) ? [a[0], a[1] + Math.sign(dx)] : [a[0] + Math.sign(dy), a[1]];
         this.drag = null;
         this.trySwap(a, b);
       }
     } else if (p.type === "up" || p.type === "cancel") {
+      const d = this.drag;
       this.drag = null;
+      if (p.type === "up" && d && d.id === p.id && d.tapSwap && this.sel) {
+        const moved = Math.max(Math.abs(p.x - d.x), Math.abs(p.y - d.y));
+        if (moved <= this.cell * 0.38) this.trySwap(this.sel, [d.r, d.c]);
+      }
     }
   }
 

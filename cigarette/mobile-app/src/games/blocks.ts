@@ -54,6 +54,13 @@ function rotateCells(cells: [number, number][], n: number, dir: 1 | -1): [number
   return cells.map(([x, y]) => (dir === 1 ? [n - 1 - y, x] : [y, n - 1 - x]) as [number, number]);
 }
 
+/** shade() with alpha: lighten (amt > 0) or darken (amt < 0) a hex colour. */
+function shadeA(hex: string, amt: number, a: number) {
+  const n = parseInt(hex.slice(1), 16);
+  const f = (c: number) => Math.round(amt >= 0 ? c + (255 - c) * amt : c * (1 + amt));
+  return `rgba(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)},${a})`;
+}
+
 export function drawBlock(ctx: CanvasRenderingContext2D, s: number, color: string) {
   const r = s * 0.2;
   const g = ctx.createLinearGradient(0, 0, s, s);
@@ -107,6 +114,29 @@ export const blocksGame: GameDefinition = {
 };
 
 type State = "intro" | "play" | "over";
+type Act = "left" | "right" | "soft" | "hard" | "rotate";
+
+/** On-screen control pad. */
+interface Pad {
+  act: Act;
+  label: string;
+  color: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  down: number; // 0..1 press animation
+}
+
+/** Held inputs that auto-repeat (keyboard keys and on-screen pads share the same timing). */
+const REPEAT: Record<string, Act> = {
+  ArrowLeft: "left",
+  ArrowRight: "right",
+  ArrowDown: "soft",
+  "pad:left": "left",
+  "pad:right": "right",
+  "pad:soft": "soft",
+};
 
 class BlocksGame implements GameInstance {
   private earned = 0;
@@ -145,15 +175,38 @@ class BlocksGame implements GameInstance {
   private best = 0;
   private newBest = false;
   private elapsed = 0;
-  private tutorial = 0; // seconds the gesture hint stays visible
-  // touch
-  private touch: { id: number; x0: number; y0: number; ax: number; ay: number; t0: number; moved: boolean; soft: boolean } | null = null;
+  private tutorial = 0; // seconds the controls hint stays visible
+  // touch gestures on the board; the axis locks after the first few pixels so a swipe down never drifts sideways
+  private touch: { id: number; x0: number; y0: number; ax: number; ay: number; t0: number; axis: "" | "h" | "v"; soft: boolean } | null = null;
+  private gestures = true;
+  private gestBtn = new Button("", "#7c5cff", "ghost");
+  // on-screen control bar
+  private pads: Pad[] = [
+    { act: "left", label: "ซ้าย", color: "#7c5cff", x: 0, y: 0, w: 0, h: 0, down: 0 },
+    { act: "soft", label: "ลงเร็ว", color: "#4f7dff", x: 0, y: 0, w: 0, h: 0, down: 0 },
+    { act: "right", label: "ขวา", color: "#7c5cff", x: 0, y: 0, w: 0, h: 0, down: 0 },
+    { act: "hard", label: "ทิ้งลง", color: "#ff5b8a", x: 0, y: 0, w: 0, h: 0, down: 0 },
+    { act: "rotate", label: "หมุน", color: "#22c7e8", x: 0, y: 0, w: 0, h: 0, down: 0 },
+  ];
+  private padTouch = new Map<number, Act>(); // pointer id -> pad held by that finger
   // keyboard auto-repeat
   private keys = new Map<string, number>();
 
   constructor(private env: GameEnv) {
     this.best = parseInt(env.store.get("best") || "0", 10) || 0;
+    this.gestures = env.store.get("gestures") !== "off";
+    this.syncGestLabel();
     this.reset();
+  }
+
+  private syncGestLabel() {
+    this.gestBtn.label = this.gestures ? "ลากบนกระดาน: เปิด" : "ลากบนกระดาน: ปิด (ใช้ปุ่ม)";
+  }
+
+  private releaseAll() {
+    this.padTouch.clear();
+    this.touch = null;
+    for (const code of [...this.keys.keys()]) this.keys.delete(code);
   }
 
   private reset() {
@@ -363,6 +416,7 @@ class BlocksGame implements GameInstance {
 
   private gameOver() {
     this.state = "over";
+    this.releaseAll();
     this.stateT = 0;
     this.piece = null;
     const r = bestScore(this.env.store, "best", this.score);
@@ -380,6 +434,7 @@ class BlocksGame implements GameInstance {
 
   private start() {
     this.reset();
+    this.releaseAll();
     this.state = "play";
     this.stateT = 0;
     this.tutorial = 6;
@@ -394,7 +449,10 @@ class BlocksGame implements GameInstance {
     this.w = w;
     this.h = h;
     const top = 74;
-    const bottom = 18;
+    // Control bar along the bottom, in thumb reach; the board sits above it and is never covered.
+    const barH = clamp(Math.round(h * 0.095), 56, 72);
+    const barPad = 12;
+    const bottom = barH + barPad + 10;
     const margin = 14;
     const sideCols = 3.4;
     const cell = Math.floor(Math.min((w - margin * 2 - 10) / (COLS + sideCols), (h - top - bottom) / ROWS));
@@ -404,6 +462,22 @@ class BlocksGame implements GameInstance {
     this.bx = Math.round((w - totalW) / 2);
     this.by = Math.round(top + (h - top - bottom - this.cell * ROWS) / 2);
     this.sideX = this.bx + boardW + 10;
+    {
+      const barW = Math.min(w - 24, 470);
+      const gap = 8;
+      const split = 16; // extra space between the move cluster and the drop / rotate cluster
+      const pw = (barW - gap * (this.pads.length - 1) - split) / this.pads.length;
+      let x = (w - barW) / 2;
+      const y = h - barPad - barH;
+      this.pads.forEach((p, i) => {
+        if (i === 3) x += split;
+        p.x = x;
+        p.y = y;
+        p.w = pw;
+        p.h = barH;
+        x += pw + gap;
+      });
+    }
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     // Block look bought in the shop (classic is the original jelly block)
     const skin = wallet.equipped("blockSkin");
@@ -439,45 +513,92 @@ class BlocksGame implements GameInstance {
 
   // ── Input ────────────────────────────────────────────────────────────────
 
+  private padAt(x: number, y: number): Pad | null {
+    // A little slop around each pad so a thumb landing on the edge still counts
+    for (const p of this.pads) if (x >= p.x - 4 && x <= p.x + p.w + 4 && y >= p.y - 8 && y <= p.y + p.h + 8) return p;
+    return null;
+  }
+
+  private act(a: Act) {
+    if (a === "left") this.move(-1);
+    else if (a === "right") this.move(1);
+    else if (a === "soft") this.softDrop();
+    else if (a === "hard") this.hardDrop();
+    else this.rotate(1);
+  }
+
   pointer(p: PointerInfo) {
     if (this.state === "intro" || this.state === "over") {
-      const btn = this.state === "intro" ? this.startBtn : this.againBtn;
-      if (p.type === "down" && btn.hit(p.x, p.y)) btn.pressed = true;
+      const btns = [this.state === "intro" ? this.startBtn : this.againBtn, this.gestBtn];
+      if (p.type === "down") for (const b of btns) b.pressed = b.hit(p.x, p.y);
       if (p.type === "up") {
-        if (btn.pressed && btn.hit(p.x, p.y) && this.stateT > 0.25) this.start();
-        btn.pressed = false;
+        const b = btns.find((x) => x.pressed && x.hit(p.x, p.y));
+        for (const x of btns) x.pressed = false;
+        if (b === this.gestBtn) {
+          this.gestures = !this.gestures;
+          this.env.store.set("gestures", this.gestures ? "on" : "off");
+          this.syncGestLabel();
+          this.env.sfx.tone({ freq: 660, dur: 0.05, vol: 0.05 });
+        } else if (b && this.stateT > 0.25) this.start();
       }
+      if (p.type === "cancel") for (const x of btns) x.pressed = false;
       return;
     }
+    // On-screen pads: each finger holds at most one; left / right / soft drop auto-repeat while held.
+    if (p.type === "down") {
+      const pad = this.padAt(p.x, p.y);
+      if (pad) {
+        this.padTouch.set(p.id, pad.act);
+        pad.down = 1;
+        this.act(pad.act);
+        if (REPEAT["pad:" + pad.act]) this.keys.set("pad:" + pad.act, 0);
+        return;
+      }
+    } else if ((p.type === "up" || p.type === "cancel") && this.padTouch.has(p.id)) {
+      const a = this.padTouch.get(p.id)!;
+      this.padTouch.delete(p.id);
+      // Another finger may still hold the same pad
+      if (![...this.padTouch.values()].includes(a)) this.keys.delete("pad:" + a);
+      return;
+    } else if (p.type === "move" && this.padTouch.has(p.id)) {
+      return;
+    }
+
     const step = this.cell * 0.85;
     if (p.type === "down") {
-      // Tap on the hold box
-      if (p.x >= this.sideX && p.y >= this.by && p.y <= this.by + this.cell * 3.2) {
+      // Tap on the hold box (works with gestures off too)
+      if (p.x >= this.sideX && p.x <= this.sideX + this.cell * 3.4 && p.y >= this.by && p.y <= this.by + this.cell * 3.2) {
         this.doHold();
         return;
       }
-      this.touch = { id: p.id, x0: p.x, y0: p.y, ax: p.x, ay: p.y, t0: p.t, moved: false, soft: false };
+      if (!this.gestures) return;
+      this.touch = { id: p.id, x0: p.x, y0: p.y, ax: p.x, ay: p.y, t0: p.t, axis: "", soft: false };
     } else if (p.type === "move" && this.touch && this.touch.id === p.id) {
       const t = this.touch;
-      while (p.x - t.ax > step) {
-        this.move(1);
-        t.ax += step;
-        t.moved = true;
+      const dx = p.x - t.x0;
+      const dy = p.y - t.y0;
+      if (!t.axis) {
+        if (Math.hypot(dx, dy) < 12) return;
+        // Lock the gesture to one axis. Vertical wins unless the drag is clearly sideways.
+        t.axis = Math.abs(dx) > Math.abs(dy) * 1.2 ? "h" : "v";
       }
-      while (t.ax - p.x > step) {
-        this.move(-1);
-        t.ax -= step;
-        t.moved = true;
-      }
-      // Slow drag down = soft drop, one row per cell moved
-      if (Math.abs(p.x - t.x0) < this.cell * 1.2) {
+      if (t.axis === "h") {
+        while (p.x - t.ax > step) {
+          this.move(1);
+          t.ax += step;
+        }
+        while (t.ax - p.x > step) {
+          this.move(-1);
+          t.ax -= step;
+        }
+      } else {
+        // Vertical: sideways drift is ignored. A slow drag down soft-drops one row per cell moved.
         while (p.y - t.ay > step) {
           if (p.t - t.t0 > 160) {
             this.softDrop();
             t.soft = true;
           }
           t.ay += step;
-          t.moved = true;
         }
       }
     } else if ((p.type === "up" || p.type === "cancel") && this.touch && this.touch.id === p.id) {
@@ -487,11 +608,12 @@ class BlocksGame implements GameInstance {
       const dy = p.y - t.y0;
       this.touch = null;
       if (p.type === "cancel") return;
-      if (dt < 260 && dy > this.cell * 2 && Math.abs(dy) > Math.abs(dx) * 1.4 && !t.soft) {
+      const straight = Math.abs(dx) < Math.abs(dy) * 0.5;
+      if (t.axis === "v" && straight && dt < 260 && dy > this.cell * 2 && !t.soft) {
         this.hardDrop();
-      } else if (dt < 300 && dy < -this.cell * 2 && Math.abs(dy) > Math.abs(dx) * 1.4) {
+      } else if (t.axis === "v" && straight && dt < 300 && dy < -this.cell * 2) {
         this.doHold();
-      } else if (!t.moved && Math.abs(dx) < 12 && Math.abs(dy) < 12) {
+      } else if (!t.axis) {
         // Tap: left third rotates left, elsewhere rotates right
         this.rotate(p.x < this.bx + this.cell * COLS * 0.33 ? -1 : 1);
       }
@@ -531,25 +653,26 @@ class BlocksGame implements GameInstance {
     this.floaters.update(dt);
     this.startBtn.update(dt);
     this.againBtn.update(dt);
+    this.gestBtn.update(dt);
+    const held = new Set(this.padTouch.values());
+    for (const pad of this.pads) pad.down = held.has(pad.act) ? 1 : Math.max(0, pad.down - dt * 7);
     this.shake = Math.max(0, this.shake - dt * 30);
     if (this.state !== "play") return;
     this.elapsed += dt;
     this.tutorial = Math.max(0, this.tutorial - dt);
 
-    // Keyboard auto-repeat
+    // Auto-repeat for held keys and pads (DAS: a short delay, then a steady repeat)
     for (const [code, held] of this.keys) {
       const t = held + dt;
       this.keys.set(code, t);
-      const das = 0.17;
-      const arr = code === "ArrowDown" ? 0.035 : 0.05;
+      const a = REPEAT[code];
+      if (!a) continue;
+      const das = a === "soft" ? 0.09 : 0.17;
+      const arr = a === "soft" ? 0.035 : 0.05;
       if (t > das) {
-        const before = Math.floor((held - das) / arr);
-        const after = Math.floor((t - das) / arr);
-        for (let i = Math.max(0, before); i < after; i++) {
-          if (code === "ArrowLeft") this.move(-1);
-          else if (code === "ArrowRight") this.move(1);
-          else if (code === "ArrowDown") this.softDrop();
-        }
+        const before = held > das ? Math.floor((held - das) / arr) + 1 : 0;
+        const after = Math.floor((t - das) / arr) + 1;
+        for (let i = before; i < after; i++) this.act(a);
       }
     }
 
@@ -579,6 +702,9 @@ class BlocksGame implements GameInstance {
     const { ctx } = this.env;
     const w = this.w;
     const h = this.h;
+    // Pause / resume: pointer-up and key-up events are not delivered while paused, so drop held inputs
+    // when the resume countdown shows instead of letting a piece slide on its own afterwards.
+    if (this.env.counting() && (this.padTouch.size || this.keys.size || this.touch)) this.releaseAll();
     if (this.bg) ctx.drawImage(this.bg, 0, 0, w, h);
     // Aurora ribbons
     if (!this.env.reducedMotion) {
@@ -617,14 +743,15 @@ class BlocksGame implements GameInstance {
     ctx.restore();
     this.renderHud();
     vignette(ctx, w, h, 0.35);
+    this.renderPads();
 
     if (this.state === "intro") {
       drawCard(ctx, w, h, {
         title: "ต่อบล็อกดวงดาว",
         subtitle: "เล่นสัก 3 นาที ให้ความอยากผ่านไป",
-        body: "ลากซ้าย-ขวาเพื่อเลื่อน · แตะเพื่อหมุน\nปัดลงเร็วๆ เพื่อทิ้งบล็อก · ปัดขึ้นเพื่อเก็บไว้ใช้ทีหลัง",
+        body: "ใช้ปุ่มด้านล่าง: เลื่อน ลงเร็ว ทิ้งลง หมุน\nแตะช่อง “เก็บไว้” เพื่อพักบล็อกไว้ใช้ทีหลัง",
         accent: "#7c5cff",
-        buttons: [this.startBtn],
+        buttons: [this.startBtn, this.gestBtn],
         appear: this.stateT * 3,
         icon: (c) => this.drawIcon(c),
         chips: this.best ? [`สถิติ ${this.best.toLocaleString()}`] : undefined,
@@ -637,7 +764,7 @@ class BlocksGame implements GameInstance {
         bigLabel: "คะแนน",
         chips: [`${this.lines} แถว`, `เลเวล ${this.level}`, `สถิติ ${this.best.toLocaleString()}`],
         accent: this.newBest ? "#ffcf3a" : "#7c5cff",
-        buttons: [this.againBtn],
+        buttons: [this.againBtn, this.gestBtn],
         appear: this.stateT * 2.5, coins: this.earned,
       });
     }
@@ -766,8 +893,9 @@ class BlocksGame implements GameInstance {
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.fillStyle = "#ffffff";
-      ctx.fillText("↔ ลากเลื่อน   ⟳ แตะหมุน", cx, y0);
-      ctx.fillText("⇣ ปัดลงทิ้ง   ⇡ ปัดขึ้นเก็บ", cx, y0 + 22);
+      ctx.fillText("กดปุ่มด้านล่างเพื่อบังคับบล็อก", cx, y0);
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      ctx.fillText(this.gestures ? "หรือ ลากเลื่อน · แตะหมุน · ปัดลงทิ้ง" : "แตะช่อง “เก็บไว้” เพื่อพักบล็อก", cx, y0 + 22);
       ctx.restore();
     }
   }
@@ -806,6 +934,103 @@ class BlocksGame implements GameInstance {
     ctx.fillText("ถัดไป", x + sw / 2, ny + 6);
     for (let i = 0; i < 3 && i < this.queue.length; i++) {
       this.renderMini(this.queue[i], x + sw / 2, ny + c * 1.9 + i * c * 2.15, i === 0 ? mini : mini * 0.82, i === 0 ? 1 : 0.75);
+    }
+  }
+
+  /** Bottom control bar: glassy jelly pads in the board's colours with drawn icons. */
+  private renderPads() {
+    const { ctx } = this.env;
+    const active = this.state === "play";
+    for (const p of this.pads) {
+      const k = ease.outCubic(p.down);
+      const r = Math.min(18, p.h * 0.3);
+      const y = p.y + k * 2;
+      ctx.save();
+      ctx.globalAlpha = active ? 1 : 0.55;
+      // Drop shadow / glow
+      ctx.shadowColor = rgba(p.color, 0.35 + 0.35 * k);
+      ctx.shadowBlur = 14 + 10 * k;
+      ctx.shadowOffsetY = 5 - 3 * k;
+      const g = ctx.createLinearGradient(0, y, 0, y + p.h);
+      g.addColorStop(0, shadeA(p.color, 0.1 + 0.25 * k, 0.9));
+      g.addColorStop(1, shadeA(p.color, -0.45 + 0.15 * k, 0.9));
+      ctx.fillStyle = g;
+      roundRectPath(ctx, p.x, y, p.w, p.h, r);
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+      // Rim and top sheen
+      ctx.strokeStyle = rgba("#ffffff", 0.28 + 0.3 * k);
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      const sh = ctx.createLinearGradient(0, y, 0, y + p.h * 0.5);
+      sh.addColorStop(0, "rgba(255,255,255,0.24)");
+      sh.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = sh;
+      roundRectPath(ctx, p.x + 2, y + 2, p.w - 4, p.h * 0.48, r - 2);
+      ctx.fill();
+      // Icon
+      const cx = p.x + p.w / 2;
+      const cy = y + p.h * 0.42;
+      const s = Math.min(p.w, p.h) / 56; // icon scale, drawn on a ~24px grid
+      glow(ctx, cx, cy, 22 * s + 8, p.color, 0.25 + 0.3 * k);
+      ctx.translate(cx, cy);
+      ctx.scale(s, s);
+      ctx.strokeStyle = "#ffffff";
+      ctx.fillStyle = "#ffffff";
+      ctx.lineWidth = 3.6;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      this.padIcon(ctx, p.act);
+      ctx.restore();
+      ctx.save();
+      ctx.globalAlpha = active ? 0.85 : 0.45;
+      ctx.font = `600 ${p.h >= 62 ? 11 : 10}px ${FONT_DISPLAY}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(p.label, cx, y + p.h - 7);
+      ctx.restore();
+    }
+  }
+
+  private padIcon(c: CanvasRenderingContext2D, a: Act) {
+    const line = (pts: [number, number][]) => {
+      c.beginPath();
+      pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+      c.stroke();
+    };
+    if (a === "left" || a === "right") {
+      const d = a === "left" ? 1 : -1;
+      line([[11 * d, 0], [-10 * d, 0]]);
+      line([[-2 * d, -9], [-11 * d, 0], [-2 * d, 9]]);
+    } else if (a === "soft") {
+      line([[0, -11], [0, 9]]);
+      line([[-8, 1], [0, 10], [8, 1]]);
+    } else if (a === "hard") {
+      line([[-9, -12], [0, -4], [9, -12]]);
+      line([[-9, -3], [0, 5], [9, -3]]);
+      c.lineWidth = 4.4;
+      line([[-11, 12], [11, 12]]);
+    } else {
+      // Clockwise arrow around a circle, head pointing into the gap at the top
+      const R = 10;
+      const a0 = -Math.PI * 0.32;
+      const a1 = Math.PI * 1.42;
+      c.beginPath();
+      c.arc(0, 1, R, a0, a1);
+      c.stroke();
+      const ex = Math.cos(a1) * R;
+      const ey = Math.sin(a1) * R + 1;
+      const tx = -Math.sin(a1);
+      const ty = Math.cos(a1);
+      const nx = Math.cos(a1);
+      const ny = Math.sin(a1);
+      c.beginPath();
+      c.moveTo(ex + tx * 8, ey + ty * 8);
+      c.lineTo(ex + nx * 6 - tx * 1, ey + ny * 6 - ty * 1);
+      c.lineTo(ex - nx * 6 - tx * 1, ey - ny * 6 - ty * 1);
+      c.closePath();
+      c.fill();
     }
   }
 
