@@ -27,6 +27,55 @@ interface Body {
   dead: boolean;
 }
 
+/** A sprite cropped to its visible pixels; (ox, oy) is its top-left relative to the centre, in CSS px. */
+interface Cropped {
+  c: HTMLCanvasElement;
+  ox: number;
+  oy: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Draws `draw` (centred on 0,0, within a square of side `size`) into a sprite and crops it to the
+ * pixels it actually covers. Rotated sprites are copied pixel by pixel over their whole rectangle,
+ * so a tight rectangle is much cheaper than the generous square used to build it.
+ */
+function croppedSprite(size: number, dpr: number, draw: (c: CanvasRenderingContext2D) => void): Cropped {
+  const full = makeSprite(size, size, dpr, (c) => {
+    c.translate(size / 2, size / 2);
+    draw(c);
+  });
+  const W = full.width;
+  const H = full.height;
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  try {
+    const d = full.getContext("2d")!.getImageData(0, 0, W, H).data;
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        if (d[(y * W + x) * 4 + 3]) {
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+  } catch {
+    x0 = y0 = 0;
+    x1 = W - 1;
+    y1 = H - 1;
+  }
+  if (x1 < x0) return { c: full, ox: -size / 2, oy: -size / 2, w: size, h: size };
+  const cw = x1 - x0 + 1;
+  const ch = y1 - y0 + 1;
+  const c = document.createElement("canvas");
+  c.width = cw;
+  c.height = ch;
+  c.getContext("2d")!.drawImage(full, x0, y0, cw, ch, 0, 0, cw, ch);
+  // full.width = ceil(size * dpr), so one sprite pixel is size / full.width CSS px.
+  const px = size / W;
+  return { c, ox: -size / 2 + x0 * px, oy: -size / 2 + y0 * px, w: cw * px, h: ch * px };
+}
+
 export const mergeGame: GameDefinition = {
   id: "merge",
   title: "รวมผลไม้",
@@ -47,7 +96,12 @@ class MergeGame implements GameInstance {
   private jar = { x: 0, y: 0, w: 0, h: 0 };
   private danger = 0;
   private radii: number[] = [];
-  private sprites: HTMLCanvasElement[] = [];
+  private sprites: Cropped[] = [];
+  // HUD pieces that only change on events: the evolution strip and the "next" fruit.
+  private stripSpr: HTMLCanvasElement | null = null;
+  private stripKey = "";
+  private nextSpr: HTMLCanvasElement | null = null;
+  private nextKey = "";
   private bg: HTMLCanvasElement | null = null;
   private bodies: Body[] = [];
   private nextId = 1;
@@ -239,10 +293,7 @@ class MergeGame implements GameInstance {
     this.sprites = this.radii.map((r, k) => {
       const pad = r * 0.7;
       const size = (r + pad) * 2;
-      return makeSprite(size, size, dpr, (c) => {
-        c.translate(size / 2, size / 2);
-        drawFruit(c, k, r, true);
-      });
+      return croppedSprite(size, dpr, (c) => drawFruit(c, k, r, true));
     });
     this.bg = makeSprite(w, h, dpr, (c) => {
       const g = c.createLinearGradient(0, 0, 0, h);
@@ -414,9 +465,9 @@ class MergeGame implements GameInstance {
       ctx.stroke();
       ctx.setLineDash([]);
       if (this.cooldown <= 0.25) {
-        const size = r * 1.7 * 2;
+        const sp = this.sprites[this.current];
         ctx.globalAlpha = 1 - this.cooldown * 4;
-        ctx.drawImage(this.sprites[this.current], x - size / 2, J.y - r - 8 - size / 2, size, size);
+        ctx.drawImage(sp.c, x + sp.ox, J.y - r - 8 + sp.oy, sp.w, sp.h);
         ctx.globalAlpha = 1;
       }
     }
@@ -424,13 +475,12 @@ class MergeGame implements GameInstance {
     // Fruits
     for (const b of this.bodies) {
       const spr = this.sprites[b.level];
-      const size = (b.r + b.r * 0.7) * 2;
       const s = 0.6 + 0.4 * Math.min(1, b.pop * 1.3) + (b.pop < 1 ? Math.sin(b.pop * Math.PI) * 0.12 : 0);
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(b.ang);
       ctx.scale(s, s);
-      ctx.drawImage(spr, -size / 2, -size / 2, size, size);
+      ctx.drawImage(spr.c, spr.ox, spr.oy, spr.w, spr.h);
       ctx.restore();
     }
 
@@ -467,10 +517,17 @@ class MergeGame implements GameInstance {
     ctx.beginPath();
     ctx.arc(w - 40, 56, 26, 0, TAU);
     ctx.fill();
-    ctx.save();
-    ctx.translate(w - 40, 56);
-    drawFruit(ctx, this.next, nr, true);
-    ctx.restore();
+    // "Next" fruit: cached, redrawn only when it changes.
+    const k = renderScale();
+    const nkey = `${this.next}|${nr}@${k}`;
+    if (!this.nextSpr || this.nextKey !== nkey) {
+      this.nextKey = nkey;
+      this.nextSpr = makeSprite(72, 72, k, (c) => {
+        c.translate(36, 36);
+        drawFruit(c, this.next, nr, true);
+      });
+    }
+    ctx.drawImage(this.nextSpr, w - 76, 20, 72, 72);
 
     if (this.state === "play") {
       this.bShake.place(w / 2 - 32, 44, 19);
@@ -483,14 +540,24 @@ class MergeGame implements GameInstance {
     const stripY = 98;
     const n = LEVELS;
     const gap = Math.min(30, (w - 40) / n);
-    for (let k = 0; k < n; k++) {
-      const x = w / 2 + (k - (n - 1) / 2) * gap;
-      ctx.save();
-      ctx.translate(x, stripY);
-      ctx.globalAlpha = k <= this.biggest || this.state === "intro" ? 1 : 0.35;
-      drawFruit(ctx, k, gap * 0.36, false);
-      ctx.restore();
+    // Cached strip: it only changes when a bigger fruit is reached.
+    const lit = this.state === "intro" ? n : this.biggest;
+    const skey = `${w}|${gap}|${lit}@${k}`;
+    if (!this.stripSpr || this.stripKey !== skey) {
+      this.stripKey = skey;
+      this.stripSpr = makeSprite(w, 48, k, (c) => {
+        c.translate(0, 24 - stripY);
+        for (let i = 0; i < n; i++) {
+          const x = w / 2 + (i - (n - 1) / 2) * gap;
+          c.save();
+          c.translate(x, stripY);
+          c.globalAlpha = i <= lit ? 1 : 0.35;
+          drawFruit(c, i, gap * 0.36, false);
+          c.restore();
+        }
+      });
     }
+    ctx.drawImage(this.stripSpr, 0, stripY - 24, w, 48);
 
     if (this.state === "intro") {
       drawCard(ctx, w, h, {

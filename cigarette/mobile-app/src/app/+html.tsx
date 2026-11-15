@@ -20,7 +20,53 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <ScrollViewStyleReset />
         
         {/* Critical Inline CSS: Guarantees INSTANT visual render on 3G / H+ before JS or fonts load */}
+        {/* Thai + Latin in ONE file per weight, for the game canvas. Google Fonts splits Thai and Latin
+            into separate unicode-range files, and Safari's canvas then measures Thai text with the
+            Latin file (width ~0): centred text started at the centre and text did not wrap on iPad. */}
+        <link rel="preload" href="/fonts/Prompt-Bold.woff" as="font" type="font/woff" crossOrigin="anonymous" />
         <style dangerouslySetInnerHTML={{ __html: `
+          @font-face {
+            font-family: 'NBPrompt';
+            src: url('/fonts/Prompt-Medium.woff') format('woff');
+            font-weight: 500;
+            font-display: swap;
+          }
+          @font-face {
+            font-family: 'NBPrompt';
+            src: url('/fonts/Prompt-SemiBold.woff') format('woff');
+            font-weight: 600;
+            font-display: swap;
+          }
+          @font-face {
+            font-family: 'NBPrompt';
+            src: url('/fonts/Prompt-Bold.woff') format('woff');
+            font-weight: 700;
+            font-display: swap;
+          }
+          @font-face {
+            font-family: 'NBPrompt';
+            src: url('/fonts/Prompt-ExtraBold.woff') format('woff');
+            font-weight: 800;
+            font-display: swap;
+          }
+          @font-face {
+            font-family: 'NBSarabun';
+            src: url('/fonts/Sarabun-Regular.woff') format('woff');
+            font-weight: 400;
+            font-display: swap;
+          }
+          @font-face {
+            font-family: 'NBSarabun';
+            src: url('/fonts/Sarabun-Medium.woff') format('woff');
+            font-weight: 500;
+            font-display: swap;
+          }
+          @font-face {
+            font-family: 'NBSarabun';
+            src: url('/fonts/Sarabun-Bold.woff') format('woff');
+            font-weight: 700;
+            font-display: swap;
+          }
           @font-face {
             font-family: 'DawnoraTH';
             src: local('DawnoraTH'), local('Dawnora'), local('Chonburi'), local('Fahkwang-Bold'), local('Kanit-Black');

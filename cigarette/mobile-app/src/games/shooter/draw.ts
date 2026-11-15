@@ -3,6 +3,7 @@
 
 import { glow, makeSprite, rgba, rng, roundRectPath, shade, TAU, clamp, FONT_DISPLAY } from "../engine/fx";
 import { ENEMIES, type Theme } from "./maps";
+import { renderScale } from "../engine/quality";
 import type { Bullet, Drop, Enemy, Laser, Mark, World } from "./world";
 
 // ── Backdrops ───────────────────────────────────────────────────────────────
@@ -1115,29 +1116,58 @@ function eye(c: CanvasRenderingContext2D, x: number, y: number, r: number, w: Wo
 
 // ── Bullets, lasers, marks, pickups ─────────────────────────────────────────
 
+// Enemy shots are drawn from small cached sprites (halo, and body with rim and core), copied at
+// whole device pixels: dozens of bullets cost a few cheap copies instead of four path fills each.
+const bulletSprites = new Map<string, HTMLCanvasElement>();
+function bulletSprite(key: string, R: number, draw: (c: CanvasRenderingContext2D) => void) {
+  let s = bulletSprites.get(key);
+  if (!s) {
+    if (bulletSprites.size > 96) bulletSprites.clear();
+    s = makeSprite(R * 2, R * 2, renderScale(), (c) => {
+      c.translate(R, R);
+      draw(c);
+    });
+    bulletSprites.set(key, s);
+  }
+  return s;
+}
+function blitBullet(c: CanvasRenderingContext2D, s: HTMLCanvasElement, x: number, y: number, R: number) {
+  const k = renderScale();
+  c.drawImage(s, Math.round((x - R) * k) / k, Math.round((y - R) * k) / k, s.width / k, s.height / k);
+}
+
 export function drawBullets(c: CanvasRenderingContext2D, bullets: Bullet[], flame: string) {
   c.save();
+  const k = renderScale();
   // Enemy shots: dark rim + saturated body + white core, readable on every sky.
   for (const b of bullets) {
     if (!b.enemy) continue;
-    c.fillStyle = rgba(b.color, 0.28);
-    c.beginPath();
-    c.arc(b.x, b.y, b.r * 2, 0, TAU);
-    c.fill();
+    const R = Math.ceil(b.r * 2 + 1);
+    const spr = bulletSprite(`h|${b.color}|${b.r}|${k}`, R, (cc) => {
+      cc.fillStyle = rgba(b.color, 0.28);
+      cc.beginPath();
+      cc.arc(0, 0, b.r * 2, 0, TAU);
+      cc.fill();
+    });
+    blitBullet(c, spr, b.x, b.y, R);
   }
   for (const b of bullets) {
     if (!b.enemy) continue;
-    c.fillStyle = b.color;
-    c.strokeStyle = "rgba(20,6,30,0.85)";
-    c.lineWidth = 1.5;
-    c.beginPath();
-    c.arc(b.x, b.y, b.r + 0.8, 0, TAU);
-    c.fill();
-    c.stroke();
-    c.fillStyle = "#ffffff";
-    c.beginPath();
-    c.arc(b.x, b.y, b.r * (b.kind === "big" ? 0.5 : 0.42), 0, TAU);
-    c.fill();
+    const R = Math.ceil(b.r + 3);
+    const spr = bulletSprite(`b|${b.color}|${b.r}|${b.kind === "big"}|${k}`, R, (cc) => {
+      cc.fillStyle = b.color;
+      cc.strokeStyle = "rgba(20,6,30,0.85)";
+      cc.lineWidth = 1.5;
+      cc.beginPath();
+      cc.arc(0, 0, b.r + 0.8, 0, TAU);
+      cc.fill();
+      cc.stroke();
+      cc.fillStyle = "#ffffff";
+      cc.beginPath();
+      cc.arc(0, 0, b.r * (b.kind === "big" ? 0.5 : 0.42), 0, TAU);
+      cc.fill();
+    });
+    blitBullet(c, spr, b.x, b.y, R);
   }
   c.globalCompositeOperation = "lighter";
   for (const b of bullets) {

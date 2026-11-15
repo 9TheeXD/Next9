@@ -2,7 +2,8 @@
 
 import type { GameDefinition, GameEnv } from "./engine/types";
 import { TurnDuel, type Side } from "./engine/turnduel";
-import { clamp, roundRectPath, TAU, glow } from "./engine/fx";
+import { clamp, roundRectPath, TAU, glow, makeSprite } from "./engine/fx";
+import { renderScale } from "./engine/quality";
 import { pentatonic } from "./engine/audio";
 
 export const connect4Game: GameDefinition = {
@@ -215,7 +216,38 @@ class Connect4 extends TurnDuel<number[]> {
     this.disc(c, x, y, r, side);
   }
 
+  // Cached layers: page background, the board frame with its holes, and one sprite per disc colour.
+  private bgSpr: HTMLCanvasElement | null = null;
+  private bgKey = "";
+  private frameSpr: HTMLCanvasElement | null = null;
+  private frameKey = "";
+  private discSpr = new Map<string, HTMLCanvasElement>();
+
+  background(c: CanvasRenderingContext2D) {
+    const key = `${this.w}x${this.h}@${renderScale()}`;
+    if (!this.bgSpr || this.bgKey !== key) {
+      this.bgKey = key;
+      this.bgSpr = makeSprite(this.w, this.h, renderScale(), (cc) => super.background(cc));
+    }
+    c.drawImage(this.bgSpr, 0, 0, this.w, this.h);
+  }
+
   private disc(c: CanvasRenderingContext2D, x: number, y: number, r: number, side: number) {
+    const k = renderScale();
+    const key = `${r}|${side}@${k}`;
+    let spr = this.discSpr.get(key);
+    if (!spr) {
+      if (this.discSpr.size > 8) this.discSpr.clear();
+      const R = Math.ceil(r + 2);
+      spr = makeSprite(R * 2, R * 2, k, (cc) => this.discRaw(cc, R, R, r, side));
+      this.discSpr.set(key, spr);
+    }
+    // Whole device pixels: a straight copy of the cached disc.
+    const R = spr.width / k / 2;
+    c.drawImage(spr, Math.round((x - R) * k) / k, Math.round((y - R) * k) / k, spr.width / k, spr.height / k);
+  }
+
+  private discRaw(c: CanvasRenderingContext2D, x: number, y: number, r: number, side: number) {
     const base = side === 1 ? "#ef4444" : "#facc15";
     const g = c.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
     g.addColorStop(0, side === 1 ? "#fca5a5" : "#fef08a");
@@ -250,7 +282,25 @@ class Connect4 extends TurnDuel<number[]> {
       }
       this.disc(c, b.x + (col + 0.5) * cs, y, cs * 0.4, v);
     }
-    // Frame with holes (even-odd fill)
+    // Frame with holes (even-odd fill), cached on a whole-device-pixel origin
+    const k = renderScale();
+    const ox = Math.floor((b.x - 10) * k) / k;
+    const oy = Math.floor((b.y - 10) * k) / k;
+    const fkey = `${b.x},${b.y},${b.w},${b.h},${cs}@${k}`;
+    if (!this.frameSpr || this.frameKey !== fkey) {
+      this.frameKey = fkey;
+      this.frameSpr = makeSprite(b.w + 22, b.h + 22, k, (cc) => {
+        cc.translate(-ox, -oy);
+        this.frame(cc);
+      });
+    }
+    c.drawImage(this.frameSpr, ox, oy, this.frameSpr.width / k, this.frameSpr.height / k);
+    this.renderWin(c);
+  }
+
+  private frame(c: CanvasRenderingContext2D) {
+    const b = this.board;
+    const cs = this.cs;
     c.save();
     c.beginPath();
     roundRectPath(c, b.x - 8, b.y - 8, b.w + 16, b.h + 16, 16);
@@ -267,6 +317,11 @@ class Connect4 extends TurnDuel<number[]> {
     c.fillStyle = fg;
     c.fill("evenodd");
     c.restore();
+  }
+
+  private renderWin(c: CanvasRenderingContext2D) {
+    const b = this.board;
+    const cs = this.cs;
     if (this.winLine && (!this.drop || this.drop.t > 0.4)) {
       for (const i of this.winLine) {
         const x = b.x + ((i % C) + 0.5) * cs;

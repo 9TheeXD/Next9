@@ -3,7 +3,8 @@
 // list; it is not a game itself and sends no game events.
 
 import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engine/types";
-import { Particles, clamp, TAU, FONT_DISPLAY, FONT_BODY, roundRectPath, rgba } from "./engine/fx";
+import { Particles, clamp, TAU, FONT_DISPLAY, FONT_BODY, roundRectPath, rgba, makeSprite } from "./engine/fx";
+import { renderScale } from "./engine/quality";
 import { drawCoin, wrapText } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { wallet, ITEMS, UPGRADES, type ShopItem } from "./engine/economy";
@@ -257,14 +258,25 @@ class Shop implements GameInstance {
 
   // ── Render ───────────────────────────────────────────────────────────────
 
+  private bgSpr: HTMLCanvasElement | null = null;
+  private bgKey = "";
+
   render() {
     const c = this.env.ctx;
     const { w, h } = this;
-    const g = c.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, "#1a1240");
-    g.addColorStop(1, "#0d0a24");
-    c.fillStyle = g;
-    c.fillRect(0, 0, w, h);
+    // Background gradient: cached, one straight copy per frame.
+    const bkey = `${w}x${h}@${renderScale()}`;
+    if (!this.bgSpr || this.bgKey !== bkey) {
+      this.bgKey = bkey;
+      this.bgSpr = makeSprite(w, h, renderScale(), (cc) => {
+        const g = cc.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, "#1a1240");
+        g.addColorStop(1, "#0d0a24");
+        cc.fillStyle = g;
+        cc.fillRect(0, 0, w, h);
+      });
+    }
+    c.drawImage(this.bgSpr, 0, 0, w, h);
     this.hits = [];
 
     // Balance header

@@ -106,6 +106,7 @@ class SudokuGame implements GameInstance {
   private time = 0;
   private flash: { i: number; t: number }[] = [];
   private bg: HTMLCanvasElement | null = null;
+  private lines: HTMLCanvasElement | null = null;
   private particles = new Particles();
   private floaters = new Floaters();
   private diffBtns = DIFFICULTY.map((d, i) => new Button(d.label, i === 0 ? "#2563eb" : "#ffffff", i === 0 ? "solid" : "ghost"));
@@ -261,6 +262,30 @@ class SudokuGame implements GameInstance {
         c.fillStyle = `rgba(120,90,40,${r() * 0.05})`;
         c.fillRect(r() * w, r() * h, 1, 1);
       }
+      // The white grid card and its soft shadow never move: bake them into the background.
+      const C = this.cell;
+      c.fillStyle = "#ffffff";
+      c.shadowColor = "rgba(80,60,20,0.18)";
+      c.shadowBlur = 16;
+      c.shadowOffsetY = 6;
+      roundRectPath(c, this.gx - 3, this.gy - 3, C * 9 + 6, C * 9 + 6, 10);
+      c.fill();
+    });
+    // Grid lines go over the cell highlights, so they are a separate transparent sprite.
+    const C = this.cell;
+    this.lines = makeSprite(C * 9 + 4, C * 9 + 4, dpr, (c) => {
+      c.translate(2, 2);
+      for (let k = 0; k <= 9; k++) {
+        const thick = k % 3 === 0;
+        c.strokeStyle = thick ? "#1e293b" : "rgba(30,41,59,0.22)";
+        c.lineWidth = thick ? 2.2 : 1;
+        c.beginPath();
+        c.moveTo(k * C, 0);
+        c.lineTo(k * C, 9 * C);
+        c.moveTo(0, k * C);
+        c.lineTo(9 * C, k * C);
+        c.stroke();
+      }
     });
   }
 
@@ -375,14 +400,7 @@ class SudokuGame implements GameInstance {
     ctx.fillStyle = ink;
     ctx.fillText(`${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`, this.gx + C * 9, 20);
 
-    // Grid
-    ctx.fillStyle = "#ffffff";
-    ctx.shadowColor = "rgba(80,60,20,0.18)";
-    ctx.shadowBlur = 16;
-    ctx.shadowOffsetY = 6;
-    roundRectPath(ctx, this.gx - 3, this.gy - 3, C * 9 + 6, C * 9 + 6, 10);
-    ctx.fill();
-    ctx.shadowColor = "transparent";
+    // Grid (white card and its shadow are part of the cached background)
     const sel = this.sel;
     const sr = Math.floor(sel / 9);
     const sc = sel % 9;
@@ -411,17 +429,7 @@ class SudokuGame implements GameInstance {
       ctx.fillRect(this.gx + c * C, this.gy + r * C, C, C);
     }
     // Lines
-    for (let k = 0; k <= 9; k++) {
-      const thick = k % 3 === 0;
-      ctx.strokeStyle = thick ? ink : "rgba(30,41,59,0.22)";
-      ctx.lineWidth = thick ? 2.2 : 1;
-      ctx.beginPath();
-      ctx.moveTo(this.gx + k * C, this.gy);
-      ctx.lineTo(this.gx + k * C, this.gy + 9 * C);
-      ctx.moveTo(this.gx, this.gy + k * C);
-      ctx.lineTo(this.gx + 9 * C, this.gy + k * C);
-      ctx.stroke();
-    }
+    if (this.lines) ctx.drawImage(this.lines, this.gx - 2, this.gy - 2, C * 9 + 4, C * 9 + 4);
     // Digits
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";

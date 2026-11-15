@@ -2,7 +2,8 @@
 // Play a bot at four levels or a friend on the same device; the score carries across rounds.
 
 import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engine/types";
-import { Particles, clamp, TAU, FONT_DISPLAY, FONT_BODY, ease, roundRectPath, glow } from "./engine/fx";
+import { Particles, clamp, TAU, FONT_DISPLAY, FONT_BODY, ease, roundRectPath, glow, makeSprite } from "./engine/fx";
+import { renderScale } from "./engine/quality";
 import { SetupMenu, OPPONENT_ROW, LEVEL_ROW, duelCoins } from "./engine/menu";
 import { playerBar, DuelOver, IconButton, ICONS } from "./engine/duel";
 import { pentatonic } from "./engine/audio";
@@ -529,32 +530,48 @@ class XoGame implements GameInstance {
     c.restore();
   }
 
+  private bgSpr: HTMLCanvasElement | null = null;
+  private bgKey = "";
+
   render() {
     const { ctx } = this.env;
     const { w, h } = this;
-    const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, "#0b1022");
-    g.addColorStop(1, "#141a3a");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
+    const showBoard = this.state !== "menu" || this.cells.length > 0;
+    // Background gradient, board panel and grid lines never change during a game: one cached layer.
+    const bkey = `${w}x${h}@${renderScale()}|${showBoard ? `${this.bx},${this.by},${this.bs},${this.n}` : "-"}`;
+    if (!this.bgSpr || this.bgKey !== bkey) {
+      this.bgKey = bkey;
+      this.bgSpr = makeSprite(w, h, renderScale(), (c) => {
+        const g = c.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, "#0b1022");
+        g.addColorStop(1, "#141a3a");
+        c.fillStyle = g;
+        c.fillRect(0, 0, w, h);
+        if (!showBoard) return;
+        const { bx, by, bs, n } = this;
+        const cs = bs / n;
+        c.fillStyle = "rgba(255,255,255,0.04)";
+        roundRectPath(c, bx - 6, by - 6, bs + 12, bs + 12, 16);
+        c.fill();
+        c.strokeStyle = "rgba(148,163,255,0.28)";
+        c.lineWidth = n <= 5 ? 3 : 1.5;
+        c.lineCap = "round";
+        for (let i = 1; i < n; i++) {
+          c.beginPath();
+          c.moveTo(bx + i * cs, by + 6);
+          c.lineTo(bx + i * cs, by + bs - 6);
+          c.moveTo(bx + 6, by + i * cs);
+          c.lineTo(bx + bs - 6, by + i * cs);
+          c.stroke();
+        }
+      });
+    }
+    ctx.drawImage(this.bgSpr, 0, 0, w, h);
 
-    if (this.state !== "menu" || this.cells.length) {
+    if (showBoard) {
       const { bx, by, bs, n } = this;
       const cs = bs / n;
-      ctx.fillStyle = "rgba(255,255,255,0.04)";
-      roundRectPath(ctx, bx - 6, by - 6, bs + 12, bs + 12, 16);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(148,163,255,0.28)";
-      ctx.lineWidth = n <= 5 ? 3 : 1.5;
       ctx.lineCap = "round";
-      for (let i = 1; i < n; i++) {
-        ctx.beginPath();
-        ctx.moveTo(bx + i * cs, by + 6);
-        ctx.lineTo(bx + i * cs, by + bs - 6);
-        ctx.moveTo(bx + 6, by + i * cs);
-        ctx.lineTo(bx + bs - 6, by + i * cs);
-        ctx.stroke();
-      }
       if (this.lastMove >= 0 && !this.winner) {
         const lx = bx + (this.lastMove % n) * cs;
         const ly = by + Math.floor(this.lastMove / n) * cs;

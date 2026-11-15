@@ -4,7 +4,8 @@
 
 import type { GameDefinition, GameEnv } from "./engine/types";
 import { TurnDuel, type Side } from "./engine/turnduel";
-import { clamp, roundRectPath, TAU, ease, FONT_DISPLAY } from "./engine/fx";
+import { clamp, roundRectPath, TAU, ease, FONT_DISPLAY, makeSprite } from "./engine/fx";
+import { renderScale } from "./engine/quality";
 import { pentatonic } from "./engine/audio";
 
 export const checkersGame: GameDefinition = {
@@ -320,7 +321,38 @@ class Checkers extends TurnDuel<St> {
     this.man(c, x, y, r, side, false);
   }
 
+  // Cached layers: page background, the board (frame and squares) and one sprite per piece type.
+  private bgSpr: HTMLCanvasElement | null = null;
+  private bgKey = "";
+  private boardSpr: HTMLCanvasElement | null = null;
+  private boardKey = "";
+  private manSpr = new Map<string, HTMLCanvasElement>();
+
+  background(c: CanvasRenderingContext2D) {
+    const key = `${this.w}x${this.h}@${renderScale()}`;
+    if (!this.bgSpr || this.bgKey !== key) {
+      this.bgKey = key;
+      this.bgSpr = makeSprite(this.w, this.h, renderScale(), (cc) => super.background(cc));
+    }
+    c.drawImage(this.bgSpr, 0, 0, this.w, this.h);
+  }
+
   private man(c: CanvasRenderingContext2D, x: number, y: number, r: number, side: number, king: boolean) {
+    const k = renderScale();
+    const id = `${r}|${side}|${king}@${k}`;
+    let spr = this.manSpr.get(id);
+    const R = Math.ceil(r * 1.25 + 2);
+    if (!spr) {
+      if (this.manSpr.size > 16) this.manSpr.clear();
+      spr = makeSprite(R * 2, R * 2, k, (cc) => this.manRaw(cc, R, R, r, side, king));
+      this.manSpr.set(id, spr);
+    }
+    // Whole device pixels: a straight copy of the cached piece.
+    const S = spr.width / k / 2;
+    c.drawImage(spr, Math.round((x - S) * k) / k, Math.round((y - S) * k) / k, spr.width / k, spr.height / k);
+  }
+
+  private manRaw(c: CanvasRenderingContext2D, x: number, y: number, r: number, side: number, king: boolean) {
     c.fillStyle = "rgba(0,0,0,0.35)";
     c.beginPath();
     c.ellipse(x, y + r * 0.2, r, r * 0.9, 0, 0, TAU);
@@ -361,14 +393,25 @@ class Checkers extends TurnDuel<St> {
   renderBoard(c: CanvasRenderingContext2D) {
     const b = this.board;
     const cs = this.cs;
-    c.fillStyle = "#3b2414";
-    roundRectPath(c, b.x - 10, b.y - 10, b.w + 20, b.h + 20, 12);
-    c.fill();
-    for (let r = 0; r < 8; r++)
-      for (let col = 0; col < 8; col++) {
-        c.fillStyle = (r + col) % 2 ? "#7c4a2a" : "#e9d5b0";
-        c.fillRect(b.x + col * cs, b.y + r * cs, cs, cs);
-      }
+    const k = renderScale();
+    const ox = Math.floor((b.x - 10) * k) / k;
+    const oy = Math.floor((b.y - 10) * k) / k;
+    const bkey = `${b.x},${b.y},${b.w},${b.h},${cs}@${k}`;
+    if (!this.boardSpr || this.boardKey !== bkey) {
+      this.boardKey = bkey;
+      this.boardSpr = makeSprite(b.w + 22, b.h + 22, k, (c2) => {
+        c2.translate(-ox, -oy);
+        c2.fillStyle = "#3b2414";
+        roundRectPath(c2, b.x - 10, b.y - 10, b.w + 20, b.h + 20, 12);
+        c2.fill();
+        for (let r = 0; r < 8; r++)
+          for (let col = 0; col < 8; col++) {
+            c2.fillStyle = (r + col) % 2 ? "#7c4a2a" : "#e9d5b0";
+            c2.fillRect(b.x + col * cs, b.y + r * cs, cs, cs);
+          }
+      });
+    }
+    c.drawImage(this.boardSpr, ox, oy, this.boardSpr.width / k, this.boardSpr.height / k);
     if (this.lastMove) {
       for (const sq of [this.lastMove.from, ...this.lastMove.path]) {
         const p = this.pos(sq);

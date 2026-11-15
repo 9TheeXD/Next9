@@ -38,6 +38,57 @@ interface Half {
   rot: number;
   vr: number;
   life: number;
+  /** Cached drawing of this half (made when it is cut), cropped to its pixels. */
+  spr?: Cropped | null;
+}
+
+/** A sprite cropped to its visible pixels; (ox, oy) is its top-left relative to the centre, in CSS px. */
+interface Cropped {
+  c: HTMLCanvasElement;
+  ox: number;
+  oy: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Draws `draw` (centred on 0,0, within a square of side `size`) into a sprite and crops it to the
+ * pixels it actually covers. Rotated sprites are copied pixel by pixel over their whole rectangle,
+ * so a tight rectangle is much cheaper than the generous square used to build it.
+ */
+function croppedSprite(size: number, dpr: number, draw: (c: CanvasRenderingContext2D) => void): Cropped {
+  const full = makeSprite(size, size, dpr, (c) => {
+    c.translate(size / 2, size / 2);
+    draw(c);
+  });
+  const W = full.width;
+  const H = full.height;
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  try {
+    const d = full.getContext("2d")!.getImageData(0, 0, W, H).data;
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        if (d[(y * W + x) * 4 + 3]) {
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+  } catch {
+    x0 = y0 = 0;
+    x1 = W - 1;
+    y1 = H - 1;
+  }
+  if (x1 < x0) return { c: full, ox: -size / 2, oy: -size / 2, w: size, h: size };
+  const cw = x1 - x0 + 1;
+  const ch = y1 - y0 + 1;
+  const c = document.createElement("canvas");
+  c.width = cw;
+  c.height = ch;
+  c.getContext("2d")!.drawImage(full, x0, y0, cw, ch, 0, 0, cw, ch);
+  // full.width = ceil(size * dpr), so one sprite pixel is size / full.width CSS px.
+  const px = size / W;
+  return { c, ox: -size / 2 + x0 * px, oy: -size / 2 + y0 * px, w: cw * px, h: ch * px };
 }
 
 interface Splat {
@@ -73,7 +124,7 @@ class SliceGame implements GameInstance {
   private trail: { x: number; y: number; t: number }[] = [];
   private blade = wallet.equipped("bladeSkin");
   private touching = false;
-  private sprites: HTMLCanvasElement[] = [];
+  private sprites: Cropped[] = [];
   private bg: HTMLCanvasElement | null = null;
   private state: State = "intro";
   private stateT = 0;
@@ -162,7 +213,25 @@ class SliceGame implements GameInstance {
     const nx = -Math.sin(angle);
     const ny = Math.cos(angle);
     for (const side of [1, -1] as const) {
-      this.halves.push({ kind: t.kind, x: t.x, y: t.y, vx: t.vx + nx * 90 * side, vy: t.vy * 0.4 + ny * 90 * side, r: t.r, angle, side, rot: 0, vr: side * 3, life: 2.5 });
+      // The half is drawn once into a sprite here instead of from paths on every frame.
+      // It fits in the whole fruit's cropped box (plus a little room for the cut face), so no
+      // pixel read-back is needed here.
+      const fb = this.sprites[t.kind];
+      const m = t.r * 0.06;
+      const bw = fb.w + m * 2;
+      const bh = fb.h + m * 2;
+      const k = renderScale();
+      const spr: Cropped = {
+        c: makeSprite(bw, bh, k, (c) => {
+          c.translate(-(fb.ox - m), -(fb.oy - m));
+          drawFruitHalf(c, t.kind, t.r, angle, side);
+        }),
+        ox: fb.ox - m,
+        oy: fb.oy - m,
+        w: Math.ceil(bw * k) / k,
+        h: Math.ceil(bh * k) / k,
+      };
+      this.halves.push({ kind: t.kind, x: t.x, y: t.y, vx: t.vx + nx * 90 * side, vy: t.vy * 0.4 + ny * 90 * side, r: t.r, angle, side, rot: 0, vr: side * 3, life: 2.5, spr });
     }
     this.particles.burst(t.x, t.y, spec.flesh, 14, { speed: 260, size: 4, gravity: this.gravity() * 0.6, life: 0.8 });
     this.particles.burst(t.x, t.y, spec.color, 8, { speed: 200, size: 3, gravity: this.gravity() * 0.6, life: 0.7 });
@@ -206,12 +275,7 @@ class SliceGame implements GameInstance {
     this.fruitR = clamp(Math.min(w, h) * 0.085, 24, 48);
     const dpr = renderScale();
     const size = this.fruitR * 3;
-    this.sprites = FRUITS.map((_, k) =>
-      makeSprite(size, size, dpr, (c) => {
-        c.translate(size / 2, size / 2);
-        drawFruit(c, k, this.fruitR, false);
-      })
-    );
+    this.sprites = FRUITS.map((_, k) => croppedSprite(size, dpr, (c) => drawFruit(c, k, this.fruitR, false)));
     this.bg = makeSprite(w, h, dpr, (c) => {
       // Wooden planks
       const r = rng(12);
@@ -366,7 +430,11 @@ class SliceGame implements GameInstance {
     const w = this.w;
     const h = this.h;
     ctx.save();
-    if (this.shake && !this.env.reducedMotion) ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
+    if (this.shake && !this.env.reducedMotion) {
+      // Whole device pixels, so the cached board stays a straight copy instead of being resampled.
+      const k = renderScale();
+      ctx.translate(Math.round((Math.random() - 0.5) * this.shake * k) / k, Math.round((Math.random() - 0.5) * this.shake * k) / k);
+    }
     if (this.bg) ctx.drawImage(this.bg, 0, 0, w, h);
     // Juice stains on the board
     for (const s of this.splats) {
@@ -385,7 +453,6 @@ class SliceGame implements GameInstance {
       }
     }
     ctx.globalAlpha = 1;
-    const size = this.fruitR * 3;
     for (const t of this.things) {
       ctx.save();
       ctx.translate(t.x, t.y);
@@ -393,7 +460,8 @@ class SliceGame implements GameInstance {
       if (t.kind < 0) this.drawSmoke(ctx, t.r);
       else {
         if (t.gold) glow(ctx, 0, 0, t.r * 2, "#ffd84d", 0.6);
-        ctx.drawImage(this.sprites[t.kind], -size / 2, -size / 2, size, size);
+        const sp = this.sprites[t.kind];
+        ctx.drawImage(sp.c, sp.ox, sp.oy, sp.w, sp.h);
       }
       ctx.restore();
     }
@@ -402,7 +470,8 @@ class SliceGame implements GameInstance {
       ctx.translate(hf.x, hf.y);
       ctx.rotate(hf.rot);
       ctx.globalAlpha = Math.min(1, hf.life * 2);
-      drawFruitHalf(ctx, hf.kind, hf.r, hf.angle, hf.side);
+      if (hf.spr) ctx.drawImage(hf.spr.c, hf.spr.ox, hf.spr.oy, hf.spr.w, hf.spr.h);
+      else drawFruitHalf(ctx, hf.kind, hf.r, hf.angle, hf.side);
       ctx.restore();
     }
     this.particles.render(ctx);

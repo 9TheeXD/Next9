@@ -652,12 +652,15 @@ class BubblesGame implements GameInstance {
     ctx.stroke();
     ctx.setLineDash([]);
 
+    // Grid bubbles snapped to whole device pixels: straight copies instead of resampled ones.
+    const ks = renderScale();
+    const DS = this.sprites.length ? this.sprites[0].width / ks : D;
     for (let r = 0; r < ROWS_MAX; r++)
       for (let c = 0; c < this.rowLen(r); c++) {
         const k = this.grid[r][c];
         if (k < 0) continue;
         const p = this.cellXY(r, c);
-        ctx.drawImage(this.sprites[k], p.x - this.R, p.y - this.R, D, D);
+        ctx.drawImage(this.sprites[k], Math.round((p.x - this.R) * ks) / ks, Math.round((p.y - this.R) * ks) / ks, DS, DS);
       }
     for (const p of this.pops) {
       const k = p.t / 0.25;
@@ -665,7 +668,7 @@ class BubblesGame implements GameInstance {
       ctx.drawImage(this.sprites[p.color], p.x - this.R * (1 + k * 0.6), p.y - this.R * (1 + k * 0.6), D * (1 + k * 0.6), D * (1 + k * 0.6));
       ctx.globalAlpha = 1;
     }
-    for (const f of this.falling) ctx.drawImage(this.sprites[f.color], f.x - this.R, f.y - this.R, D, D);
+    for (const f of this.falling) ctx.drawImage(this.sprites[f.color], Math.round((f.x - this.R) * ks) / ks, Math.round((f.y - this.R) * ks) / ks, DS, DS);
 
     if (this.state === "play") {
       if (this.aiming && !this.flyer) this.drawAim();

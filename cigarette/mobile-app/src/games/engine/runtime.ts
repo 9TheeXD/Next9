@@ -255,7 +255,7 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
     c.textAlign = "center";
     c.textBaseline = "middle";
     const size = Math.min(w, h) * (n > 0 ? 0.32 : 0.16) * k;
-    c.font = `800 ${Math.round(size)}px "Prompt", "Kanit", sans-serif`;
+    c.font = `800 ${Math.round(size)}px "NBPrompt", "Prompt", "Kanit", sans-serif`;
     c.lineWidth = Math.max(4, size * 0.07);
     c.strokeStyle = "rgba(0,0,0,0.35)";
     const text = n > 0 ? String(n) : "เริ่ม!";
@@ -264,7 +264,7 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
     c.fillText(text, w / 2, h / 2);
     if (n > 0 && cdLabel) {
       c.globalAlpha = 0.9;
-      c.font = `600 ${Math.round(Math.max(15, Math.min(w, h) * 0.05))}px "Prompt", sans-serif`;
+      c.font = `600 ${Math.round(Math.max(15, Math.min(w, h) * 0.05))}px "NBPrompt", "Prompt", sans-serif`;
       c.fillStyle = "#e2e8f0";
       c.fillText(cdLabel, w / 2, h / 2 - Math.min(w, h) * 0.31);
     }
@@ -379,7 +379,13 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
   // Redraw once the Thai web fonts arrive, so the first frame is not drawn in a fallback font.
   const fonts = (document as any).fonts;
   if (fonts?.load) {
-    Promise.all([fonts.load('700 20px "Prompt"'), fonts.load('500 16px "Sarabun"')])
+    // Load the Thai glyphs explicitly (a load without sample text fetches only the Latin part).
+    const th = "ภาษาไทย";
+    Promise.all(
+      ['500 16px "NBPrompt"', '700 20px "NBPrompt"', '800 20px "NBPrompt"', '500 16px "NBSarabun"', '700 16px "NBSarabun"'].map(
+        (f) => fonts.load(f, th).catch(() => [])
+      )
+    )
       .then(() => game.render())
       .catch(() => {});
   }

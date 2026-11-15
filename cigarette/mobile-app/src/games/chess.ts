@@ -2,7 +2,8 @@
 // Full rules, move hints, undo, and a gentle hint button that suggests a good move.
 
 import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engine/types";
-import { Particles, clamp, TAU, FONT_DISPLAY, FONT_BODY, ease, roundRectPath } from "./engine/fx";
+import { Particles, clamp, TAU, FONT_DISPLAY, FONT_BODY, ease, roundRectPath, makeSprite } from "./engine/fx";
+import { renderScale } from "./engine/quality";
 import { SetupMenu, OPPONENT_ROW, LEVEL_ROW, duelCoins } from "./engine/menu";
 import { playerBar, DuelOver, IconButton, ICONS } from "./engine/duel";
 import { pentatonic } from "./engine/audio";
@@ -316,44 +317,58 @@ class ChessGame implements GameInstance {
     return { x: this.w / 2 - s * 2, y: this.by + this.sq * 4 - s / 2, s };
   }
 
+  private boardSpr: HTMLCanvasElement | null = null;
+  private boardKey = "";
+
   render() {
     const { ctx } = this.env;
     const { w, h, sq, bx, by } = this;
-    const bg = ctx.createLinearGradient(0, 0, 0, h);
-    bg.addColorStop(0, "#1b1410");
-    bg.addColorStop(1, "#2c2016");
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, w, h);
+    // Background, frame, the 64 wood squares and the coordinates only change with the layout or
+    // when the board flips, so they are one cached layer.
+    // (The coordinates are text, so a web font finishing its load also rebuilds the layer.)
+    const fonts = typeof document !== "undefined" ? (document as any).fonts?.status ?? "" : "";
+    const bkey = `${w}x${h}@${renderScale()}|${bx},${by},${sq},${this.flipped}|${fonts}`;
+    if (!this.boardSpr || this.boardKey !== bkey) {
+      this.boardKey = bkey;
+      this.boardSpr = makeSprite(w, h, renderScale(), (c) => {
+        const bg = c.createLinearGradient(0, 0, 0, h);
+        bg.addColorStop(0, "#1b1410");
+        bg.addColorStop(1, "#2c2016");
+        c.fillStyle = bg;
+        c.fillRect(0, 0, w, h);
 
-    // Frame
-    ctx.fillStyle = "#4a3221";
-    roundRectPath(ctx, bx - 8, by - 8, sq * 8 + 16, sq * 8 + 16, 10);
-    ctx.fill();
-    // Squares with a subtle wood grain
-    for (let r = 0; r < 8; r++) {
-      for (let f = 0; f < 8; f++) {
-        const light = (r + f) % 2 === 0;
-        const g = ctx.createLinearGradient(bx + f * sq, by + r * sq, bx + (f + 1) * sq, by + (r + 1) * sq);
-        g.addColorStop(0, light ? "#f3dfb8" : "#b07a4f");
-        g.addColorStop(1, light ? "#e6cb98" : "#9a6640");
-        ctx.fillStyle = g;
-        ctx.fillRect(bx + f * sq, by + r * sq, sq, sq);
-      }
+        // Frame
+        c.fillStyle = "#4a3221";
+        roundRectPath(c, bx - 8, by - 8, sq * 8 + 16, sq * 8 + 16, 10);
+        c.fill();
+        // Squares with a subtle wood grain
+        for (let r = 0; r < 8; r++) {
+          for (let f = 0; f < 8; f++) {
+            const light = (r + f) % 2 === 0;
+            const g = c.createLinearGradient(bx + f * sq, by + r * sq, bx + (f + 1) * sq, by + (r + 1) * sq);
+            g.addColorStop(0, light ? "#f3dfb8" : "#b07a4f");
+            g.addColorStop(1, light ? "#e6cb98" : "#9a6640");
+            c.fillStyle = g;
+            c.fillRect(bx + f * sq, by + r * sq, sq, sq);
+          }
+        }
+        // Coordinates
+        c.font = `600 ${Math.max(9, sq * 0.2)}px ${FONT_BODY}`;
+        for (let i = 0; i < 8; i++) {
+          const file = this.flipped ? 7 - i : i;
+          const rank = this.flipped ? i + 1 : 8 - i;
+          c.fillStyle = i % 2 === 0 ? "#9a6640" : "#f3dfb8";
+          c.textAlign = "left";
+          c.textBaseline = "top";
+          c.fillText(`${rank}`, bx + 2, by + i * sq + 2);
+          c.fillStyle = i % 2 === 1 ? "#9a6640" : "#f3dfb8";
+          c.textAlign = "right";
+          c.textBaseline = "bottom";
+          c.fillText("abcdefgh"[file], bx + (i + 1) * sq - 2, by + 8 * sq - 1);
+        }
+      });
     }
-    // Coordinates
-    ctx.font = `600 ${Math.max(9, sq * 0.2)}px ${FONT_BODY}`;
-    for (let i = 0; i < 8; i++) {
-      const file = this.flipped ? 7 - i : i;
-      const rank = this.flipped ? i + 1 : 8 - i;
-      ctx.fillStyle = i % 2 === 0 ? "#9a6640" : "#f3dfb8";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(`${rank}`, bx + 2, by + i * sq + 2);
-      ctx.fillStyle = i % 2 === 1 ? "#9a6640" : "#f3dfb8";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "bottom";
-      ctx.fillText("abcdefgh"[file], bx + (i + 1) * sq - 2, by + 8 * sq - 1);
-    }
+    ctx.drawImage(this.boardSpr, 0, 0, w, h);
 
     const hl = (s: number, color: string) => {
       const p = this.sqPos(s);
