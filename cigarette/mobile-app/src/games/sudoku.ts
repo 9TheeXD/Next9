@@ -231,7 +231,7 @@ class SudokuGame implements GameInstance {
     const wins = (parseInt(this.env.store.get(key) || "0", 10) || 0) + 1;
     this.env.store.set(key, String(wins));
     this.env.emit({
-      type: "end", coins: (this.earned = [30, 50, 80][this.diff]),
+      type: "end", coins: (this.earned = [15, 25, 40][this.diff]),
       score: wins,
       best: wins,
       summary: `ซูโดกุ${DIFFICULTY[this.diff].label} สำเร็จใน ${mins} นาที`,

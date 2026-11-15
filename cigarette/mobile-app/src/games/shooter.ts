@@ -64,6 +64,7 @@ export const shooterGame: GameDefinition = {
   category: "action",
   minutes: "3–10 นาที",
   palette: ["#070a24", "#4fa8ff"],
+  countdown: true,
   create: (env) => new ShooterGame(env),
 };
 
@@ -221,8 +222,8 @@ class ShooterGame implements GameInstance {
     this.particles.ring(e.x, e.y, st.color, e.r * 3, 0.45);
     this.shake = Math.max(this.shake, e.kind === "boss" ? 18 : 3);
     this.env.sfx.noise({ dur: e.kind === "boss" ? 1.2 : 0.25, vol: e.kind === "boss" ? 0.2 : 0.08, freq: 600, sweepTo: 80, type: "lowpass" });
-    const coins = e.kind === "boss" ? 12 + this.wave : this.rand() < 0.55 ? 1 : 0;
-    for (let i = 0; i < coins; i++) this.drops.push({ x: e.x + (this.rand() - 0.5) * e.r * 2, y: e.y, vy: 40 + this.rand() * 80, kind: "coin", value: 1 + Math.floor(this.wave / 4), t: 0 });
+    const coins = e.kind === "boss" ? 6 + Math.floor(this.wave / 2) : this.rand() < 0.35 ? 1 : 0;
+    for (let i = 0; i < coins; i++) this.drops.push({ x: e.x + (this.rand() - 0.5) * e.r * 2, y: e.y, vy: 40 + this.rand() * 80, kind: "coin", value: 1 + Math.floor(this.wave / 8), t: 0 });
     if (this.rand() < (e.kind === "boss" ? 1 : 0.05)) {
       const kinds: Drop["kind"][] = ["spread", "shield", "heal"];
       this.drops.push({ x: e.x, y: e.y, vy: 70, kind: kinds[Math.floor(this.rand() * 3)], value: 0, t: 0 });
@@ -249,7 +250,7 @@ class ShooterGame implements GameInstance {
       this.best = reached;
       this.env.store.set("best", String(reached));
     }
-    this.earned = this.runCoins + this.wave * 3;
+    this.earned = Math.min(60, this.runCoins + this.wave);
     this.env.emit({ type: "end", coins: this.earned, score: this.score, best: this.best, summary: `ถึงด่าน ${reached} · ยิงไป ${this.kills} ลำ`, stats: { wave: reached, kills: this.kills } });
   }
 

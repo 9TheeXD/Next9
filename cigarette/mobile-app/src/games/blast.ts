@@ -250,7 +250,7 @@ class BlastGame implements GameInstance {
       this.best = r.best;
       this.newBest = r.isNew;
       this.env.sfx.tone({ freq: 330, dur: 0.6, vol: 0.09, glideTo: 180 });
-      this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 25, 5, 120)), score: this.score, best: this.best, summary: `ล้างไป ${this.lines} แถว`, stats: { lines: this.lines } });
+      this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 30)), score: this.score, best: this.best, summary: `ล้างไป ${this.lines} แถว`, stats: { lines: this.lines } });
     }
   }
 

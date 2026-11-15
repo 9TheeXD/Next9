@@ -16,18 +16,30 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { amount } = body;
 
-    if (typeof amount !== "number" || amount <= 0) {
+    // Negative amounts come from trading XP for coins in the app; XP never goes below zero.
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 100000) {
       return NextResponse.json<APIResponse<never>>(
         { success: false, error: "Invalid amount" },
         { status: 400 }
       );
     }
 
-    const updated = await prisma.user.update({
-      where: { id: auth.userId },
-      data: { xp: { increment: amount } },
-      select: { xp: true },
-    });
+    const delta = Math.trunc(amount);
+    const updated =
+      delta > 0
+        ? await prisma.user.update({
+            where: { id: auth.userId },
+            data: { xp: { increment: delta } },
+            select: { xp: true },
+          })
+        : await prisma.$transaction(async (tx) => {
+            const cur = await tx.user.findUniqueOrThrow({ where: { id: auth.userId }, select: { xp: true } });
+            return tx.user.update({
+              where: { id: auth.userId },
+              data: { xp: Math.max(0, cur.xp + delta) },
+              select: { xp: true },
+            });
+          });
 
     return NextResponse.json<APIResponse<{ xp: number }>>(
       { success: true, data: { xp: updated.xp } },

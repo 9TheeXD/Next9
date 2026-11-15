@@ -264,7 +264,8 @@ export const LEVEL_ROW: MenuRow = {
 
 /** Coins for finishing a duel: more for beating a harder bot, a little for friendly games. */
 export function duelCoins(mode: string, level: number, result: "win" | "lose" | "draw") {
-  if (mode === "friend") return 10;
-  const win = [20, 40, 80, 150][level] ?? 20;
-  return result === "win" ? win : result === "draw" ? Math.round(win / 2) : 5;
+  // Same scale as the other games: a normal round is worth 10-30 coins, the best wins about 50.
+  if (mode === "friend") return 6;
+  const win = [12, 20, 32, 50][level] ?? 12;
+  return result === "win" ? win : result === "draw" ? Math.round(win / 2) : 3;
 }

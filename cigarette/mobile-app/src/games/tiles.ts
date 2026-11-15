@@ -222,12 +222,12 @@ class TilesGame implements GameInstance {
       [0, 2, 4, 7, 9].forEach((s, i) => this.env.sfx.chime(pentatonic(s + 5), 0.1, i * 0.09));
       const passed = this.level + 1;
       if (this.level < LEVELS.length - 1) this.env.store.set("level", String(this.level + 1));
-      this.env.emit({ type: "end", coins: (this.earned = 30 + this.level * 15), score: passed, best: passed, summary: `ผ่านด่าน ${passed}`, stats: { level: passed } });
+      this.env.emit({ type: "end", coins: (this.earned = Math.min(40, 12 + this.level * 2)), score: passed, best: passed, summary: `ผ่านด่าน ${passed}`, stats: { level: passed } });
     } else if (this.tray.filter((t) => t.state === "tray").length >= this.trayCap) {
       this.state = "lose";
       this.stateT = 0;
       this.env.sfx.tone({ freq: 300, dur: 0.5, vol: 0.08, glideTo: 180 });
-      this.env.emit({ type: "end", coins: (this.earned = 5 + this.cleared / 3), score: this.cleared / 3, best: this.level + 1, summary: `ด่าน ${this.level + 1}: เก็บได้ ${this.cleared / 3} ชุด`, stats: { level: this.level + 1 } });
+      this.env.emit({ type: "end", coins: (this.earned = Math.min(15, 3 + Math.floor(this.cleared / 6))), score: this.cleared / 3, best: this.level + 1, summary: `ด่าน ${this.level + 1}: เก็บได้ ${this.cleared / 3} ชุด`, stats: { level: this.level + 1 } });
     }
   }
 

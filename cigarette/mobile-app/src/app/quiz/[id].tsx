@@ -6,6 +6,7 @@ import { QUIZ_BANK } from "@/utils/quizBank";
 import { api } from "@/lib/api";
 import { useGamification } from "@/contexts/GamificationContext";
 import { useAppSounds } from "@/hooks/useAppSounds";
+import ReadyGate from "@/components/ReadyGate";
 
 export default function QuizScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -25,6 +26,8 @@ export default function QuizScreen() {
   const [isFinished, setIsFinished] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [earnedBonusThisTime, setEarnedBonusThisTime] = useState(false);
+  // The quiz opens on a short "what this is" screen; questions show after the user taps start.
+  const [started, setStarted] = useState(false);
 
   const handleClose = () => {
     playNav();
@@ -40,6 +43,44 @@ export default function QuizScreen() {
             <Feather name="x" size={20} color="#1e293b" />
           </Pressable>
         </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!started) {
+    const total = shuffledQuestions.length;
+    const alreadyPerfect = perfectQuizzes.includes(quiz.id);
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <Pressable onPress={handleClose} style={styles.backButton} accessibilityRole="button" accessibilityLabel="ปิด">
+            <Feather name="x" size={20} color="#64748b" />
+          </Pressable>
+          <Text style={styles.headerTitle}>แบบทดสอบ</Text>
+          <View style={styles.progressContainer}>
+            <Text style={styles.progressText}>{total} ข้อ</Text>
+          </View>
+        </View>
+        <ReadyGate
+          tone="light"
+          kicker={`แบบทดสอบ · ${total} ข้อ`}
+          title={quiz.title}
+          subtitle={quiz.description}
+          icon={quiz.icon}
+          accent={quiz.color}
+          steps={[
+            `มีทั้งหมด ${total} ข้อ อ่านคำถามแล้วแตะคำตอบที่คิดว่าถูก`,
+            "ตอบแล้วจะเห็นเฉลยพร้อมคำอธิบายทันที จากนั้นกดปุ่มด้านล่างเพื่อไปข้อถัดไป",
+            "ไม่จับเวลา ค่อยๆ อ่านได้เลย",
+            alreadyPerfect ? "คุณเคยได้คะแนนเต็มชุดนี้แล้ว รอบนี้เป็นการทบทวน" : `ตอบถูกทุกข้อ รับโบนัส ${total * 100} XP`,
+          ]}
+          onStart={() => {
+            playClick();
+            setStarted(true);
+          }}
+          onCancel={handleClose}
+          cancelLabel="กลับไปก่อน"
+        />
       </SafeAreaView>
     );
   }

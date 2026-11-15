@@ -209,7 +209,7 @@ class MergeGame implements GameInstance {
     this.best = r.best;
     this.newBest = r.isNew;
     this.env.sfx.tone({ freq: 330, dur: 0.6, vol: 0.09, glideTo: 180 });
-    this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 15, 5, 150)), score: this.score, best: this.best, summary: `ผลไม้ใหญ่สุด: ${FRUITS[this.biggest].name}`, stats: { biggest: this.biggest } });
+    this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 20)), score: this.score, best: this.best, summary: `ผลไม้ใหญ่สุด: ${FRUITS[this.biggest].name}`, stats: { biggest: this.biggest } });
   }
 
   resize(w: number, h: number) {

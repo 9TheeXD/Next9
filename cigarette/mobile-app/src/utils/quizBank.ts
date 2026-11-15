@@ -308,7 +308,7 @@ export const QUIZ_BANK: QuizTopic[] = [
     id: "psychology-addiction",
     title: "จิตวิทยาของการเสพติด",
     description: "เรียนรู้กลไกของสมองที่ทำให้คุณติดบุหรี่",
-    icon: "brain",
+    icon: "cpu",
     color: "#f59e0b",
     questions: [
       {

@@ -373,7 +373,7 @@ class BubblesGame implements GameInstance {
       [0, 2, 4, 7, 9].forEach((s, i) => this.env.sfx.chime(pentatonic(s + 5), 0.1, i * 0.08));
       const r = bestScore(this.env.store, "best", this.score);
       this.best = r.best;
-      this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 20, 5, 150)), score: this.score, best: this.best, summary: `ผ่านด่าน ${this.level}`, stats: { level: this.level } });
+      this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 25)), score: this.score, best: this.best, summary: `ผ่านด่าน ${this.level}`, stats: { level: this.level } });
       return;
     }
     const s = this.shooter();
@@ -393,7 +393,7 @@ class BubblesGame implements GameInstance {
     this.best = r.best;
     this.newBest = r.isNew;
     this.env.sfx.tone({ freq: 330, dur: 0.6, vol: 0.09, glideTo: 180 });
-    this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 20, 5, 150)), score: this.score, best: this.best, summary: `ถึงด่าน ${this.level}`, stats: { level: this.level } });
+    this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 25)), score: this.score, best: this.best, summary: `ถึงด่าน ${this.level}`, stats: { level: this.level } });
   }
 
   private start(level: number) {

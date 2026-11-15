@@ -17,6 +17,7 @@ export const partyGame: GameDefinition = {
   category: "party",
   minutes: "3–10 นาที",
   palette: ["#1e1b4b", "#f59e0b"],
+  countdown: true,
   create: (env) => new PartyGame(env),
 };
 
@@ -1176,12 +1177,12 @@ class PartyGame implements GameInstance {
     this.over.t = 0;
     let summary: string;
     if (this.mode === "coop") {
-      this.earned = 10 + this.stars * 6;
+      this.earned = Math.min(50, 6 + this.stars * 3);
       summary = `ร่วมมือ ${this.rounds} เกม ได้ ${this.stars}/${this.rounds * 3} ดาว`;
     } else {
       const best = Math.max(...this.points);
       const humanBest = Math.max(...this.points.filter((_, i) => this.humans[i]));
-      this.earned = 10 + this.rounds * 3 + (humanBest === best ? 25 : 0);
+      this.earned = Math.min(50, 6 + this.rounds * 2 + (humanBest === best ? 12 : 0));
       summary = this.mode === "team" ? `ทีมล่าง ${this.points[0] + this.points[1]} – ${this.points[2] + this.points[3]} ทีมบน` : `${SEAT_NAMES[this.points.indexOf(best)]} ชนะด้วย ${best} แต้ม`;
     }
     [0, 2, 4, 7, 9].forEach((s, k) => this.env.sfx.chime(pentatonic(s + 3), 0.1, k * 0.1));

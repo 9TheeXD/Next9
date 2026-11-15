@@ -40,6 +40,7 @@ export const lanternGame: GameDefinition = {
   category: "calm",
   minutes: "2–3 นาที",
   palette: ["#141a4d", "#ffb45c"],
+  countdown: true,
   create: (env) => new LanternGame(env),
 };
 
@@ -150,7 +151,7 @@ class LanternGame implements GameInstance {
     const r = bestScore(this.env.store, "best", pct);
     this.best = r.best;
     this.env.emit({
-      type: "end", coins: (this.earned = Math.max(10, this.breaths * 2)),
+      type: "end", coins: (this.earned = Math.min(30, Math.max(8, this.breaths))),
       score: this.inRhythm,
       best: this.best,
       summary: `หายใจช้า ${this.breaths} ครั้ง · เข้าจังหวะ ${pct}%`,

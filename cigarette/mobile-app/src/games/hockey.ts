@@ -15,6 +15,7 @@ export const hockeyGame: GameDefinition = {
   category: "duel",
   minutes: "2–5 นาที",
   palette: ["#0e7490", "#f0abfc"],
+  countdown: true,
   create: (env) => new Hockey(env),
 };
 
