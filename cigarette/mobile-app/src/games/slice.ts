@@ -56,6 +56,7 @@ export const sliceGame: GameDefinition = {
   category: "action",
   minutes: "75 วินาที",
   palette: ["#3b2414", "#ff5d73"],
+  countdown: true,
   create: (env) => new SliceGame(env),
 };
 
@@ -195,7 +196,7 @@ class SliceGame implements GameInstance {
     this.best = r.best;
     this.newBest = r.isNew;
     [0, 2, 4].forEach((s, i) => this.env.sfx.chime(pentatonic(s + 5), 0.09, i * 0.1));
-    this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 2, 5, 120)), score: this.score, best: this.best, summary: `หั่นไป ${this.sliced} ลูก`, stats: { sliced: this.sliced, combo: this.bestCombo } });
+    this.env.emit({ type: "end", coins: (this.earned = coinsFor(this.score, 5)), score: this.score, best: this.best, summary: `หั่นไป ${this.sliced} ลูก`, stats: { sliced: this.sliced, combo: this.bestCombo } });
   }
 
   resize(w: number, h: number) {

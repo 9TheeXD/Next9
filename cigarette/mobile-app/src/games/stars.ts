@@ -34,6 +34,7 @@ export const starsGame: GameDefinition = {
   category: "brain",
   minutes: "2–4 นาที",
   palette: ["#0e1440", "#c7a2ff"],
+  countdown: true,
   create: (env) => new StarsGame(env),
 };
 
@@ -195,7 +196,7 @@ class StarsGame implements GameInstance {
     this.state = "over";
     this.stateT = 0;
     this.env.emit({
-      type: "end", coins: (this.earned = Math.max(5, reached * 4)),
+      type: "end", coins: (this.earned = Math.min(40, Math.max(3, reached * 2))),
       score: reached,
       best: this.best,
       summary: `จำได้ยาวสุด ${reached} ดวง`,

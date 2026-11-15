@@ -372,7 +372,7 @@ class Dots implements GameInstance {
     const win = this.winners();
     const humanWon = win.some((i) => this.humans[i]);
     const allHuman = this.humans.slice(0, this.players).every(Boolean);
-    this.earned = allHuman ? 15 : humanWon ? 20 + this.level * 20 + this.n * 3 : 8;
+    this.earned = allHuman ? 6 : humanWon ? Math.min(50, 10 + this.level * 10 + this.n) : 3;
     this.env.emit({
       type: "end",
       coins: this.earned,

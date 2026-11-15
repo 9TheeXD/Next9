@@ -102,6 +102,7 @@ export const blocksGame: GameDefinition = {
   category: "puzzle",
   minutes: "3 นาที",
   palette: ["#2b1a6b", "#34d8ff"],
+  countdown: true,
   create: (env) => new BlocksGame(env),
 };
 
@@ -369,7 +370,7 @@ class BlocksGame implements GameInstance {
     this.newBest = r.isNew;
     this.env.sfx.tone({ freq: 392, dur: 0.6, vol: 0.1, glideTo: 196 });
     this.env.emit({
-      type: "end", coins: (this.earned = coinsFor(this.score, 60, 5, 120)),
+      type: "end", coins: (this.earned = coinsFor(this.score, 60)),
       score: this.score,
       best: this.best,
       summary: `ล้างไป ${this.lines} แถว · เลเวล ${this.level}`,

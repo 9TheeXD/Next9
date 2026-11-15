@@ -98,6 +98,7 @@ export const defenseGame: GameDefinition = {
   category: "action",
   minutes: "3–8 นาที",
   palette: ["#14321f", "#86efac"],
+  countdown: true,
   create: (env) => new DefenseGame(env),
 };
 
@@ -630,7 +631,7 @@ class DefenseGame implements GameInstance {
     const r = bestScore(this.env.store, "best", survived);
     this.best = r.best;
     this.newBest = r.isNew;
-    this.earned = 10 + survived * 6 + Math.floor(this.kills / 4);
+    this.earned = Math.min(60, 5 + survived * 2 + Math.floor(this.kills / 10));
     this.env.sfx.tone({ freq: 300, dur: 0.9, vol: 0.08, type: "triangle", glideTo: 110 });
     this.env.emit({
       type: "end",

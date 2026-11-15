@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { wallet } from "@/games/engine/economy";
 import { api } from "@/lib/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,7 +36,15 @@ interface GamificationContextType {
   knowledgeDays: number;
   loggedDays: number;
   claimWeeklyMission: (mission: WeeklyMissionType) => void;
+  /** Coins → XP at XP_BUY_COST coins each. Returns false if there are not enough coins. */
+  buyXP: (amount: number) => boolean;
+  /** XP → coins, XP_SELL_PER_COIN XP for one coin. Returns the coins given (0 if not enough XP). */
+  sellXP: (amount: number) => number;
 }
+
+/** Exchange rates. Buying costs more than selling gives back, so coins cannot be farmed in a loop. */
+export const XP_BUY_COST = 4; // coins per 1 XP
+export const XP_SELL_PER_COIN = 2; // XP per 1 coin
 
 const GamificationContext = createContext<GamificationContextType | undefined>(undefined);
 
@@ -285,7 +294,7 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
     const syncPending = async () => {
       const pendingStr = await AsyncStorage.getItem(XP_PENDING_KEY);
       const pendingXP = pendingStr ? parseInt(pendingStr, 10) : 0;
-      if (pendingXP > 0) {
+      if (pendingXP !== 0) {
         try {
           await api.postXP({ amount: pendingXP });
           await AsyncStorage.removeItem(XP_PENDING_KEY);
@@ -347,10 +356,47 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
 
       if (xpAmount > 0) {
         addXP(xpAmount, `ภารกิจสัปดาห์: ${title}`);
+        // Missions pay more coins than any single game round.
+        wallet.add(Math.round(xpAmount / 2));
       }
       return next;
     });
   }, [user?.role, addXP]);
+
+  const buyXP = useCallback(
+    (amount: number) => {
+      const n = Math.floor(amount);
+      if (n <= 0 || user?.role !== "SMOKER") return false;
+      if (!wallet.spend(n * XP_BUY_COST)) return false;
+      addXP(n, "แลกเหรียญเป็น XP");
+      return true;
+    },
+    [addXP, user?.role]
+  );
+
+  const sellXP = useCallback(
+    (amount: number) => {
+      const n = Math.floor(amount / XP_SELL_PER_COIN) * XP_SELL_PER_COIN;
+      if (n <= 0 || user?.role !== "SMOKER" || n > xp) return 0;
+      const coins = n / XP_SELL_PER_COIN;
+      setXp((prev) => {
+        const next = Math.max(0, prev - n);
+        AsyncStorage.setItem(XP_STORAGE_KEY, next.toString()).catch(console.error);
+        return next;
+      });
+      if (isOnline) {
+        api.postXP({ amount: -n }).catch(console.error);
+      } else {
+        AsyncStorage.getItem(XP_PENDING_KEY).then((pending) => {
+          const p = pending ? parseInt(pending, 10) : 0;
+          AsyncStorage.setItem(XP_PENDING_KEY, (p - n).toString()).catch(console.error);
+        });
+      }
+      wallet.add(coins);
+      return coins;
+    },
+    [xp, isOnline, user?.role]
+  );
 
   const clearToast = useCallback(() => {
     setActiveToast(null);
@@ -386,6 +432,8 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
       if (mission === 'dailyLog') { xpAmount = 20; title = "บันทึกพฤติกรรมประจำวัน"; }
       
       if (xpAmount > 0) {
+        // Missions pay more coins than a game round (a round is about 10-30).
+        wallet.add(xpAmount * 3);
         setXp((currentXp) => {
           const newXp = currentXp + xpAmount;
           AsyncStorage.setItem(XP_STORAGE_KEY, newXp.toString()).catch(console.error);
@@ -402,7 +450,7 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
         setActiveToast({
           id: Date.now().toString(),
           amount: xpAmount,
-          message: `ภารกิจสำเร็จ: ${title}`,
+          message: `ภารกิจสำเร็จ: ${title} (+${xpAmount * 3} เหรียญ)`,
         });
         playBadge();
       }
@@ -447,6 +495,8 @@ export function GamificationProvider({ children }: { children: React.ReactNode }
         knowledgeDays,
         loggedDays,
         claimWeeklyMission,
+        buyXP,
+        sellXP,
       }}
     >
       {children}

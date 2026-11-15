@@ -45,6 +45,7 @@ export const snakeGame: GameDefinition = {
   category: "action",
   minutes: "2–5 นาที",
   palette: ["#0a0f22", "#5eead4"],
+  countdown: true,
   create: (env) => new SnakeGame(env),
 };
 
@@ -179,7 +180,7 @@ class SnakeGame implements GameInstance {
     const r = bestScore(this.env.store, "best", this.bestLen);
     this.best = r.best;
     this.newBest = r.isNew;
-    this.earned = coinsFor(this.bestLen + this.kills * 20, 3, 5, 200);
+    this.earned = coinsFor(this.bestLen + this.kills * 20, 8);
     this.env.sfx.noise({ dur: 0.6, vol: 0.12, freq: 400, sweepTo: 80, type: "lowpass" });
     this.env.emit({
       type: "end",

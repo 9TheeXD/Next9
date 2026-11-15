@@ -180,8 +180,14 @@ export const wallet = {
   },
 };
 
-/** Coins for a finished round: score / divisor, kept between min and max. */
-export function coinsFor(score: number, divisor: number, min = 5, max = 120) {
+/**
+ * Coins for a finished round: score / divisor, kept between min and max.
+ * Balance target for every game: a normal round gives about 10-30 coins and an excellent one about
+ * 50, so skins (300+) take real play. Quit-smoking missions pay more than games (see
+ * GamificationContext and CravingRescue).
+ */
+export const ROUND_COIN_CAP = 50;
+export function coinsFor(score: number, divisor: number, min = 3, max = ROUND_COIN_CAP) {
   return Math.max(min, Math.min(max, Math.round(score / divisor)));
 }
 

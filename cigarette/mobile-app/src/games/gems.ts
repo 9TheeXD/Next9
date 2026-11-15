@@ -474,7 +474,7 @@ class GemsGame implements GameInstance {
     this.newBest = r.isNew;
     [0, 2, 4, 7, 9].forEach((s, i) => this.env.sfx.chime(pentatonic(s + 3), 0.09, i * 0.1));
     this.env.emit({
-      type: "end", coins: (this.earned = coinsFor(this.score, 80, 5, 120)),
+      type: "end", coins: (this.earned = coinsFor(this.score, 80)),
       score: this.score,
       best: this.best,
       summary: `3 นาทีผ่านไปแล้ว · ต่อเนื่องสูงสุด x${this.biggestCombo}`,

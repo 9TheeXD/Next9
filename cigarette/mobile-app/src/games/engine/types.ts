@@ -30,6 +30,14 @@ export interface GameEnv {
     get: (key: string) => string | null;
     set: (key: string, value: string) => void;
   };
+  /**
+   * Freezes the game for a "3, 2, 1, GO" overlay (the game keeps rendering, update() and input wait).
+   * Games with `countdown: true` get one automatically on every "start" event and when the player
+   * resumes from pause; call this yourself for other moments, e.g. a respawn or a new round.
+   */
+  countdown: (seconds?: number, label?: string) => void;
+  /** True while a countdown is showing. */
+  counting: () => boolean;
 }
 
 export interface GameInstance {
@@ -58,5 +66,7 @@ export interface GameDefinition {
   category: GameCategory;
   /** Two colours for the card art in the game list. */
   palette: [string, string];
+  /** Real-time games: show 3-2-1 before play starts and after a pause. Turn-based games leave it off. */
+  countdown?: boolean;
   create(env: GameEnv): GameInstance;
 }

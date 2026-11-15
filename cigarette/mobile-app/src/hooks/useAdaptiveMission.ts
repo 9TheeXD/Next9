@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { wallet } from "@/games/engine/economy";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/contexts/AuthContext';
 import { getBangkokDateString } from '@/utils/calculations';
@@ -84,6 +85,8 @@ export function useAdaptiveMission(recentLogs: any[]) {
 
     setMission(updated);
     await AsyncStorage.setItem(MISSION_STATE_KEY, JSON.stringify(updated));
+    // Today's mission is worth more than any game round.
+    wallet.addDaily("adaptive_mission", 60);
 
     // Update history
     const newHistory: MissionHistoryRecord[] = [

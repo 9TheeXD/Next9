@@ -17,6 +17,7 @@ export const pulseGame: GameDefinition = {
   category: "action",
   minutes: "2–10 นาที",
   palette: ["#12052e", "#f472b6"],
+  countdown: true,
   create: (env) => new PulseGame(env),
 };
 
@@ -265,9 +266,12 @@ class PulseGame implements GameInstance {
       this.unlocked = this.level + 1;
       this.env.store.set("unlocked", `${this.unlocked}`);
     }
-    for (const id of this.coinsRun) this.coinsTaken.add(id);
-    const coinBonus = this.coinsTaken.size * 5;
-    this.earned = (this.practice ? 15 : 30) + this.level * (this.practice ? 4 : 8) + coinBonus;
+    let fresh = 0; // coins in this level picked up for the first time
+    for (const id of this.coinsRun) {
+      if (!this.coinsTaken.has(id)) fresh++;
+      this.coinsTaken.add(id);
+    }
+    this.earned = Math.min(50, Math.round((this.practice ? 5 : 10) + this.level * 1.5 + fresh * 3));
     [0, 2, 4, 5, 7].forEach((k, i) => this.env.sfx.chime(pentatonic(k + 4), 0.11, i * 0.1));
     for (let i = 0; i < 4; i++) this.particles.burst(this.w * (0.2 + i * 0.2), this.h * 0.4, `hsl(${(this.hue + i * 40) % 360},95%,65%)`, 30, { speed: 300, size: 3, gravity: 200 });
     this.env.emit({

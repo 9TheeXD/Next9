@@ -44,12 +44,35 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
   const reducedMotion =
     typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  // Countdown overlay ("3, 2, 1, เริ่ม!"): while it runs the game is drawn but not updated.
+  let cdLeft = 0;
+  let cdLabel = "";
+  let cdLastShown = -1;
+  let live = false; // between a "start" and an "end" event
+  function countdown(seconds = 3, label = "เตรียมตัว") {
+    if (reducedMotion) seconds = Math.min(seconds, 2);
+    cdLeft = Math.max(0.5, seconds) + 0.55; // the extra part shows "เริ่ม!"
+    cdLabel = label;
+    cdLastShown = -1;
+  }
+
   const game: GameInstance = def.create({
     canvas,
     ctx,
     sfx,
     reducedMotion,
-    emit: (e) => opts.onEvent?.(e),
+    countdown,
+    counting: () => cdLeft > 0,
+    emit: (e) => {
+      if (e.type === "start") {
+        live = true;
+        if (def.countdown) countdown();
+      } else if (e.type === "end") {
+        live = false;
+        cdLeft = 0;
+      }
+      opts.onEvent?.(e);
+    },
     store: {
       get: (k) => {
         try {
@@ -101,8 +124,64 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
     last = now;
     if (paused) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (cdLeft > 0) {
+      cdLeft = Math.max(0, cdLeft - dt);
+      game.render();
+      drawCountdown();
+      return;
+    }
     game.update(dt);
     game.render();
+  }
+
+  function drawCountdown() {
+    const n = Math.ceil(cdLeft - 0.55); // 3, 2, 1, then 0 = "เริ่ม!"
+    if (n !== cdLastShown) {
+      cdLastShown = n;
+      if (n > 0) sfx.tone({ freq: 520, dur: 0.12, vol: 0.14, type: "sine" });
+      else sfx.tone({ freq: 880, dur: 0.25, vol: 0.18, type: "triangle" });
+    }
+    const frac = n > 0 ? cdLeft - 0.55 - (n - 1) : cdLeft / 0.55; // 1 → 0 within the current number
+    const w = width;
+    const h = height;
+    const c = ctx;
+    c.save();
+    c.fillStyle = `rgba(6, 10, 24, ${n > 0 ? 0.45 : 0.45 * frac})`;
+    c.fillRect(0, 0, w, h);
+    const k = reducedMotion ? 1 : 1 + 0.35 * Math.max(0, frac - 0.6) / 0.4;
+    const alpha = Math.min(1, frac * 3);
+    c.globalAlpha = alpha;
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    const size = Math.min(w, h) * (n > 0 ? 0.32 : 0.16) * k;
+    c.font = `800 ${Math.round(size)}px "Prompt", "Kanit", sans-serif`;
+    c.lineWidth = Math.max(4, size * 0.07);
+    c.strokeStyle = "rgba(0,0,0,0.35)";
+    const text = n > 0 ? String(n) : "เริ่ม!";
+    c.strokeText(text, w / 2, h / 2);
+    c.fillStyle = n > 0 ? "#ffffff" : "#7cf5c4";
+    c.fillText(text, w / 2, h / 2);
+    if (n > 0 && cdLabel) {
+      c.globalAlpha = 0.9;
+      c.font = `600 ${Math.round(Math.max(15, Math.min(w, h) * 0.05))}px "Prompt", sans-serif`;
+      c.fillStyle = "#e2e8f0";
+      c.fillText(cdLabel, w / 2, h / 2 - Math.min(w, h) * 0.31);
+    }
+    // ring that empties once per number
+    if (n > 0) {
+      const r = Math.min(w, h) * 0.22;
+      c.globalAlpha = 0.85;
+      c.lineWidth = 6;
+      c.strokeStyle = "rgba(255,255,255,0.18)";
+      c.beginPath();
+      c.arc(w / 2, h / 2, r, 0, Math.PI * 2);
+      c.stroke();
+      c.strokeStyle = "#7cf5c4";
+      c.beginPath();
+      c.arc(w / 2, h / 2, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
+      c.stroke();
+    }
+    c.restore();
   }
   raf = requestAnimationFrame(frame);
 
@@ -119,10 +198,10 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
       /* not capturable */
     }
     e.preventDefault();
-    if (!paused) game.pointer(toInfo(e, "down"));
+    if (!paused && cdLeft <= 0) game.pointer(toInfo(e, "down"));
   };
   const onMove = (e: PointerEvent) => {
-    if (!paused) game.pointer(toInfo(e, "move"));
+    if (!paused && cdLeft <= 0) game.pointer(toInfo(e, "move"));
   };
   const onUp = (e: PointerEvent) => {
     if (!paused) game.pointer(toInfo(e, "up"));
@@ -139,6 +218,7 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
 
   const onKey = (e: KeyboardEvent) => {
     if (paused || !game.key) return;
+    if (cdLeft > 0 && e.type === "keydown") return;
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
     if (e.type === "keydown") sfx.unlock();
@@ -162,6 +242,7 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
     resume() {
       paused = false;
       last = performance.now();
+      if (def.countdown && live) countdown(3, "เล่นต่อ");
     },
     setMuted(m: boolean) {
       sfx.setMuted(m);

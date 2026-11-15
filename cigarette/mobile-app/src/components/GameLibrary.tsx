@@ -6,6 +6,7 @@ import { GAMES, type GameDefinition } from "@/games";
 import type { GameCategory } from "@/games/engine/types";
 import { shopScreen } from "@/games/shop";
 import { wallet } from "@/games/engine/economy";
+import XpExchange from "@/components/XpExchange";
 
 const COVERS: Record<string, ImageSourcePropType> = {
   blocks: require("../../assets/images/games/cover_blocks.jpg"),
@@ -76,11 +77,12 @@ export default function GameLibrary({ onPlay, showWhy = true, only }: Props) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.shopTitle}>ร้านค้า · {coins.toLocaleString()} เหรียญ</Text>
-            <Text style={styles.shopText}>สกิน ตัวช่วย อัปเกรดตัวละครไม่จำกัด · ได้เหรียญจากการเล่นและการไม่สูบ</Text>
+            <Text style={styles.shopText}>สกิน ตัวช่วย อัปเกรดตัวละครไม่จำกัด · ได้เหรียญจากเกม และได้มากกว่าจากภารกิจกับวันที่ไม่สูบ</Text>
           </View>
           <Feather name="shopping-bag" size={22} color="#fde68a" />
         </Pressable>
       ) : null}
+      <XpExchange />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shelves}>
         {SHELVES.filter((s) => s.id === "all" || pool.some((g) => g.category === s.id)).map((s) => {
           const on = shelf === s.id;
