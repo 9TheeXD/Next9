@@ -133,7 +133,7 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
     step = Math.max(step, maxStep);
   }
   pickSteps();
-  if (weakDevice()) step = Math.max(step, STEPS.indexOf(1.5));
+  if (weakDevice() && !fixedScale()) step = Math.max(step, STEPS.indexOf(1.5));
   let winStart = 0;
   let winFrames = 0;
   let winSum = 0;
@@ -145,8 +145,9 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
   function applyQuality() {
     const s = STEPS[step];
     // Glow goes first on weak phones and as soon as the resolution had to drop below 1.5.
-    shadows = s >= 1.5 && !(weakDevice() && step > maxStep);
-    setRenderQuality(s, s < 1.5 || weakDevice());
+    const weak = weakDevice() && !fixedScale();
+    shadows = s >= 1.5 && !(weak && step > maxStep);
+    setRenderQuality(s, s < 1.5 || weak);
   }
   applyQuality();
 
@@ -195,6 +196,7 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
     const w = Math.max(1, Math.round(r.width));
     const h = Math.max(1, Math.round(r.height));
     pickSteps();
+    applyQuality(); // keep renderScale() equal to the canvas scale, so sprite caches draw 1:1
     const d = STEPS[step];
     if (!force && w === width && h === height && d === dpr) return;
     width = w;
