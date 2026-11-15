@@ -8,10 +8,122 @@
 // interleaved paths. The sequence itself is new on every attempt, so a retry is still a memory test.
 
 import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engine/types";
-import { Particles, Floaters, makeStars, drawStars, rgba, makeSprite, clamp, ease, TAU, FONT_DISPLAY, FONT_BODY, glow, rng, roundRectPath, type Star } from "./engine/fx";
+import { Particles, Floaters, makeStars, rgba, makeSprite, clamp, ease, TAU, FONT_DISPLAY, FONT_BODY, glow, rng, roundRectPath, type Star } from "./engine/fx";
 import { Button, drawCard } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { renderScale } from "./engine/quality";
+
+// ── Cached drawing ──────────────────────────────────────────────────────────
+// On older phones the cost of a frame is pixels: gradients, glows and text redrawn every frame. Parts that
+// rarely change are drawn once into canvases at the canvas resolution and copied 1:1 (device-pixel aligned).
+
+/** A cached drawing and the region it covers (relative to where it is drawn). */
+interface Layer {
+  c: HTMLCanvasElement;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+function makeLayer(x: number, y: number, w: number, h: number, dpr: number, draw: (c: CanvasRenderingContext2D) => void): Layer {
+  const x0 = Math.floor(x * dpr) / dpr;
+  const y0 = Math.floor(y * dpr) / dpr;
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.ceil((x + w - x0) * dpr));
+  c.height = Math.max(1, Math.ceil((y + h - y0) * dpr));
+  const ctx = c.getContext("2d")!;
+  ctx.setTransform(dpr, 0, 0, dpr, -x0 * dpr, -y0 * dpr);
+  draw(ctx);
+  return { c, x: x0, y: y0, w: c.width / dpr, h: c.height / dpr };
+}
+
+/** Draws a layer with its origin at (ox, oy), rounded to whole device pixels so the copy is not resampled. */
+function drawLayer(ctx: CanvasRenderingContext2D, l: Layer, ox = 0, oy = 0) {
+  const d = renderScale();
+  ctx.drawImage(l.c, Math.round(ox * d) / d + l.x, Math.round(oy * d) / d + l.y, l.w, l.h);
+}
+
+/** The soft radial glow from fx (same gradient stops), drawn around (0, 0). */
+function glowAt(c: CanvasRenderingContext2D, r: number, color: string, alpha: number) {
+  const g = c.createRadialGradient(0, 0, 0, 0, 0, r);
+  g.addColorStop(0, rgba(color, alpha));
+  g.addColorStop(0.35, rgba(color, alpha * 0.35));
+  g.addColorStop(1, rgba(color, 0));
+  c.fillStyle = g;
+  c.beginPath();
+  c.arc(0, 0, r, 0, TAU);
+  c.fill();
+}
+
+// Cached text is drawn again when the Thai web fonts arrive after the game started.
+let fontGen = 0;
+if (typeof document !== "undefined" && (document as any).fonts?.addEventListener) {
+  (document as any).fonts.addEventListener("loadingdone", () => fontGen++);
+}
+
+const starColors = new Map<number, string>();
+
+/**
+ * Star colours as seen through a translucent layer that is baked into the background instead of being drawn
+ * over the stars: a star of colour S under a layer of colour C and opacity k shows as C·k + S·(1−k), so drawing
+ * it in that colour over the baked background gives the same pixels.
+ */
+interface StarTint {
+  fill: string[];
+  cross: string[];
+}
+
+function hslRgb(h: number, s: number, l: number): [number, number, number] {
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return [f(0) * 255, f(8) * 255, f(4) * 255];
+}
+
+function mixHex(c: [number, number, number], over: string, k: number) {
+  const n = parseInt(over.slice(1), 16);
+  const o = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const m = (i: number) => Math.round(o[i] * k + c[i] * (1 - k));
+  return `rgb(${m(0)},${m(1)},${m(2)})`;
+}
+
+/** drawStars() from fx with the same pixels, without building two colour strings per star every frame. */
+function drawStarField(ctx: CanvasRenderingContext2D, stars: Star[], w: number, h: number, time: number, tint?: StarTint) {
+  const ga = ctx.globalAlpha;
+  for (let i = 0; i < stars.length; i++) {
+    const s = stars[i];
+    const tw = 0.55 + 0.45 * Math.sin(time * s.speed + s.phase);
+    const a = tw * (s.r > 1 ? 0.95 : 0.7);
+    let col = "#ffffff";
+    if (tint) col = tint.fill[i];
+    else if (s.hue) {
+      col = starColors.get(s.hue) ?? `hsl(${s.hue},80%,85%)`;
+      starColors.set(s.hue, col);
+    }
+    ctx.globalAlpha = ga * a;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(s.x * w, s.y * h, s.r, 0, TAU);
+    ctx.fill();
+    if (s.r > 1.2) {
+      ctx.globalAlpha = ga * a * 0.35;
+      ctx.strokeStyle = tint ? tint.cross[i] : "#ffffff";
+      ctx.lineWidth = 0.6;
+      const L = s.r * 4 * tw;
+      ctx.beginPath();
+      ctx.moveTo(s.x * w - L, s.y * h);
+      ctx.lineTo(s.x * w + L, s.y * h);
+      ctx.moveTo(s.x * w, s.y * h - L);
+      ctx.lineTo(s.x * w, s.y * h + L);
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = ga;
+}
+
+const DASH = [4, 8];
+const NO_DASH: number[] = [];
 
 const STAR_COLORS = ["#ffd66b", "#7ad8ff", "#ff8fd0", "#a6ff9e", "#c7a2ff", "#ffb27a", "#8ff5ff", "#f4f1ff"];
 const GOLD = "#ffd34d";
@@ -303,6 +415,13 @@ class StarsGame implements GameInstance {
   private mapBtn = new Button("แผนที่ดวงดาว", "#8b6cff", "ghost");
   private cardBtns: [Button, () => void][] = [];
   private hudMap = { x: 0, y: 0, r: 22 };
+  // Cached layers by key; cleared when the size, the resolution or the fonts change
+  private layers = new Map<string, Layer>();
+  private layerScale = 0;
+  private layerFonts = 0;
+  private widths = new Map<string, number>();
+  private tint: StarTint | undefined;
+  private tintKey = "";
 
   constructor(private env: GameEnv) {
     this.unlocked = parseInt(env.store.get("unlocked") || "0", 10) || 0;
@@ -608,6 +727,7 @@ class StarsGame implements GameInstance {
     const s = Math.max(120, Math.min(availW, availH / ASPECT, 560));
     this.area = { x: (w - s) / 2, y: top + Math.max(0, (availH - s * ASPECT) / 2), w: s, h: s * ASPECT };
     this.bgCache.clear();
+    this.layers.clear();
     this.centerMap();
   }
 
@@ -746,7 +866,7 @@ class StarsGame implements GameInstance {
       ctx.drawImage(this.bgFor((i0 + 1) % THEMES.length), 0, 0, w, h);
       ctx.globalAlpha = 1;
     }
-    drawStars(ctx, this.stars, w, h, this.time * 0.7);
+    drawStarField(ctx, this.stars, w, h, this.time * 0.7);
     this.renderShooting();
 
     const max = this.mapMax();
@@ -761,38 +881,42 @@ class StarsGame implements GameInstance {
       const th = THEMES[themeOf(L)];
       ctx.strokeStyle = done ? rgba(th.line, 0.75) : "rgba(255,255,255,0.18)";
       ctx.lineWidth = done ? 3 : 2;
-      ctx.setLineDash(done ? [] : [4, 8]);
+      ctx.setLineDash(done ? NO_DASH : DASH);
       ctx.beginPath();
       ctx.moveTo(this.mapX(L), y0);
       ctx.lineTo(this.mapX(L + 1), y1);
       ctx.stroke();
     }
-    ctx.setLineDash([]);
+    ctx.setLineDash(NO_DASH);
     ctx.restore();
 
-    // Group labels
+    // Group labels (cached; they only move with the scroll)
     for (let k = 1; k * 5 + 1 <= max; k++) {
       const L = k * 5 + 1;
       const y = this.mapY(L) + this.gap * 0.5;
       if (y < 96 || y > h - 180) continue;
       const th = THEMES[themeOf(L)];
       const label = `${th.name} · ด่าน ${L}–${L + 4}`;
-      ctx.font = `700 12px ${FONT_DISPLAY}`;
-      const tw = ctx.measureText(label).width + 26;
+      const font = `700 12px ${FONT_DISPLAY}`;
+      const tw = this.textWidth(ctx, font, label) + 26;
       const x = this.mapX(L) < w / 2 ? w - 14 - tw : 14;
-      ctx.fillStyle = "rgba(8,10,30,0.6)";
-      roundRectPath(ctx, x, y - 13, tw, 26, 13);
-      ctx.fill();
-      ctx.strokeStyle = rgba(th.accent, 0.6);
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.fillStyle = th.line;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label, x + tw / 2, y + 1);
+      const l = this.layer(`group|${L}`, -1, -15, tw + 2, 30, (c) => {
+        c.fillStyle = "rgba(8,10,30,0.6)";
+        roundRectPath(c, 0, -13, tw, 26, 13);
+        c.fill();
+        c.strokeStyle = rgba(th.accent, 0.6);
+        c.lineWidth = 1;
+        c.stroke();
+        c.font = font;
+        c.fillStyle = th.line;
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        c.fillText(label, tw / 2, 1);
+      });
+      drawLayer(ctx, l, x, y);
     }
 
-    // Nodes
+    // Nodes: the glow and the body of each are cached; only the pulsing ring of the selected one is live
     for (let L = 1; L <= max; L++) {
       const x = this.mapX(L);
       const y = this.mapY(L);
@@ -803,7 +927,10 @@ class StarsGame implements GameInstance {
       const sel = L === this.level;
       const cur = L === this.unlocked;
       const r = sel ? 27 : 23;
-      if (open) glow(ctx, x, y, r * (sel ? 3.2 : 2.4), th.accent, sel ? 0.55 : 0.3);
+      if (open) {
+        const gr = r * (sel ? 3.2 : 2.4);
+        drawLayer(ctx, this.layer(`mglow|${th.accent}|${sel}`, -gr, -gr, gr * 2, gr * 2, (c) => glowAt(c, gr, th.accent, sel ? 0.55 : 0.3)), x, y);
+      }
       if (sel) {
         ctx.strokeStyle = rgba("#ffffff", 0.5 + 0.3 * Math.sin(this.time * 4));
         ctx.lineWidth = 2;
@@ -811,133 +938,139 @@ class StarsGame implements GameInstance {
         ctx.arc(x, y, r + 7 + Math.sin(this.time * 4) * 2, 0, TAU);
         ctx.stroke();
       }
-      const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r);
-      if (open) {
-        grad.addColorStop(0, "#ffffff");
-        grad.addColorStop(0.35, th.line);
-        grad.addColorStop(1, th.accent);
-      } else {
-        grad.addColorStop(0, "rgba(255,255,255,0.18)");
-        grad.addColorStop(1, "rgba(255,255,255,0.05)");
-      }
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = open ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.2)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      if (open) {
-        ctx.font = `800 ${sel ? 19 : 17}px ${FONT_DISPLAY}`;
-        ctx.fillStyle = "#1a1040";
-        ctx.fillText(String(L), x, y + 1);
-      } else {
-        // Padlock
-        ctx.fillStyle = "rgba(255,255,255,0.45)";
-        roundRectPath(ctx, x - 7, y - 2, 14, 11, 3);
-        ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,0.45)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(x, y - 3, 4.5, Math.PI, 0);
-        ctx.stroke();
-      }
-      // Rating stars under cleared levels
-      if (cleared) {
-        const got = this.rating(L);
-        for (let k = 0; k < 3; k++) {
-          starPath(ctx, x + (k - 1) * 13, y + r + 9, 5.5);
-          ctx.fillStyle = k < got ? "#ffd66b" : "rgba(255,255,255,0.2)";
-          ctx.fill();
+      const got = cleared ? this.rating(L) : 0;
+      const body = this.layer(`node|${L}|${sel}|${open}|${cleared}|${cur}|${got}`, -r - 3, -r - 14, r * 2 + 50, r * 2 + 40, (c) => {
+        const grad = c.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.1, 0, 0, r);
+        if (open) {
+          grad.addColorStop(0, "#ffffff");
+          grad.addColorStop(0.35, th.line);
+          grad.addColorStop(1, th.accent);
+        } else {
+          grad.addColorStop(0, "rgba(255,255,255,0.18)");
+          grad.addColorStop(1, "rgba(255,255,255,0.05)");
         }
-      } else if (cur) {
-        ctx.font = `700 11px ${FONT_DISPLAY}`;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText("ด่านใหม่", x, y + r + 12);
-      }
-      // Twist badge
-      const tw = twistsOf(levelDef(L));
-      if (tw.length) {
-        const bx = x + r * 0.78;
-        const by = y - r * 0.78;
-        ctx.fillStyle = "rgba(10,10,30,0.85)";
-        ctx.beginPath();
-        ctx.arc(bx, by, 10, 0, TAU);
-        ctx.fill();
-        drawTwistIcon(ctx, tw[0], bx, by, 13);
-      }
+        c.fillStyle = grad;
+        c.beginPath();
+        c.arc(0, 0, r, 0, TAU);
+        c.fill();
+        c.strokeStyle = open ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.2)";
+        c.lineWidth = 1.5;
+        c.stroke();
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        if (open) {
+          c.font = `800 ${sel ? 19 : 17}px ${FONT_DISPLAY}`;
+          c.fillStyle = "#1a1040";
+          c.fillText(String(L), 0, 1);
+        } else {
+          // Padlock
+          c.fillStyle = "rgba(255,255,255,0.45)";
+          roundRectPath(c, -7, -2, 14, 11, 3);
+          c.fill();
+          c.strokeStyle = "rgba(255,255,255,0.45)";
+          c.lineWidth = 2;
+          c.beginPath();
+          c.arc(0, -3, 4.5, Math.PI, 0);
+          c.stroke();
+        }
+        // Rating stars under cleared levels
+        if (cleared) {
+          for (let k = 0; k < 3; k++) {
+            starPath(c, (k - 1) * 13, r + 9, 5.5);
+            c.fillStyle = k < got ? "#ffd66b" : "rgba(255,255,255,0.2)";
+            c.fill();
+          }
+        } else if (cur) {
+          c.font = `700 11px ${FONT_DISPLAY}`;
+          c.fillStyle = "#ffffff";
+          c.fillText("ด่านใหม่", 0, r + 12);
+        }
+        // Twist badge
+        const tw = twistsOf(levelDef(L));
+        if (tw.length) {
+          const bx = r * 0.78;
+          const by = -r * 0.78;
+          c.fillStyle = "rgba(10,10,30,0.85)";
+          c.beginPath();
+          c.arc(bx, by, 10, 0, TAU);
+          c.fill();
+          drawTwistIcon(c, tw[0], bx, by, 13);
+        }
+      });
+      drawLayer(ctx, body, x, y);
     }
 
     // Header
-    const hg = ctx.createLinearGradient(0, 0, 0, 120);
-    hg.addColorStop(0, "rgba(4,6,20,0.92)");
-    hg.addColorStop(1, "rgba(4,6,20,0)");
-    ctx.fillStyle = hg;
-    ctx.fillRect(0, 0, w, 120);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = `800 24px ${FONT_DISPLAY}`;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText("เส้นทางดวงดาว", w / 2, 34);
     let total = 0;
     for (let L = 1; L < this.unlocked; L++) total += this.rating(L);
-    ctx.font = `500 13px ${FONT_BODY}`;
-    ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.fillText(this.unlocked > 1 ? `ผ่านแล้ว ${this.unlocked - 1} ด่าน · ดาวสะสม ${total}/${(this.unlocked - 1) * 3}` : "ดาวสว่างทีละดวง จำไว้ แล้วแตะตาม", w / 2, 62);
+    drawLayer(ctx, this.layer(`header|${this.unlocked}|${total}`, 0, 0, w, 120, (c) => {
+      const hg = c.createLinearGradient(0, 0, 0, 120);
+      hg.addColorStop(0, "rgba(4,6,20,0.92)");
+      hg.addColorStop(1, "rgba(4,6,20,0)");
+      c.fillStyle = hg;
+      c.fillRect(0, 0, w, 120);
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.font = `800 24px ${FONT_DISPLAY}`;
+      c.fillStyle = "#ffffff";
+      c.fillText("เส้นทางดวงดาว", w / 2, 34);
+      c.font = `500 13px ${FONT_BODY}`;
+      c.fillStyle = "rgba(255,255,255,0.7)";
+      c.fillText(this.unlocked > 1 ? `ผ่านแล้ว ${this.unlocked - 1} ด่าน · ดาวสะสม ${total}/${(this.unlocked - 1) * 3}` : "ดาวสว่างทีละดวง จำไว้ แล้วแตะตาม", w / 2, 62);
+    }));
 
     // Bottom panel with the selected level
-    const fade = ctx.createLinearGradient(0, h - 230, 0, h);
-    fade.addColorStop(0, "rgba(4,6,20,0)");
-    fade.addColorStop(0.45, "rgba(4,6,20,0.85)");
-    fade.addColorStop(1, "rgba(4,6,20,0.95)");
-    ctx.fillStyle = fade;
-    ctx.fillRect(0, h - 230, w, 230);
     const pw = Math.min(380, w - 24);
     const px = (w - pw) / 2;
     const ph = 176;
     const py = h - ph - 12;
-    ctx.fillStyle = "rgba(14,14,44,0.92)";
-    roundRectPath(ctx, px, py, pw, ph, 22);
-    ctx.fill();
-    ctx.strokeStyle = rgba(this.theme.accent, 0.6);
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
     const d = this.def;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.font = `800 19px ${FONT_DISPLAY}`;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(`ด่าน ${d.level}`, px + 18, py + 24);
-    const lw = ctx.measureText(`ด่าน ${d.level}`).width;
-    ctx.font = `600 13px ${FONT_BODY}`;
-    ctx.fillStyle = this.theme.line;
-    ctx.fillText(this.theme.name, px + 28 + lw, py + 25);
-    const got = this.rating(d.level);
-    if (d.level < this.unlocked) {
-      for (let k = 0; k < 3; k++) {
-        starPath(ctx, px + pw - 58 + k * 20, py + 24, 7.5);
-        ctx.fillStyle = k < got ? "#ffd66b" : "rgba(255,255,255,0.2)";
-        ctx.fill();
+    drawLayer(ctx, this.layer(`panel|${d.level}|${this.unlocked}|${this.rating(d.level)}`, 0, h - 230, w, 230, (c) => {
+      const fade = c.createLinearGradient(0, h - 230, 0, h);
+      fade.addColorStop(0, "rgba(4,6,20,0)");
+      fade.addColorStop(0.45, "rgba(4,6,20,0.85)");
+      fade.addColorStop(1, "rgba(4,6,20,0.95)");
+      c.fillStyle = fade;
+      c.fillRect(0, h - 230, w, 230);
+      c.fillStyle = "rgba(14,14,44,0.92)";
+      roundRectPath(c, px, py, pw, ph, 22);
+      c.fill();
+      c.strokeStyle = rgba(this.theme.accent, 0.6);
+      c.lineWidth = 1.5;
+      c.stroke();
+      c.textAlign = "left";
+      c.textBaseline = "middle";
+      c.font = `800 19px ${FONT_DISPLAY}`;
+      c.fillStyle = "#ffffff";
+      c.fillText(`ด่าน ${d.level}`, px + 18, py + 24);
+      const lw = c.measureText(`ด่าน ${d.level}`).width;
+      c.font = `600 13px ${FONT_BODY}`;
+      c.fillStyle = this.theme.line;
+      c.fillText(this.theme.name, px + 28 + lw, py + 25);
+      const got = this.rating(d.level);
+      if (d.level < this.unlocked) {
+        for (let k = 0; k < 3; k++) {
+          starPath(c, px + pw - 58 + k * 20, py + 24, 7.5);
+          c.fillStyle = k < got ? "#ffd66b" : "rgba(255,255,255,0.2)";
+          c.fill();
+        }
       }
-    }
-    ctx.font = `500 13px ${FONT_BODY}`;
-    ctx.fillStyle = "rgba(255,255,255,0.75)";
-    ctx.fillText(`ดาวบนฟ้า ${d.n} ดวง · ${d.rounds.length} รอบ · จำยาวสุด ${d.rounds[d.rounds.length - 1]} ดวง`, px + 18, py + 50);
-    const tws = twistsOf(d);
-    if (tws.length) {
-      let xx = px + 18;
-      for (const t of tws) xx = this.badge(ctx, t, xx, py + 80) + 6;
-    } else {
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
-      ctx.fillText(d.level === 1 ? "เริ่มจากดาว 3 ดวง ค่อยๆ ยากขึ้นทีละด่าน" : "ด่านปกติ ไม่มีกติกาพิเศษ", px + 18, py + 80);
-    }
+      c.font = `500 13px ${FONT_BODY}`;
+      c.fillStyle = "rgba(255,255,255,0.75)";
+      c.fillText(`ดาวบนฟ้า ${d.n} ดวง · ${d.rounds.length} รอบ · จำยาวสุด ${d.rounds[d.rounds.length - 1]} ดวง`, px + 18, py + 50);
+      const tws = twistsOf(d);
+      if (tws.length) {
+        let xx = px + 18;
+        for (const t of tws) xx = this.badge(c, t, xx, py + 80) + 6;
+      } else {
+        c.fillStyle = "rgba(255,255,255,0.6)";
+        c.fillText(d.level === 1 ? "เริ่มจากดาว 3 ดวง ค่อยๆ ยากขึ้นทีละด่าน" : "ด่านปกติ ไม่มีกติกาพิเศษ", px + 18, py + 80);
+      }
+    }));
     this.playBtn.place(w / 2, py + 106, pw - 36, 54);
     this.playBtn.render(ctx);
   }
 
-  /** Small pill with a twist icon and its name; returns the right edge. */
   private badge(c: CanvasRenderingContext2D, t: Twist, x: number, y: number, pulse = 0) {
     const info = TWIST_INFO[t];
     c.save();
@@ -1119,6 +1252,62 @@ class StarsGame implements GameInstance {
 
   // ── Render ──────────────────────────────────────────────────────────────
 
+  /** A cached layer: built by draw() the first time the key is seen (draw in the coordinates given). */
+  private layer(key: string, x: number, y: number, w: number, h: number, draw: (c: CanvasRenderingContext2D) => void): Layer {
+    let l = this.layers.get(key);
+    if (!l) {
+      if (this.layers.size > 400) this.layers.clear();
+      l = makeLayer(x, y, w, h, renderScale(), draw);
+      this.layers.set(key, l);
+    }
+    return l;
+  }
+
+  private checkLayers() {
+    if (this.layerScale !== renderScale() || this.layerFonts !== fontGen) {
+      this.layerScale = renderScale();
+      this.layerFonts = fontGen;
+      this.layers.clear();
+      this.widths.clear();
+    }
+  }
+
+  /** Star colours under the board halo (see StarTint). */
+  private starTint(accent: string): StarTint {
+    const a = this.area;
+    const key = `${accent}|${a.x}|${a.y}|${a.w}|${this.w}|${this.h}`;
+    if (this.tint && this.tintKey === key) return this.tint;
+    const cx = a.x + a.w / 2;
+    const cy = a.y + a.h / 2;
+    const r1 = a.h * 0.7;
+    const fill: string[] = [];
+    const cross: string[] = [];
+    for (const s of this.stars) {
+      const x = s.x * this.w;
+      const y = s.y * this.h;
+      const inside = x >= a.x - 40 && x <= a.x + a.w + 40 && y >= a.y - 40 && y <= a.y + a.h + 40;
+      const t = clamp((Math.hypot(x - cx, y - cy) - 10) / (r1 - 10), 0, 1);
+      const k = inside ? 0.1 * (1 - t) : 0;
+      const base: [number, number, number] = s.hue ? hslRgb(s.hue, 0.8, 0.85) : [255, 255, 255];
+      fill.push(mixHex(base, accent, k));
+      cross.push(mixHex([255, 255, 255], accent, k));
+    }
+    this.tintKey = key;
+    return (this.tint = { fill, cross });
+  }
+
+  private textWidth(ctx: CanvasRenderingContext2D, font: string, text: string) {
+    const key = font + "|" + text;
+    let v = this.widths.get(key);
+    if (v === undefined) {
+      if (this.widths.size > 200) this.widths.clear();
+      ctx.font = font;
+      v = ctx.measureText(text).width;
+      this.widths.set(key, v);
+    }
+    return v;
+  }
+
   private renderShooting() {
     const { ctx } = this.env;
     ctx.save();
@@ -1139,6 +1328,7 @@ class StarsGame implements GameInstance {
   }
 
   render() {
+    this.checkLayers();
     if (this.state === "select") {
       this.renderMap();
       this.particles.render(this.env.ctx);
@@ -1147,20 +1337,24 @@ class StarsGame implements GameInstance {
     const { ctx } = this.env;
     const w = this.w;
     const h = this.h;
-    ctx.drawImage(this.bgFor(this.def.theme), 0, 0, w, h);
-    drawStars(ctx, this.stars, w, h, this.time * 0.7);
+    // Sky with the soft halo around the board baked in (the halo used to be a big gradient drawn over the
+    // stars each frame; the stars are now tinted the way the halo tinted them)
+    const a = this.area;
+    const theme = this.def.theme;
+    const accent = this.theme.accent;
+    drawLayer(ctx, this.layer(`sky|${theme}`, 0, 0, w, h, (c) => {
+      c.drawImage(this.bgFor(theme), 0, 0, w, h);
+      const bg = c.createRadialGradient(a.x + a.w / 2, a.y + a.h / 2, 10, a.x + a.w / 2, a.y + a.h / 2, a.h * 0.7);
+      bg.addColorStop(0, rgba(accent, 0.1));
+      bg.addColorStop(1, rgba(accent, 0));
+      c.fillStyle = bg;
+      c.fillRect(a.x - 40, a.y - 40, a.w + 80, a.h + 80);
+    }));
+    drawStarField(ctx, this.stars, w, h, this.time * 0.7, this.starTint(accent));
     this.renderShooting();
 
     ctx.save();
     if (this.shake > 0 && !this.env.reducedMotion) ctx.translate(Math.sin(this.time * 60) * this.shake * 0.6, 0);
-
-    // Board halo
-    const a = this.area;
-    const bg = ctx.createRadialGradient(a.x + a.w / 2, a.y + a.h / 2, 10, a.x + a.w / 2, a.y + a.h / 2, a.h * 0.7);
-    bg.addColorStop(0, rgba(this.theme.accent, 0.1));
-    bg.addColorStop(1, rgba(this.theme.accent, 0));
-    ctx.fillStyle = bg;
-    ctx.fillRect(a.x - 40, a.y - 40, a.w + 80, a.h + 80);
 
     // Reverse levels: an orange frame whose dashes run backwards while you tap
     if (this.def.reverse && (this.state === "input" || this.state === "ready")) {
@@ -1201,7 +1395,11 @@ class StarsGame implements GameInstance {
       const col = lit > 0.02 ? n.litColor : n.color;
       ctx.save();
       ctx.globalAlpha = dim;
-      glow(ctx, p.x, p.y, R * (3 + lit * 3), col, 0.22 + lit * 0.55);
+      if (lit === 0) {
+        // Resting glow: a cached copy of the same gradient
+        const gr = R * 3;
+        drawLayer(ctx, this.layer(`nglow|${col}|${R}`, -gr, -gr, gr * 2, gr * 2, (c) => glowAt(c, gr, col, 0.22)), p.x, p.y);
+      } else glow(ctx, p.x, p.y, R * (3 + lit * 3), col, 0.22 + lit * 0.55);
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(this.time * 0.2 + n.twinkle);
@@ -1273,6 +1471,105 @@ class StarsGame implements GameInstance {
     const d = this.def;
     // Map button (top-left)
     this.hudMap = { x: 32, y: 32, r: 20 };
+    // Map button, level title and round stars only change between rounds: one cached layer
+    const roundNow = this.state !== "clear" ? this.roundIdx : -1;
+    drawLayer(ctx, this.layer(`hudtop|${d.level}|${this.roundIdx}|${roundNow}|${this.def.theme}`, 0, 0, w, 60, (c) => this.drawHudTop(c)));
+
+    if (this.state === "brief") return;
+    // Message
+    let msg = this.message;
+    let col = "#ffffff";
+    if (this.env.counting()) msg = `ด่าน ${d.level}`;
+    if (this.state === "ready" || (this.state === "show" && this.showT < 0.3)) {
+      col = this.theme.line;
+      if (d.reverse) msg = "ดูให้ดี แล้วแตะย้อนกลับ";
+      else if (d.dual) msg = "ดูให้ดี สองสาย";
+    }
+    if (this.state === "input" && d.reverse) col = REVERSE;
+    if (this.state === "input" && d.dual) col = this.expectCol[this.inputIdx] === 1 ? CYAN : GOLD;
+    const watch = this.state === "ready" || this.state === "show";
+    const font = `700 ${watch ? 24 : 22}px ${FONT_DISPLAY}`;
+    const mw = this.textWidth(ctx, font, msg);
+    if (watch && !this.env.counting()) {
+      // Eye icon beside "look closely"
+      const ex = w / 2 - mw / 2 - 26;
+      const ey = 72;
+      const open = this.state === "ready" ? 0.6 + 0.4 * Math.abs(Math.sin(this.stateT * 5)) : 1;
+      ctx.save();
+      ctx.strokeStyle = col;
+      ctx.fillStyle = col;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(ex - 13, ey);
+      ctx.quadraticCurveTo(ex, ey - 11 * open, ex + 13, ey);
+      ctx.quadraticCurveTo(ex, ey + 11 * open, ex - 13, ey);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(ex, ey, 4 * open, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+      if (this.state === "ready") {
+        // Ring tightening around the board: the show is about to begin
+        const k = clamp(this.stateT / 1.1, 0, 1);
+        const a = this.area;
+        ctx.strokeStyle = rgba(this.theme.line, 0.35 * (1 - k));
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(a.x + a.w / 2, a.y + a.h / 2, a.w * (0.9 - 0.3 * k), a.h * (0.75 - 0.25 * k), 0, 0, TAU);
+        ctx.stroke();
+      }
+    }
+    drawLayer(ctx, this.layer(`msg|${msg}|${col}|${font}`, 0, 73 - 26, w, 52, (c) => {
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.font = font;
+      c.fillStyle = col;
+      c.fillText(msg, w / 2, 73);
+    }));
+    // Twist badges
+    const tws = twistsOf(d);
+    if (tws.length) {
+      const bfont = `700 12px ${FONT_DISPLAY}`;
+      let total = 6 * (tws.length - 1);
+      for (const t of tws) total += this.textWidth(ctx, bfont, TWIST_INFO[t].badge) + 40;
+      const live = (t: Twist) => (t === "reverse" || t === "dual") && this.state === "input";
+      const x0 = w / 2 - total / 2;
+      // Still badges come from a cache; the pulsing ones (reverse / dual while tapping) are drawn live
+      drawLayer(ctx, this.layer(`badges|${d.level}|${this.state === "input"}`, 0, 104 - 16, w, 32, (c) => {
+        let x = x0;
+        for (const t of tws) {
+          if (!live(t)) this.badge(c, t, x, 104, 0);
+          x += this.textWidth(c, bfont, TWIST_INFO[t].badge) + 40 + 6;
+        }
+      }));
+      let x = x0;
+      for (const t of tws) {
+        if (live(t)) this.badge(ctx, t, x, 104, 0.5 + 0.5 * Math.sin(this.time * 5));
+        x += this.textWidth(ctx, bfont, TWIST_INFO[t].badge) + 40 + 6;
+      }
+    }
+    // Lives as moons
+    drawLayer(ctx, this.layer(`moons|${this.lives}|${this.def.theme}`, w / 2 - 50, h - 50, 100, 32, (c) => {
+      for (let i = 0; i < 3; i++) {
+        const x = w / 2 + (i - 1) * 26;
+        const y = h - 34;
+        c.fillStyle = i < this.lives ? "#ffe9a8" : "rgba(255,255,255,0.15)";
+        c.beginPath();
+        c.arc(x, y, 8, 0, TAU);
+        c.fill();
+        if (i < this.lives) {
+          c.fillStyle = this.theme.bg[1];
+          c.beginPath();
+          c.arc(x + 4, y - 3, 7, 0, TAU);
+          c.fill();
+        }
+      }
+    }));
+  }
+
+  private drawHudTop(ctx: CanvasRenderingContext2D) {
+    const { w } = this;
+    const d = this.def;
     ctx.save();
     ctx.fillStyle = "rgba(255,255,255,0.12)";
     ctx.beginPath();
@@ -1318,82 +1615,6 @@ class StarsGame implements GameInstance {
     ctx.font = `500 10px ${FONT_BODY}`;
     ctx.fillStyle = "rgba(255,255,255,0.55)";
     ctx.fillText("รอบ", w - 24 - (d.rounds.length - 1) * 9, 48);
-
-    if (this.state === "brief") return;
-    // Message
-    let msg = this.message;
-    let col = "#ffffff";
-    if (this.env.counting()) msg = `ด่าน ${d.level}`;
-    if (this.state === "ready" || (this.state === "show" && this.showT < 0.3)) {
-      col = this.theme.line;
-      if (d.reverse) msg = "ดูให้ดี แล้วแตะย้อนกลับ";
-      else if (d.dual) msg = "ดูให้ดี สองสาย";
-    }
-    if (this.state === "input" && d.reverse) col = REVERSE;
-    if (this.state === "input" && d.dual) col = this.expectCol[this.inputIdx] === 1 ? CYAN : GOLD;
-    const watch = this.state === "ready" || this.state === "show";
-    ctx.font = `700 ${watch ? 24 : 22}px ${FONT_DISPLAY}`;
-    const mw = ctx.measureText(msg).width;
-    if (watch && !this.env.counting()) {
-      // Eye icon beside "look closely"
-      const ex = w / 2 - mw / 2 - 26;
-      const ey = 72;
-      const open = this.state === "ready" ? 0.6 + 0.4 * Math.abs(Math.sin(this.stateT * 5)) : 1;
-      ctx.save();
-      ctx.strokeStyle = col;
-      ctx.fillStyle = col;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(ex - 13, ey);
-      ctx.quadraticCurveTo(ex, ey - 11 * open, ex + 13, ey);
-      ctx.quadraticCurveTo(ex, ey + 11 * open, ex - 13, ey);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(ex, ey, 4 * open, 0, TAU);
-      ctx.fill();
-      ctx.restore();
-      if (this.state === "ready") {
-        // Ring tightening around the board: the show is about to begin
-        const k = clamp(this.stateT / 1.1, 0, 1);
-        const a = this.area;
-        ctx.strokeStyle = rgba(this.theme.line, 0.35 * (1 - k));
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(a.x + a.w / 2, a.y + a.h / 2, a.w * (0.9 - 0.3 * k), a.h * (0.75 - 0.25 * k), 0, 0, TAU);
-        ctx.stroke();
-      }
-    }
-    ctx.textAlign = "center";
-    ctx.fillStyle = col;
-    ctx.fillText(msg, w / 2, 73);
-    // Twist badges
-    const tws = twistsOf(d);
-    if (tws.length) {
-      ctx.font = `700 12px ${FONT_DISPLAY}`;
-      const widths = tws.map((t) => ctx.measureText(TWIST_INFO[t].badge).width + 40);
-      const total = widths.reduce((s, v) => s + v, 0) + 6 * (tws.length - 1);
-      let x = w / 2 - total / 2;
-      tws.forEach((t, k) => {
-        const pulse = (t === "reverse" || t === "dual") && this.state === "input" ? 0.5 + 0.5 * Math.sin(this.time * 5) : 0;
-        this.badge(ctx, t, x, 104, pulse);
-        x += widths[k] + 6;
-      });
-    }
-    // Lives as moons
-    for (let i = 0; i < 3; i++) {
-      const x = w / 2 + (i - 1) * 26;
-      const y = h - 34;
-      ctx.fillStyle = i < this.lives ? "#ffe9a8" : "rgba(255,255,255,0.15)";
-      ctx.beginPath();
-      ctx.arc(x, y, 8, 0, TAU);
-      ctx.fill();
-      if (i < this.lives) {
-        ctx.fillStyle = this.theme.bg[1];
-        ctx.beginPath();
-        ctx.arc(x + 4, y - 3, 7, 0, TAU);
-        ctx.fill();
-      }
-    }
   }
 
   private twistIcon(t: Twist | null) {
