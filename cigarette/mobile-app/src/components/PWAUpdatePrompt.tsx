@@ -63,12 +63,15 @@ export default function PWAUpdatePrompt() {
     }
   }, [triggerPrompt]);
 
-  // Check on mount, every 5s, on focus, and on route change
+  // Check on mount, every minute, on focus, and on route change
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     checkVersion();
-    const intervalId = setInterval(checkVersion, 5000);
+    // Once a minute is plenty; a 5 s poll (with a service-worker update check) caused hitches in games.
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') checkVersion();
+    }, 60000);
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') checkVersion();
