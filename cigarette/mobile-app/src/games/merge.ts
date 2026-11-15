@@ -9,6 +9,7 @@ import { pentatonic } from "./engine/audio";
 import { coinsFor } from "./engine/economy";
 import { BoosterButton } from "./engine/booster";
 import { drawFruit, FRUITS } from "./art/fruits";
+import { renderScale } from "./engine/quality";
 
 const LEVELS = FRUITS.length;
 
@@ -234,7 +235,7 @@ class MergeGame implements GameInstance {
       }
     }
     this.aimX = this.jar.x + jw / 2;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     this.sprites = this.radii.map((r, k) => {
       const pad = r * 0.7;
       const size = (r + pad) * 2;

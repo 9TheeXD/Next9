@@ -11,6 +11,7 @@ import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engin
 import { Particles, Floaters, makeStars, drawStars, rgba, makeSprite, clamp, ease, TAU, FONT_DISPLAY, FONT_BODY, glow, rng, roundRectPath, type Star } from "./engine/fx";
 import { Button, drawCard } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
+import { renderScale } from "./engine/quality";
 
 const STAR_COLORS = ["#ffd66b", "#7ad8ff", "#ff8fd0", "#a6ff9e", "#c7a2ff", "#ffb27a", "#8ff5ff", "#f4f1ff"];
 const GOLD = "#ffd34d";
@@ -615,7 +616,7 @@ class StarsGame implements GameInstance {
     if (hit) return hit;
     const { w, h } = this;
     const th = THEMES[t];
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     const spr = makeSprite(w, h, dpr, (c) => {
       const g = c.createLinearGradient(0, 0, w, h);
       g.addColorStop(0, th.bg[0]);

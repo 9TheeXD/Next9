@@ -19,6 +19,7 @@ import {
 } from "./defense/data";
 import { World, BREAK, routeAt, type Barrier, type WorldEvent } from "./defense/world";
 import { drawGround, drawTree, drawTower, drawEnemy, drawFence, drawShot, drawLock, drawStar, iconEnemy, Weather, LOOK, type Geo } from "./defense/art";
+import { renderScale } from "./engine/quality";
 
 export const defenseGame: GameDefinition = {
   id: "defense",
@@ -153,10 +154,10 @@ class DefenseGame implements GameInstance {
 
   private ensureBackground() {
     if (!this.world) return;
-    const key = `${this.mapN}|${this.layout.name}|${this.season}|${this.w}x${this.h}`;
+    const key = `${this.mapN}|${this.layout.name}|${this.season}|${this.w}x${this.h}@${renderScale()}`;
     if (key === this.bgKey && this.bg) return;
     this.bgKey = key;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     const world = this.world;
     this.bg = makeSprite(this.w, this.h, dpr, (c) =>
       drawGround(c, this.w, this.h, this.geo, this.layout.routes, world.pads, this.season, 4242 + this.mapN * 17)

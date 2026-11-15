@@ -7,6 +7,7 @@ import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engin
 import { makeStars, drawStars, makeSprite, clamp, lerp, ease, TAU, FONT_DISPLAY, FONT_BODY, glow, rng, type Star } from "./engine/fx";
 import { Button, drawCard, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
+import { renderScale } from "./engine/quality";
 
 const IN = 4;
 const OUT = 6;
@@ -163,7 +164,7 @@ class LanternGame implements GameInstance {
     this.w = w;
     this.h = h;
     this.horizon = Math.round(h * 0.64);
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     const hz = this.horizon;
     this.bg = makeSprite(w, h, dpr, (c) => {
       // Sky

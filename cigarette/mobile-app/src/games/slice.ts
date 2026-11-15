@@ -9,6 +9,7 @@ import { pentatonic } from "./engine/audio";
 import { coinsFor, wallet } from "./engine/economy";
 import { bladeColors } from "./art/skins";
 import { drawFruit, drawFruitHalf, FRUITS } from "./art/fruits";
+import { renderScale } from "./engine/quality";
 
 const ROUND = 75;
 
@@ -203,7 +204,7 @@ class SliceGame implements GameInstance {
     this.w = w;
     this.h = h;
     this.fruitR = clamp(Math.min(w, h) * 0.085, 24, 48);
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     const size = this.fruitR * 3;
     this.sprites = FRUITS.map((_, k) =>
       makeSprite(size, size, dpr, (c) => {

@@ -10,6 +10,7 @@ import { coinsFor, wallet } from "./engine/economy";
 import { drawBlock } from "./blocks";
 import { drawBlockSkin } from "./art/skins";
 import { BoosterButton } from "./engine/booster";
+import { renderScale } from "./engine/quality";
 
 const N = 8;
 const COLORS = ["#ff6b8b", "#ffb547", "#ffe15a", "#5ee08f", "#4fd1ff", "#6f8bff", "#b884ff", "#ff8fd6"];
@@ -271,7 +272,7 @@ class BlastGame implements GameInstance {
     this.by = Math.round(top + (h - top - trayH - this.cell * N) / 2);
     this.trayY = this.by + this.cell * N + 18;
     this.trayCell = Math.floor(Math.min(this.cell * 0.55, (w - 40) / 3 / 5.2, (h - this.trayY - 16) / 5.2));
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     const skin = wallet.equipped("blockSkin");
     this.sprites = COLORS.map((col) => makeSprite(this.cell, this.cell, dpr, (c) => (skin && skin !== "block_classic" ? drawBlockSkin(c, this.cell, col, skin) : drawBlock(c, this.cell, col))));
     this.bg = makeSprite(w, h, dpr, (c) => {

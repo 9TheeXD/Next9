@@ -7,6 +7,7 @@ import { Particles, Floaters, rgba, shade, makeSprite, roundRectPath, clamp, eas
 import { Button, drawCard, glassPanel, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { coinsFor } from "./engine/economy";
+import { renderScale } from "./engine/quality";
 
 const COLS = 7;
 const ROWS = 8;
@@ -547,7 +548,7 @@ class GemsGame implements GameInstance {
     this.cell = Math.floor(clamp(Math.min((w - 28) / COLS, (h - top - 24) / ROWS), 30, 70));
     this.bx = Math.round((w - this.cell * COLS) / 2);
     this.by = Math.round(top + (h - top - 16 - this.cell * ROWS) / 2);
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     this.sprites = TYPES.map((_, i) => makeSprite(this.cell, this.cell, dpr, (c) => drawGem(c, this.cell, i)));
     this.bg = makeSprite(w, h, dpr, (c) => {
       const g = c.createLinearGradient(0, 0, 0, h);

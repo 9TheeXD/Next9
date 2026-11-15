@@ -7,6 +7,7 @@ import { Particles, Floaters, makeSprite, roundRectPath, clamp, FONT_DISPLAY, FO
 import { Button, drawCard } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { wallet } from "./engine/economy";
+import { renderScale } from "./engine/quality";
 
 const DIFFICULTY = [
   { label: "ง่าย", keep: 42 },
@@ -248,7 +249,7 @@ class SudokuGame implements GameInstance {
     this.gx = Math.round((w - this.cell * 9) / 2);
     this.gy = top;
     this.padY = this.gy + this.cell * 9 + 14;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     this.bg = makeSprite(w, h, dpr, (c) => {
       const g = c.createLinearGradient(0, 0, 0, h);
       g.addColorStop(0, "#fbf6ea");

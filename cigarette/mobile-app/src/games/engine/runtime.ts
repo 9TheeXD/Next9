@@ -3,6 +3,7 @@
 
 import { Sfx } from "./audio";
 import { syncBus } from "./syncbus";
+import { setRenderQuality, weakDevice } from "./quality";
 import type { GameDefinition, GameEvent, GameInstance, PointerInfo } from "./types";
 
 export interface GameHandle {
@@ -38,7 +39,24 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
   if (getComputedStyle(host).position === "static") host.style.position = "relative";
   host.appendChild(canvas);
 
-  const ctx = canvas.getContext("2d", { alpha: false })!;
+  const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true })!;
+
+  // Glow (shadowBlur) is the most expensive thing a 2D canvas can draw: every shape gets blurred
+  // again each frame. On struggling devices it is switched off here for every game at once.
+  let shadows = true;
+  const blurDesc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, "shadowBlur");
+  if (blurDesc?.get && blurDesc.set) {
+    const { get, set } = blurDesc;
+    Object.defineProperty(ctx, "shadowBlur", {
+      configurable: true,
+      get() {
+        return get.call(ctx);
+      },
+      set(v: number) {
+        set.call(ctx, shadows ? v : 0);
+      },
+    });
+  }
   const sfx = new Sfx();
   sfx.setMuted(!!opts.muted);
   const reducedMotion =
@@ -92,15 +110,93 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
     },
   });
 
+  // ── Resolution governor ──────────────────────────────────────────────────────────────────────
+  // Steps through these pixel ratios (capped by the screen's own ratio). It goes down when frames
+  // arrive late and back up when there is clear headroom. A screen locked at 30 Hz shows late frames
+  // at any resolution, so if dropping a step did not help, it stops dropping.
+  const deviceRatio = () => Math.min(window.devicePixelRatio || 1, 2);
+  const STEPS = [2, 1.75, 1.5, 1.25, 1, 0.8];
+  let maxStep = 0; // index of the sharpest allowed step for this screen
+  let step = 0;
+  // Tests can pin the resolution (window.__NB_FIXED_SCALE__ = 2) to compare frame times fairly.
+  const fixedScale = () => (typeof window !== "undefined" ? Number((window as any).__NB_FIXED_SCALE__) || 0 : 0);
+  function pickSteps() {
+    const fixed = fixedScale();
+    if (fixed) {
+      const i = STEPS.indexOf(fixed);
+      maxStep = step = i >= 0 ? i : 0;
+      return;
+    }
+    const cap = deviceRatio();
+    maxStep = STEPS.findIndex((s) => s <= cap + 0.01);
+    if (maxStep < 0) maxStep = STEPS.length - 1;
+    step = Math.max(step, maxStep);
+  }
+  pickSteps();
+  if (weakDevice()) step = Math.max(step, STEPS.indexOf(1.5));
+  let winStart = 0;
+  let winFrames = 0;
+  let winSum = 0;
+  let goodWindows = 0;
+  let lastDropAvg = 0;
+  let uselessDrops = 0;
+  let raises = 0;
+
+  function applyQuality() {
+    const s = STEPS[step];
+    // Glow goes first on weak phones and as soon as the resolution had to drop below 1.5.
+    shadows = s >= 1.5 && !(weakDevice() && step > maxStep);
+    setRenderQuality(s, s < 1.5 || weakDevice());
+  }
+  applyQuality();
+
+  function measure(now: number, interval: number) {
+    if (fixedScale()) return;
+    if (interval > 250) {
+      winStart = now; // tab switch, alert, GC pause: not a real frame rate
+      winFrames = winSum = 0;
+      return;
+    }
+    if (!winStart) winStart = now;
+    winFrames++;
+    winSum += interval;
+    if (now - winStart < 1000 || winFrames < 20) return;
+    const avg = winSum / winFrames;
+    winStart = now;
+    winFrames = winSum = 0;
+    if (avg > 21 && step < STEPS.length - 1 && uselessDrops < 2) {
+      if (lastDropAvg && avg > lastDropAvg * 0.92) uselessDrops++; // the last drop did not help
+      lastDropAvg = avg;
+      goodWindows = 0;
+      step++;
+      applyQuality();
+      resize(true);
+    } else if (avg < 17.6 && step > maxStep && raises < 3) {
+      if (++goodWindows >= 5) {
+        goodWindows = 0;
+        raises++;
+        lastDropAvg = 0;
+        step--;
+        applyQuality();
+        resize(true);
+      }
+    } else {
+      goodWindows = 0;
+    }
+  }
+
   let width = 0;
   let height = 0;
   let dpr = 1;
-  function resize() {
-    const rect = host.getBoundingClientRect();
-    const w = Math.max(1, Math.round(rect.width));
-    const h = Math.max(1, Math.round(rect.height));
-    const d = Math.min(window.devicePixelRatio || 1, 2.5);
-    if (w === width && h === height && d === dpr) return;
+  let rect = { left: 0, top: 0 };
+  function resize(force = false) {
+    const r = host.getBoundingClientRect();
+    rect = { left: r.left, top: r.top };
+    const w = Math.max(1, Math.round(r.width));
+    const h = Math.max(1, Math.round(r.height));
+    pickSteps();
+    const d = STEPS[step];
+    if (!force && w === width && h === height && d === dpr) return;
     width = w;
     height = h;
     dpr = d;
@@ -111,18 +207,21 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
     game.render();
   }
   resize();
-  const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resize) : null;
+  const onResize = () => resize();
+  const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(onResize) : null;
   ro?.observe(host);
-  window.addEventListener("resize", resize);
+  window.addEventListener("resize", onResize);
 
   let paused = false;
   let raf = 0;
   let last = performance.now();
   function frame(now: number) {
     raf = requestAnimationFrame(frame);
-    const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+    const interval = now - last;
+    const dt = Math.min(0.05, Math.max(0, interval / 1000));
     last = now;
     if (paused) return;
+    measure(now, interval);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (cdLeft > 0) {
       cdLeft = Math.max(0, cdLeft - dt);
@@ -186,9 +285,14 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
   raf = requestAnimationFrame(frame);
 
   // Pointer input
+  // Reading the canvas position forces the browser to finish layout, so it is read once per touch
+  // (on "down") instead of on every move.
   function toInfo(e: PointerEvent, type: PointerInfo["type"]): PointerInfo {
-    const r = canvas.getBoundingClientRect();
-    return { type, x: e.clientX - r.left, y: e.clientY - r.top, id: e.pointerId, t: performance.now() };
+    if (type === "down") {
+      const r = canvas.getBoundingClientRect();
+      rect = { left: r.left, top: r.top };
+    }
+    return { type, x: e.clientX - rect.left, y: e.clientY - rect.top, id: e.pointerId, t: performance.now() };
   }
   const onDown = (e: PointerEvent) => {
     sfx.unlock();
@@ -242,6 +346,8 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
     resume() {
       paused = false;
       last = performance.now();
+      winStart = 0;
+      winFrames = winSum = 0;
       if (def.countdown && live) countdown(3, "เล่นต่อ");
     },
     setMuted(m: boolean) {
@@ -253,7 +359,7 @@ export function mountGame(def: GameDefinition, host: HTMLElement, opts: MountOpt
     destroy() {
       cancelAnimationFrame(raf);
       ro?.disconnect();
-      window.removeEventListener("resize", resize);
+      window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKey);
       document.removeEventListener("visibilitychange", onVisibility);

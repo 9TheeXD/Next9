@@ -11,6 +11,7 @@ import { Button, drawCard, glassPanel, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { coinsFor, wallet } from "./engine/economy";
 import { drawBlockSkin } from "./art/skins";
+import { renderScale } from "./engine/quality";
 
 const COLS = 10;
 const ROWS = 20;
@@ -478,7 +479,7 @@ class BlocksGame implements GameInstance {
         x += pw + gap;
       });
     }
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     // Block look bought in the shop (classic is the original jelly block)
     const skin = wallet.equipped("blockSkin");
     const paint = (c: CanvasRenderingContext2D, size: number, col: string) => (skin && skin !== "block_classic" ? drawBlockSkin(c, size, col, skin) : drawBlock(c, size, col));

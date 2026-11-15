@@ -12,6 +12,7 @@ import { drawShip, shipFlame } from "./art/skins";
 import { ENEMIES, bossName, coinPlan, mapSpec, mapTheme, type MapSpec, type Theme } from "./shooter/maps";
 import { World, shipStats, type WEvent } from "./shooter/world";
 import { drawAmbient, drawBoss, drawBullets, drawEnemy, drawLasers, drawMapPlanet, drawMarks, drawPickup, makeBackdrop, PICKUP_COLOR } from "./shooter/draw";
+import { renderScale } from "./engine/quality";
 
 export const shooterGame: GameDefinition = {
   id: "shooter",
@@ -168,7 +169,7 @@ class ShooterGame implements GameInstance {
   // ── Setup ────────────────────────────────────────────────────────────────
 
   private buildShip() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     const size = 56;
     this.shipSprite = makeSprite(size * 1.6, size * 1.6, dpr, (c) => {
       c.translate(size * 0.8, size * 0.8);
@@ -177,10 +178,10 @@ class ShooterGame implements GameInstance {
   }
 
   private ensureBg() {
-    const key = `${this.spec.m}:${this.w}x${this.h}`;
+    const key = `${this.spec.m}:${this.w}x${this.h}@${renderScale()}`;
     if (key === this.bgFor || !this.w) return;
     this.bgFor = key;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     this.bg = makeBackdrop(this.theme, this.w, this.h, dpr, this.spec.seed);
   }
 

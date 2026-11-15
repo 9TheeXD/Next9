@@ -6,6 +6,7 @@ import { TAU, rng, glow, makeSprite, roundRectPath, clamp } from "../engine/fx";
 import { drawCoin } from "../engine/ui";
 import { CEIL, chomper, crawlerX, droneY, railY, type Obj } from "./sim";
 import { THEME_COUNT } from "./levels";
+import { renderScale } from "../engine/quality";
 
 export type Style = 0 | 1 | 2 | 3 | 4 | 5; // sunset, cave, garden, factory, abyss, storm
 
@@ -60,10 +61,10 @@ export class Backdrop {
   private bolt: { x: number; pts: number[] } | null = null;
 
   private prepare(th: Theme, w: number, h: number) {
-    const key = `${th.style}:${th.hue}:${w}:${h}`;
+    const key = `${th.style}:${th.hue}:${w}:${h}@${renderScale()}`;
     if (key === this.key) return;
     this.key = key;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = renderScale();
     const r = rng(th.style * 31 + th.hue);
     this.dots = [];
     for (let i = 0; i < 60; i++) this.dots.push({ x: r(), y: r(), r: 0.5 + r() * 1.6, d: 0.03 + r() * 0.15, s: r() * 10 });

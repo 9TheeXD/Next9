@@ -7,6 +7,7 @@ import { Button, drawCard, glassPanel } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { drawFruit } from "./art/fruits";
 import { BoosterButton } from "./engine/booster";
+import { renderScale } from "./engine/quality";
 
 const TRAY = 7;
 
@@ -275,7 +276,7 @@ class TilesGame implements GameInstance {
     this.ox = Math.round((w - bw * this.tile) / 2) + 6;
     this.oy = Math.round(top + (h - top - trayH - bh * this.tile * 1.1) / 2) + 6;
     this.trayY = h - trayH + 8;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     const s = this.tile * 0.86;
     this.faces = Array.from({ length: 11 }, (_, k) =>
       makeSprite(s, s * 1.12, dpr, (c) => {

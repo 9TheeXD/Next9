@@ -15,6 +15,7 @@ import { Button, drawCard, glassPanel, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { wallet, coinsFor } from "./engine/economy";
 import { snakeColor } from "./art/skins";
+import { renderScale } from "./engine/quality";
 
 const ARENA = 2500; // radius (the old arena was 1300: this is 3.7x the area)
 const ORBS = 1900; // food kept on the map
@@ -453,7 +454,7 @@ class SnakeGame implements GameInstance {
     this.w = w;
     this.h = h;
     this.boostBtn = { x: w - 60, y: h - 70, r: 38 };
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     const t = 56;
     this.tile = makeSprite(t, t * Math.sqrt(3), dpr, (c) => {
       c.fillStyle = "#0b1126";

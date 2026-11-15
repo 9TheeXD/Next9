@@ -8,6 +8,7 @@ import { Button, drawCard, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { coinsFor } from "./engine/economy";
 import { BoosterButton, drawBoosterIcon } from "./engine/booster";
+import { renderScale } from "./engine/quality";
 
 const COLS = 10;
 const ROWS_MAX = 13;
@@ -414,7 +415,7 @@ class BubblesGame implements GameInstance {
     this.R = Math.floor(playW / (COLS * 2));
     this.left = (w - this.R * COLS * 2) / 2;
     this.top = 64;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     this.sprites = COLORS.map((_, k) => makeSprite(this.R * 2, this.R * 2, dpr, (c) => {
       c.translate(this.R, this.R);
       drawBubble(c, this.R, k);
