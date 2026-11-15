@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, Animated, Easing } from "react-native";
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from "react-native-svg";
 import { Feather } from "@expo/vector-icons";
+import ReadyGate from "@/components/ReadyGate";
 
 /**
  * A guided 4-minute movement break. Even 5 minutes of light or seated isometric exercise lowers
@@ -12,17 +13,55 @@ import { Feather } from "@expo/vector-icons";
 interface Move {
   name: string;
   how: string;
+  /** What to do, shown on the ready screen before the timer starts. */
+  steps: string[];
   seconds: number;
   icon: string;
 }
 
 const MOVES: Move[] = [
-  { name: "ย่ำเท้าอยู่กับที่", how: "ยกเข่าสลับซ้าย-ขวา แกว่งแขนตามจังหวะ", seconds: 45, icon: "activity" },
-  { name: "หมุนไหล่", how: "หมุนไหล่ไปข้างหลังช้าๆ แล้วสลับไปข้างหน้า คลายความตึง", seconds: 30, icon: "refresh-cw" },
-  { name: "ดันกำแพง", how: "มือยันกำแพงระดับไหล่ งอศอกเข้าหากำแพงแล้วดันออกช้าๆ", seconds: 45, icon: "maximize" },
-  { name: "ลุกนั่งเก้าอี้", how: "ลุกขึ้นยืนจากเก้าอี้ แล้วค่อยๆ นั่งลง ทำต่อเนื่อง", seconds: 45, icon: "chevrons-up" },
-  { name: "พนมมือกดเกร็ง", how: "พนมมือระดับอก กดฝ่ามือเข้าหากันแรงๆ 10 วินาที แล้วคลาย ทำซ้ำ", seconds: 40, icon: "pause" },
-  { name: "ยืดตัวหายใจลึก", how: "ประสานมือเหนือศีรษะ ยืดตัวให้สุด หายใจเข้าลึก ผ่อนออกยาว", seconds: 35, icon: "sun" },
+  {
+    name: "ย่ำเท้าอยู่กับที่",
+    how: "ยกเข่าสลับซ้าย-ขวา แกว่งแขนตามจังหวะ",
+    steps: ["ยืนขึ้น เว้นที่ว่างรอบตัวสักหนึ่งก้าว", "ย่ำเท้ากับที่ ยกเข่าสลับซ้าย-ขวา", "แกว่งแขนตามจังหวะ หายใจตามสบาย ไม่ต้องกลั้น"],
+    seconds: 45,
+    icon: "activity",
+  },
+  {
+    name: "หมุนไหล่",
+    how: "หมุนไหล่ไปข้างหลังช้าๆ แล้วสลับไปข้างหน้า คลายความตึง",
+    steps: ["ยืนหรือนั่งหลังตรง ปล่อยแขนไว้ข้างลำตัว", "หมุนไหล่ไปข้างหลังช้าๆ เป็นวงกว้าง", "ผ่านไปครึ่งเวลา สลับหมุนไปข้างหน้า"],
+    seconds: 30,
+    icon: "refresh-cw",
+  },
+  {
+    name: "ดันกำแพง",
+    how: "มือยันกำแพงระดับไหล่ งอศอกเข้าหากำแพงแล้วดันออกช้าๆ",
+    steps: ["ยืนหันหน้าเข้ากำแพง ห่างราวหนึ่งช่วงแขน", "วางฝ่ามือบนกำแพงระดับไหล่", "งอศอกให้ตัวเข้าหากำแพง แล้วดันกลับช้าๆ ทำต่อเนื่อง"],
+    seconds: 45,
+    icon: "maximize",
+  },
+  {
+    name: "ลุกนั่งเก้าอี้",
+    how: "ลุกขึ้นยืนจากเก้าอี้ แล้วค่อยๆ นั่งลง ทำต่อเนื่อง",
+    steps: ["นั่งบนเก้าอี้ที่มั่นคง เท้าวางราบกับพื้น", "ลุกขึ้นยืนให้สุด แล้วค่อยๆ นั่งลง", "ทำต่อเนื่องตามจังหวะของตัวเอง ใช้มือช่วยพยุงได้"],
+    seconds: 45,
+    icon: "chevrons-up",
+  },
+  {
+    name: "พนมมือกดเกร็ง",
+    how: "พนมมือระดับอก กดฝ่ามือเข้าหากันแรงๆ 10 วินาที แล้วคลาย ทำซ้ำ",
+    steps: ["พนมมือระดับอก กางศอกออกเล็กน้อย", "กดฝ่ามือเข้าหากันแรงๆ ค้างไว้ราว 10 วินาที", "คลายมือ พักสั้นๆ แล้วทำซ้ำ หายใจปกติ อย่ากลั้น"],
+    seconds: 40,
+    icon: "pause",
+  },
+  {
+    name: "ยืดตัวหายใจลึก",
+    how: "ประสานมือเหนือศีรษะ ยืดตัวให้สุด หายใจเข้าลึก ผ่อนออกยาว",
+    steps: ["ประสานมือแล้วยกขึ้นเหนือศีรษะ", "ยืดตัวขึ้นให้สุด หายใจเข้าลึกๆ ทางจมูก", "ค่อยๆ ผ่อนลมหายใจออกยาวทางปาก แล้วยืดซ้ำ"],
+    seconds: 35,
+    icon: "sun",
+  },
 ];
 
 const SIZE = 220;
@@ -31,12 +70,15 @@ const R = (SIZE - STROKE) / 2;
 const C = 2 * Math.PI * R;
 
 export default function MoveBreak({ onDone }: { onDone: () => void }) {
-  const [pos, setPos] = useState({ idx: 0, left: MOVES[0].seconds, done: false });
+  // `ready` is false while the ready screen for the current move is showing: the timer and the
+  // pulse only start after the user has read what to do and tapped start.
+  const [pos, setPos] = useState({ idx: 0, left: MOVES[0].seconds, done: false, ready: false });
   const [running, setRunning] = useState(true);
-  const { idx, left, done } = pos;
+  const { idx, left, done, ready } = pos;
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!ready || done) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
@@ -45,20 +87,20 @@ export default function MoveBreak({ onDone }: { onDone: () => void }) {
     );
     loop.start();
     return () => loop.stop();
-  }, [pulse]);
+  }, [pulse, ready, done]);
 
   useEffect(() => {
-    if (!running || done) return;
+    if (!running || done || !ready) return;
     const t = setInterval(() => {
       setPos((p) => {
         if (p.done) return p;
         if (p.left > 1) return { ...p, left: p.left - 1 };
-        if (p.idx + 1 < MOVES.length) return { idx: p.idx + 1, left: MOVES[p.idx + 1].seconds, done: false };
+        if (p.idx + 1 < MOVES.length) return { idx: p.idx + 1, left: MOVES[p.idx + 1].seconds, done: false, ready: false };
         return { ...p, left: 0, done: true };
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [running, done]);
+  }, [running, done, ready]);
 
   const finished = done;
   const move = MOVES[idx];
@@ -66,8 +108,12 @@ export default function MoveBreak({ onDone }: { onDone: () => void }) {
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
 
   const skip = () => {
-    setPos((p) => (p.idx + 1 < MOVES.length ? { idx: p.idx + 1, left: MOVES[p.idx + 1].seconds, done: false } : { ...p, left: 0, done: true }));
+    setPos((p) => (p.idx + 1 < MOVES.length ? { idx: p.idx + 1, left: MOVES[p.idx + 1].seconds, done: false, ready: false } : { ...p, left: 0, done: true }));
+  };
+
+  const start = () => {
     setRunning(true);
+    setPos((p) => ({ ...p, left: MOVES[p.idx].seconds, ready: true }));
   };
 
   if (finished) {
@@ -82,6 +128,24 @@ export default function MoveBreak({ onDone }: { onDone: () => void }) {
           <Text style={styles.primaryText}>ไปดูว่าความอยากเหลือเท่าไหร่</Text>
         </Pressable>
       </View>
+    );
+  }
+
+  if (!ready) {
+    const total = Math.round(MOVES.reduce((n, m) => n + m.seconds, 0) / 60);
+    return (
+      <ReadyGate
+        key={idx}
+        kicker={idx === 0 ? `${MOVES.length} ท่าง่ายๆ ราว ${total} นาที · ท่าที่ 1` : `ท่าต่อไป · ท่าที่ ${idx + 1} จาก ${MOVES.length}`}
+        title={move.name}
+        subtitle={`ทำต่อเนื่อง ${move.seconds} วินาที`}
+        steps={move.steps}
+        icon={move.icon}
+        accent="#14b8a6"
+        onStart={start}
+        onCancel={onDone}
+        cancelLabel={idx === 0 ? "ไม่ทำตอนนี้" : "พอแล้ว ไปต่อ"}
+      />
     );
   }
 
