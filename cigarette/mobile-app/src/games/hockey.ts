@@ -2,7 +2,8 @@
 // Each player drags a mallet in their own half; multi-touch so both can play at once.
 
 import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engine/types";
-import { Particles, Floaters, clamp, TAU, FONT_DISPLAY, glow, rgba, roundRectPath } from "./engine/fx";
+import { Particles, Floaters, clamp, TAU, FONT_DISPLAY, glow, rgba, roundRectPath, makeSprite } from "./engine/fx";
+import { renderScale } from "./engine/quality";
 import { SetupMenu, OPPONENT_ROW, duelCoins } from "./engine/menu";
 import { DuelOver } from "./engine/duel";
 import { pentatonic } from "./engine/audio";
@@ -567,52 +568,121 @@ class Hockey implements GameInstance {
     });
   }
 
+  /** Static table (background, air holes, lines, goals, rail) and the puck/mallet looks, cached at canvas resolution. */
+  private sprites: { key: string; ds: number; table: HTMLCanvasElement; puck: HTMLCanvasElement; mallets: HTMLCanvasElement[] } | null = null;
+
+  private getSprites(c: CanvasRenderingContext2D) {
+    const { w, h } = this;
+    // The canvas' own pixel ratio (normally renderScale()), so the table can be copied 1:1.
+    const ds = c.canvas.width / w || renderScale();
+    const pr = this.puck.r;
+    const mr = this.mallets[0].r;
+    const key = `${w}x${h}@${ds}/${renderScale()}:${pr}:${mr}`;
+    if (this.sprites && this.sprites.key === key) return this.sprites;
+    const r = this.rink;
+    const table = makeSprite(w, h, ds, (c) => {
+      c.fillStyle = "#020617";
+      c.fillRect(0, 0, w, h);
+      // Table
+      const g = c.createLinearGradient(0, r.y, 0, r.y + r.h);
+      g.addColorStop(0, "#0b1d33");
+      g.addColorStop(0.5, "#0f2a47");
+      g.addColorStop(1, "#0b1d33");
+      c.fillStyle = g;
+      roundRectPath(c, r.x, r.y, r.w, r.h, 26);
+      c.fill();
+      // Air holes
+      c.fillStyle = "rgba(255,255,255,0.05)";
+      c.beginPath();
+      for (let y = r.y + 16; y < r.y + r.h; y += 22) for (let x = r.x + 16 + ((y / 22) % 2) * 11; x < r.x + r.w; x += 22) c.rect(x, y, 1.5, 1.5);
+      c.fill();
+      // Lines
+      c.strokeStyle = "rgba(244,114,182,0.5)";
+      c.lineWidth = 3;
+      c.beginPath();
+      c.moveTo(r.x, r.y + r.h / 2);
+      c.lineTo(r.x + r.w, r.y + r.h / 2);
+      c.stroke();
+      c.strokeStyle = "rgba(34,211,238,0.35)";
+      c.beginPath();
+      c.arc(r.x + r.w / 2, r.y + r.h / 2, r.w * 0.17, 0, TAU);
+      c.stroke();
+      for (const [side, y] of [
+        [1, r.y],
+        [0, r.y + r.h],
+      ] as const) {
+        c.strokeStyle = rgba(COL[side], 0.45);
+        c.beginPath();
+        c.arc(r.x + r.w / 2, y, r.goal * 0.62, side === 1 ? 0 : Math.PI, side === 1 ? Math.PI : TAU);
+        c.stroke();
+        // Goal mouth
+        c.fillStyle = "#000";
+        c.fillRect(r.x + r.w / 2 - r.goal / 2, side === 1 ? r.y - 6 : r.y + r.h - 2, r.goal, 8);
+        glow(c, r.x + r.w / 2, y, r.goal * 0.5, COL[side], 0.25);
+      }
+      // Rail glow
+      c.strokeStyle = "rgba(148,163,255,0.5)";
+      c.lineWidth = 3;
+      roundRectPath(c, r.x, r.y, r.w, r.h, 26);
+      c.stroke();
+    });
+    const ph = pr + 6;
+    const puck = makeSprite(ph * 2, ph * 2, ds, (c) => {
+      c.translate(ph, ph);
+      c.fillStyle = "rgba(0,0,0,0.4)";
+      c.beginPath();
+      c.arc(3, 4, pr, 0, TAU);
+      c.fill();
+      const pg = c.createRadialGradient(-pr * 0.3, -pr * 0.3, 1, 0, 0, pr);
+      pg.addColorStop(0, "#4b5563");
+      pg.addColorStop(1, "#0b0f19");
+      c.fillStyle = pg;
+      c.beginPath();
+      c.arc(0, 0, pr, 0, TAU);
+      c.fill();
+      c.strokeStyle = "#e5e7eb";
+      c.lineWidth = 2;
+      c.stroke();
+    });
+    const mh = mr * 1.8;
+    const mallets = COL.map((col) =>
+      makeSprite(mh * 2, mh * 2, ds, (c) => {
+        c.translate(mh, mh);
+        glow(c, 0, 0, mr * 1.8, col, 0.35);
+        const mg = c.createRadialGradient(-mr * 0.3, -mr * 0.35, 2, 0, 0, mr);
+        mg.addColorStop(0, "#ffffff");
+        mg.addColorStop(0.35, col);
+        mg.addColorStop(1, rgba(col, 0.7));
+        c.fillStyle = mg;
+        c.beginPath();
+        c.arc(0, 0, mr, 0, TAU);
+        c.fill();
+        c.fillStyle = "rgba(0,0,0,0.25)";
+        c.beginPath();
+        c.arc(0, 0, mr * 0.45, 0, TAU);
+        c.fill();
+        c.fillStyle = col;
+        c.beginPath();
+        c.arc(0, -2, mr * 0.38, 0, TAU);
+        c.fill();
+      })
+    );
+    this.sprites = { key, ds, table, puck, mallets };
+    return this.sprites;
+  }
+
   render() {
     const c = this.env.ctx;
     const { w, h } = this;
-    c.fillStyle = "#020617";
-    c.fillRect(0, 0, w, h);
     const r = this.rink;
-    // Table
-    const g = c.createLinearGradient(0, r.y, 0, r.y + r.h);
-    g.addColorStop(0, "#0b1d33");
-    g.addColorStop(0.5, "#0f2a47");
-    g.addColorStop(1, "#0b1d33");
-    c.fillStyle = g;
-    roundRectPath(c, r.x, r.y, r.w, r.h, 26);
-    c.fill();
-    // Air holes
-    c.fillStyle = "rgba(255,255,255,0.05)";
-    for (let y = r.y + 16; y < r.y + r.h; y += 22) for (let x = r.x + 16 + ((y / 22) % 2) * 11; x < r.x + r.w; x += 22) c.fillRect(x, y, 1.5, 1.5);
-    // Lines
-    c.strokeStyle = "rgba(244,114,182,0.5)";
-    c.lineWidth = 3;
-    c.beginPath();
-    c.moveTo(r.x, r.y + r.h / 2);
-    c.lineTo(r.x + r.w, r.y + r.h / 2);
-    c.stroke();
-    c.strokeStyle = "rgba(34,211,238,0.35)";
-    c.beginPath();
-    c.arc(r.x + r.w / 2, r.y + r.h / 2, r.w * 0.17, 0, TAU);
-    c.stroke();
-    for (const [side, y] of [
-      [1, r.y],
-      [0, r.y + r.h],
-    ] as const) {
-      c.strokeStyle = rgba(COL[side], 0.45);
-      c.beginPath();
-      c.arc(r.x + r.w / 2, y, r.goal * 0.62, side === 1 ? 0 : Math.PI, side === 1 ? Math.PI : TAU);
-      c.stroke();
-      // Goal mouth
-      c.fillStyle = "#000";
-      c.fillRect(r.x + r.w / 2 - r.goal / 2, side === 1 ? r.y - 6 : r.y + r.h - 2, r.goal, 8);
-      glow(c, r.x + r.w / 2, y, r.goal * 0.5, COL[side], 0.25);
-    }
-    // Rail glow
-    c.strokeStyle = "rgba(148,163,255,0.5)";
-    c.lineWidth = 3;
-    roundRectPath(c, r.x, r.y, r.w, r.h, 26);
-    c.stroke();
+    const sp = this.getSprites(c);
+    if (sp.table.width === c.canvas.width && sp.table.height === c.canvas.height) {
+      // 1:1 device-pixel copy (no resampling) is much cheaper than a scaled blit.
+      c.save();
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.drawImage(sp.table, 0, 0);
+      c.restore();
+    } else c.drawImage(sp.table, 0, 0, w, h);
 
     // Scores along the centre line, one facing each player
     c.font = `800 34px ${FONT_DISPLAY}`;
@@ -629,48 +699,26 @@ class Hockey implements GameInstance {
 
     if (this.state !== "menu") {
       // Puck trail
-      this.trail.forEach((t, i) => {
-        c.fillStyle = `rgba(255,255,255,${(i / this.trail.length) * 0.15})`;
+      const tl = this.trail.length;
+      c.fillStyle = "#ffffff";
+      for (let i = 0; i < tl; i++) {
+        const t = this.trail[i];
+        c.globalAlpha = (i / tl) * 0.15;
         c.beginPath();
-        c.arc(t.x, t.y, this.puck.r * (i / this.trail.length), 0, TAU);
+        c.arc(t.x, t.y, this.puck.r * (i / tl), 0, TAU);
         c.fill();
-      });
+      }
+      c.globalAlpha = 1;
       const p = this.puck;
       if (this.goalT <= 0) {
-        c.fillStyle = "rgba(0,0,0,0.4)";
-        c.beginPath();
-        c.arc(p.x + 3, p.y + 4, p.r, 0, TAU);
-        c.fill();
-        const pg = c.createRadialGradient(p.x - p.r * 0.3, p.y - p.r * 0.3, 1, p.x, p.y, p.r);
-        pg.addColorStop(0, "#4b5563");
-        pg.addColorStop(1, "#0b0f19");
-        c.fillStyle = pg;
-        c.beginPath();
-        c.arc(p.x, p.y, p.r, 0, TAU);
-        c.fill();
-        c.strokeStyle = "#e5e7eb";
-        c.lineWidth = 2;
-        c.stroke();
+        const pw = sp.puck.width / sp.ds;
+        c.drawImage(sp.puck, p.x - pw / 2, p.y - pw / 2, pw, pw);
       }
-      this.mallets.forEach((m, i) => {
-        glow(c, m.x, m.y, m.r * 1.8, COL[i], 0.35);
-        const mg = c.createRadialGradient(m.x - m.r * 0.3, m.y - m.r * 0.35, 2, m.x, m.y, m.r);
-        mg.addColorStop(0, "#ffffff");
-        mg.addColorStop(0.35, COL[i]);
-        mg.addColorStop(1, rgba(COL[i], 0.7));
-        c.fillStyle = mg;
-        c.beginPath();
-        c.arc(m.x, m.y, m.r, 0, TAU);
-        c.fill();
-        c.fillStyle = "rgba(0,0,0,0.25)";
-        c.beginPath();
-        c.arc(m.x, m.y, m.r * 0.45, 0, TAU);
-        c.fill();
-        c.fillStyle = COL[i];
-        c.beginPath();
-        c.arc(m.x, m.y - 2, m.r * 0.38, 0, TAU);
-        c.fill();
-      });
+      for (let i = 0; i < this.mallets.length; i++) {
+        const m = this.mallets[i];
+        const mw = sp.mallets[i].width / sp.ds;
+        c.drawImage(sp.mallets[i], m.x - mw / 2, m.y - mw / 2, mw, mw);
+      }
       if (this.goalT > 0) {
         const msg = this.mode === "friend" ? (this.lastGoal === 0 ? "ฟ้าได้ประตู!" : "ชมพูได้ประตู!") : this.lastGoal === 0 ? "ประตู!" : "บอทยิงเข้า";
         c.font = `800 30px ${FONT_DISPLAY}`;
