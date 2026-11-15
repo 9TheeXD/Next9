@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Pressable, StyleSheet, ImageBackground, ImageSourcePropType, ScrollView, Platform } from "react-native";
+import { View, Text, Pressable, StyleSheet, ImageBackground, ImageSourcePropType, ScrollView, Platform, useWindowDimensions } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import { GAMES, type GameDefinition } from "@/games";
@@ -7,6 +7,8 @@ import type { GameCategory } from "@/games/engine/types";
 import { shopScreen } from "@/games/shop";
 import { wallet } from "@/games/engine/economy";
 import XpExchange from "@/components/XpExchange";
+
+const GRID_GAP = 10; // must match styles.grid columnGap
 
 const COVERS: Record<string, ImageSourcePropType> = {
   blocks: require("../../assets/images/games/cover_blocks.jpg"),
@@ -125,17 +127,26 @@ function GameCard({
   big?: boolean;
   badge?: string;
 }) {
+  // Tablets and desktop: more columns and a wide, short featured card, so the cover art fills the
+  // card instead of a tall card that is mostly the dark caption gradient.
+  const { width } = useWindowDimensions();
+  const cols = width >= 1000 ? 4 : width >= 640 ? 3 : 2;
+  const smallWidth: any =
+    Platform.OS === "web"
+      ? `calc(${100 / cols}% - ${((cols - 1) * GRID_GAP) / cols}px)`
+      : cols === 4 ? "23.5%" : cols === 3 ? "31.8%" : "48.5%";
+  const coverRatio = big ? (width >= 640 ? 2.4 : 1.5) : 1.5;
   return (
     <Pressable
       onPress={() => onPlay(game)}
-      style={({ pressed }) => [styles.card, big ? styles.cardBig : styles.cardSmall, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.card, big ? styles.cardBig : [styles.cardSmall, { width: smallWidth }], pressed && styles.pressed]}
       accessibilityRole="button"
       accessibilityLabel={`เล่น ${game.title}`}
     >
-      <ImageBackground source={COVERS[game.id]} style={styles.cover} imageStyle={styles.coverImage} resizeMode="cover">
+      <ImageBackground source={COVERS[game.id]} style={[styles.cover, { aspectRatio: coverRatio }]} imageStyle={styles.coverImage} resizeMode="cover">
         <LinearGradient
-          colors={["rgba(5,7,28,0)", "rgba(5,7,28,0.25)", "rgba(5,7,28,0.88)"]}
-          locations={[0, 0.45, 1]}
+          colors={["rgba(5,7,28,0)", "rgba(5,7,28,0.2)", "rgba(5,7,28,0.85)"]}
+          locations={[0, 0.55, 1]}
           style={StyleSheet.absoluteFill}
         />
         {badge ? (
@@ -185,7 +196,7 @@ const styles = StyleSheet.create({
   shelfOn: { backgroundColor: "#4f46e5", borderColor: "#4f46e5" },
   shelfText: { fontSize: 13, fontWeight: "700", color: "#475569" },
   shelfTextOn: { color: "#ffffff" },
-  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 12 },
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", rowGap: 12, columnGap: 10 },
   card: {
     borderRadius: 20,
     overflow: "hidden",
