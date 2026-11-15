@@ -307,5 +307,5 @@ export class Floaters {
   }
 }
 
-export const FONT_DISPLAY = `"Prompt","Kanit","Sarabun","Noto Sans Thai","Leelawadee UI",Tahoma,sans-serif`;
-export const FONT_BODY = `"Sarabun","Prompt","Noto Sans Thai","Leelawadee UI",Tahoma,sans-serif`;
+export const FONT_DISPLAY = `"NBPrompt","Prompt","Kanit","Sarabun","Noto Sans Thai","Leelawadee UI",Tahoma,sans-serif`;
+export const FONT_BODY = `"NBSarabun","Sarabun","Prompt","Noto Sans Thai","Leelawadee UI",Tahoma,sans-serif`;
