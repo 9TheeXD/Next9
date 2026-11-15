@@ -1,5 +1,7 @@
 // Maths, easing, colour and drawing helpers, and a particle system shared by the games.
 
+import { renderScale } from "./quality";
+
 export const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 export const TAU = Math.PI * 2;
@@ -74,16 +76,103 @@ export function makeSprite(
   return c;
 }
 
+// Glow sprites, one per colour: the same radial gradient drawn once at full strength, then copied
+// with drawImage at any size and opacity. Every stop shares one colour, so scaling the alpha with
+// globalAlpha gives the same pixels as building a gradient with that alpha, at about half the cost
+// for small glows and without per-call gradient and colour-string work.
+const GLOW_R = 64;
+const glowSprites = new Map<string, HTMLCanvasElement>();
+function glowSprite(color: string): HTMLCanvasElement | null {
+  let s = glowSprites.get(color);
+  if (s) return s;
+  if (typeof document === "undefined") return null;
+  if (glowSprites.size >= 64) glowSprites.clear();
+  s = document.createElement("canvas");
+  s.width = s.height = GLOW_R * 2;
+  const c = s.getContext("2d")!;
+  const g = c.createRadialGradient(GLOW_R, GLOW_R, 0, GLOW_R, GLOW_R, GLOW_R);
+  g.addColorStop(0, rgba(color, 1));
+  g.addColorStop(0.35, rgba(color, 0.35));
+  g.addColorStop(1, rgba(color, 0));
+  c.fillStyle = g;
+  c.fillRect(0, 0, GLOW_R * 2, GLOW_R * 2);
+  glowSprites.set(color, s);
+  return s;
+}
+
+// Glows that keep the same size frame after frame also get a sprite at their exact pixel size, so
+// they are copied pixel for pixel (no scaling) at a whole device pixel: the cheapest possible draw.
+// A size is cached once it shows up a second time, so glows that pulse in size stay on the scaled
+// sprite above instead of filling the cache. The cache is capped by total pixels.
+const exactGlows = new Map<string, HTMLCanvasElement>();
+const exactSeen = new Map<string, number>();
+let exactPixels = 0;
+function exactGlow(color: string, R: number): HTMLCanvasElement | null {
+  const key = color + "|" + R;
+  const hit = exactGlows.get(key);
+  if (hit) return hit;
+  const n = (exactSeen.get(key) || 0) + 1;
+  if (n < 2) {
+    if (exactSeen.size > 256) exactSeen.clear();
+    exactSeen.set(key, n);
+    return null;
+  }
+  exactSeen.delete(key);
+  const px = 4 * R * R;
+  if (exactPixels + px > 5e6) {
+    exactGlows.clear();
+    exactPixels = 0;
+  }
+  const s = document.createElement("canvas");
+  s.width = s.height = R * 2;
+  const c = s.getContext("2d")!;
+  const g = c.createRadialGradient(R, R, 0, R, R, R);
+  g.addColorStop(0, rgba(color, 1));
+  g.addColorStop(0.35, rgba(color, 0.35));
+  g.addColorStop(1, rgba(color, 0));
+  c.fillStyle = g;
+  c.fillRect(0, 0, R * 2, R * 2);
+  exactGlows.set(key, s);
+  exactPixels += px;
+  return s;
+}
+
 /** Soft radial glow. */
 export function glow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, alpha = 1) {
-  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-  g.addColorStop(0, rgba(color, alpha));
-  g.addColorStop(0.35, rgba(color, alpha * 0.35));
-  g.addColorStop(1, rgba(color, 0));
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, TAU);
-  ctx.fill();
+  if (!(r > 0) || !(alpha > 0)) return;
+  if (alpha <= 1 && typeof document !== "undefined") {
+    const k = renderScale();
+    const t = ctx.getTransform();
+    const R = Math.round(r * k);
+    if (R >= 2 && R <= 512 && t.b === 0 && t.c === 0 && Math.abs(t.a - k) < 1e-3 && Math.abs(t.d - k) < 1e-3) {
+      const ex = exactGlow(color, R);
+      if (ex) {
+        const ga = ctx.globalAlpha;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalAlpha = ga * alpha;
+        ctx.drawImage(ex, Math.round(t.e + x * k) - R, Math.round(t.f + y * k) - R);
+        ctx.globalAlpha = ga;
+        ctx.setTransform(t);
+        return;
+      }
+    }
+  }
+  const spr = alpha > 1 ? null : glowSprite(color);
+  if (!spr) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, rgba(color, alpha));
+    g.addColorStop(0.35, rgba(color, alpha * 0.35));
+    g.addColorStop(1, rgba(color, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.fill();
+    return;
+  }
+  const ga = ctx.globalAlpha;
+  ctx.globalAlpha = ga * alpha;
+  ctx.drawImage(spr, x - r, y - r, r * 2, r * 2);
+  ctx.globalAlpha = ga;
 }
 
 export function vignette(ctx: CanvasRenderingContext2D, w: number, h: number, strength = 0.55) {

@@ -15,6 +15,7 @@ import { Button, drawCard, glassPanel, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { wallet, coinsFor } from "./engine/economy";
 import { snakeColor } from "./art/skins";
+import { renderScale } from "./engine/quality";
 
 const ARENA = 2500; // radius (the old arena was 1300: this is 3.7x the area)
 const ORBS = 1900; // food kept on the map
@@ -453,7 +454,7 @@ class SnakeGame implements GameInstance {
     this.w = w;
     this.h = h;
     this.boostBtn = { x: w - 60, y: h - 70, r: 38 };
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     const t = 56;
     this.tile = makeSprite(t, t * Math.sqrt(3), dpr, (c) => {
       c.fillStyle = "#0b1126";
@@ -1007,7 +1008,38 @@ class SnakeGame implements GameInstance {
       c.restore();
     }
     const skinned = !s.bot;
-    for (let i = n - 1; i >= 0; i--) {
+    if (!skinned && !s.elite) {
+      // Bots: stripes of 3 points per colour. Each stripe is one path (same look: the circles are
+      // opaque and drawn in the same order), with the highlight after its last point as before.
+      let open = false;
+      for (let i = n - 1; i >= 0; i--) {
+        const sg = s.segs[i];
+        const px = sg.x * z + ox;
+        const py = sg.y * z + oy;
+        const vis = !(px < x0 || px > x1 || py < y0 || py > y1);
+        if (vis) {
+          if (!open) {
+            c.beginPath();
+            open = true;
+          }
+          c.moveTo(px + r, py);
+          c.arc(px, py, r, 0, TAU);
+        }
+        if (i % 3 === 0) {
+          if (open) {
+            c.fillStyle = s.col[i % 6 < 3 ? 0 : 1];
+            c.fill();
+            open = false;
+          }
+          if (vis) {
+            c.fillStyle = "rgba(255,255,255,0.18)";
+            c.beginPath();
+            c.arc(px - r * 0.3, py - r * 0.3, r * 0.4, 0, TAU);
+            c.fill();
+          }
+        }
+      }
+    } else for (let i = n - 1; i >= 0; i--) {
       const sg = s.segs[i];
       const px = sg.x * z + ox;
       const py = sg.y * z + oy;
@@ -1053,8 +1085,91 @@ class SnakeGame implements GameInstance {
       drawCrown(c, hx, hy - r - 6 - cs * 0.28, cs);
       tagY = hy - r - 6 - cs * 0.28 - cs * 0.42 - 12;
     }
-    c.fillStyle = s.elite ? "#ffd76a" : s.bot ? "rgba(255,255,255,0.75)" : "#a7f3d0";
-    c.fillText(s.name, hx, tagY);
+    this.drawTag(c, s, Math.round(11 + r * 0.2), hx, tagY);
+  }
+
+  /** Name tag text, rendered once per name/size into a small sprite and copied 1:1 (Thai shaping is slow). */
+  private tags = new Map<Snake, { key: string; img: HTMLCanvasElement; ax: number; ay: number }>();
+  private drawTag(c: CanvasRenderingContext2D, s: Snake, size: number, x: number, y: number) {
+    const ratio = c.canvas.width / this.w;
+    const color = s.elite ? "#ffd76a" : s.bot ? "rgba(255,255,255,0.75)" : "#a7f3d0";
+    const font = `${s.elite ? 800 : 600} ${size}px ${FONT_BODY}`;
+    const key = `${s.name}|${font}|${color}|${ratio}`;
+    let t = this.tags.get(s);
+    if (!t || t.key !== key) {
+      c.font = font;
+      const tw = Math.ceil(c.measureText(s.name).width) + 8;
+      const th = Math.ceil(size * 1.6) + 6;
+      const img = makeSprite(tw, th, ratio, (g) => {
+        g.font = font;
+        g.textAlign = "center";
+        g.textBaseline = "bottom";
+        g.fillStyle = color;
+        g.fillText(s.name, tw / 2, th - 3);
+      });
+      t = { key, img, ax: tw / 2, ay: th - 3 };
+      this.tags.set(s, t);
+    }
+    // Snap so the sprite lands on whole device pixels at 1:1 (as sharp as direct text).
+    const dx = Math.round((x - t.ax) * ratio) / ratio;
+    const dy = Math.round((y - t.ay) * ratio) / ratio;
+    c.drawImage(t.img, dx, dy, t.img.width / ratio, t.img.height / ratio);
+  }
+
+  /** Arc-length spans [0, 2πr) covered by the angle range a0..a1 (split where it wraps past 0). */
+  private spans: [number, number][] = [];
+  private arcSpans(a0: number, a1: number, r: number) {
+    const out = this.spans;
+    out.length = 0;
+    if (a1 - a0 >= TAU) {
+      out.push([0, TAU * r]);
+      return out;
+    }
+    let s = a0 % TAU;
+    if (s < 0) s += TAU;
+    const e = s + (a1 - a0);
+    if (e <= TAU) out.push([s * r, e * r]);
+    else out.push([s * r, TAU * r], [0, (e - TAU) * r]);
+    return out;
+  }
+
+  private floor: { img: HTMLCanvasElement; zf: number; key: string } | null = null;
+
+  private drawFloor(ctx: CanvasRenderingContext2D, w: number, h: number, z: number) {
+    const tile = this.tile;
+    if (!tile) {
+      ctx.fillStyle = "#070b1c";
+      ctx.fillRect(0, 0, w, h);
+      return;
+    }
+    const ratio = ctx.canvas.width / w;
+    const key = `${w}x${h}@${ctx.canvas.width}/${renderScale()}`;
+    let f = this.floor;
+    // Zoom drifts in tiny steps as the snake grows; a 0.3% stale floor scale is invisible.
+    if (!f || f.key !== key || Math.abs(f.zf - z) > 0.003) {
+      const zf = z;
+      const tw = 56 * zf;
+      const th = 56 * Math.sqrt(3) * zf;
+      const W = w + tw * 2 + 1;
+      const H = h + th * 2 + 1;
+      const img = document.createElement("canvas");
+      img.width = Math.ceil(W * ratio);
+      img.height = Math.ceil(H * ratio);
+      const c = img.getContext("2d", { alpha: false })!;
+      c.scale(ratio, ratio);
+      c.fillStyle = "#070b1c";
+      c.fillRect(0, 0, W, H);
+      for (let y = 0; y < H; y += th) for (let x = 0; x < W; x += tw) c.drawImage(tile, x, y, tw + 0.5, th + 0.5);
+      f = this.floor = { img, zf, key };
+    }
+    const tw = 56 * f.zf;
+    const th = 56 * Math.sqrt(3) * f.zf;
+    const ox = -(((this.camX * f.zf) % tw) + tw) % tw - tw;
+    const oy = -(((this.camY * f.zf) % th) + th) % th - th;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(f.img, Math.round(ox * ratio), Math.round(oy * ratio));
+    ctx.restore();
   }
 
   render() {
@@ -1062,16 +1177,9 @@ class SnakeGame implements GameInstance {
     const w = this.w;
     const h = this.h;
     const z = this.zoom;
-    ctx.fillStyle = "#070b1c";
-    ctx.fillRect(0, 0, w, h);
-    // Hex floor scrolling with the camera
-    if (this.tile) {
-      const tw = 56 * z;
-      const th = 56 * Math.sqrt(3) * z;
-      const ox = -(((this.camX * z) % tw) + tw) % tw - tw;
-      const oy = -(((this.camY * z) % th) + th) % th - th;
-      for (let y = oy; y < h + th; y += th) for (let x = ox; x < w + tw; x += tw) ctx.drawImage(this.tile, x, y, tw + 0.5, th + 0.5);
-    }
+    // Hex floor scrolling with the camera: one opaque screen-plus-a-tile sprite, copied 1:1
+    // (dozens of scaled tile blits per frame were the most expensive thing in this game).
+    this.drawFloor(ctx, w, h, z);
     // World border: dark red outside, a glowing double rim
     const cx0 = w / 2 - this.camX * z;
     const cy0 = h / 2 - this.camY * z;
@@ -1079,6 +1187,22 @@ class SnakeGame implements GameInstance {
     const dCenter = Math.hypot(this.camX, this.camY);
     const viewR = Math.hypot(w, h) / 2;
     if (dCenter + viewR > R - 40 * z) {
+      // The arena is huge: stroke only the part of the rim that can be on screen (same pixels,
+      // far less path work, and the moving dashes no longer run around the whole circle).
+      let a0 = 0;
+      let a1 = TAU;
+      if (dCenter > viewR + 1) {
+        const base = Math.atan2(h / 2 - cy0, w / 2 - cx0);
+        let lo = 0;
+        let hi = 0;
+        for (let k = 0; k < 4; k++) {
+          const d = angDiff(Math.atan2((k < 2 ? 0 : h) - cy0, (k % 2 ? w : 0) - cx0), base);
+          if (d < lo) lo = d;
+          if (d > hi) hi = d;
+        }
+        a0 = base + lo - 0.02;
+        a1 = base + hi + 0.02;
+      }
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, w, h);
@@ -1089,7 +1213,7 @@ class SnakeGame implements GameInstance {
       ctx.strokeStyle = "rgba(255,60,110,0.12)";
       ctx.lineWidth = 34 * z;
       ctx.beginPath();
-      ctx.arc(cx0, cy0, R, 0, TAU);
+      ctx.arc(cx0, cy0, R, a0, a1);
       ctx.stroke();
       ctx.strokeStyle = "rgba(255,80,130,0.35)";
       ctx.lineWidth = 12 * z;
@@ -1097,12 +1221,25 @@ class SnakeGame implements GameInstance {
       ctx.strokeStyle = "#ff7aa2";
       ctx.lineWidth = 3;
       ctx.stroke();
-      ctx.setLineDash([18 * z, 22 * z]);
-      ctx.lineDashOffset = -this.time * 30 * z;
+      // Dashes 18 on / 22 off moving along the rim, as setLineDash + lineDashOffset would draw them
+      // on the full circle starting at angle 0.
       ctx.strokeStyle = "rgba(255,220,230,0.5)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(cx0, cy0, R - 16 * z, 0, TAU);
+      const rr = R - 16 * z;
+      const P = 40 * z;
+      const on = 18 * z;
+      const off = -this.time * 30 * z; // lineDashOffset
+      const C = TAU * rr;
+      for (const [s0, s1] of this.arcSpans(a0, a1, rr)) {
+        for (let k = Math.floor((s0 + off) / P); k * P - off < s1; k++) {
+          const ds = Math.max(s0, k * P - off);
+          const de = Math.min(s1, k * P - off + on, C);
+          if (de <= ds) continue;
+          ctx.moveTo(cx0 + Math.cos(ds / rr) * rr, cy0 + Math.sin(ds / rr) * rr);
+          ctx.arc(cx0, cy0, rr, ds / rr, de / rr);
+        }
+      }
       ctx.stroke();
       ctx.restore();
     }
@@ -1133,17 +1270,64 @@ class SnakeGame implements GameInstance {
     if (this.state !== "play") this.renderMenu(ctx, w, h);
   }
 
+  /** Red edge glow: the same radial gradient, cached at full strength and faded with globalAlpha. */
+  private wallGlow: HTMLCanvasElement | null = null;
+  private drawWallGlow(ctx: CanvasRenderingContext2D, w: number, h: number, alpha: number) {
+    if (alpha <= 0) return;
+    const cw = ctx.canvas.width;
+    const ch = ctx.canvas.height;
+    if (!this.wallGlow || this.wallGlow.width !== cw || this.wallGlow.height !== ch) {
+      const img = document.createElement("canvas");
+      img.width = cw;
+      img.height = ch;
+      const c = img.getContext("2d")!;
+      c.scale(cw / w, ch / h);
+      const g = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.75);
+      g.addColorStop(0, "rgba(255,40,90,0)");
+      g.addColorStop(1, "rgba(255,40,90,1)");
+      c.fillStyle = g;
+      c.fillRect(0, 0, w, h);
+      this.wallGlow = img;
+    }
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = Math.min(1, alpha);
+    ctx.drawImage(this.wallGlow, 0, 0);
+    ctx.restore();
+  }
+
+  /**
+   * HUD pieces that change rarely (text-heavy panels): drawn into a sprite with their usual absolute
+   * coordinates, kept while `key` is the same, and copied 1:1 at whole device pixels.
+   */
+  private hudCache = new Map<string, { key: string; img: HTMLCanvasElement }>();
+  private hudSprite(ctx: CanvasRenderingContext2D, slot: string, key: string, x: number, y: number, sw: number, sh: number, draw: (c: CanvasRenderingContext2D) => void) {
+    const ratio = ctx.canvas.width / this.w;
+    const fullKey = `${key}|${ratio}|${x}|${y}|${sw}|${sh}`;
+    let e = this.hudCache.get(slot);
+    if (!e || e.key !== fullKey) {
+      // Whole device pixels for the origin, so the copy below is exactly 1:1.
+      const x0 = Math.floor(x * ratio) / ratio;
+      const y0 = Math.floor(y * ratio) / ratio;
+      const img = makeSprite(sw + 1, sh + 1, ratio, (c) => {
+        c.translate(-x0, -y0);
+        draw(c);
+      });
+      e = { key: fullKey, img };
+      this.hudCache.set(slot, e);
+    }
+    const x0 = Math.floor(x * ratio) / ratio;
+    const y0 = Math.floor(y * ratio) / ratio;
+    ctx.drawImage(e.img, x0, y0, e.img.width / ratio, e.img.height / ratio);
+  }
+
   private renderHud(ctx: CanvasRenderingContext2D, w: number, h: number) {
     const pl = this.player!;
     // Near the wall: red edge glow and a warning
     const dist = Math.hypot(pl.segs[0].x, pl.segs[0].y);
     if (pl.alive && dist > ARENA - 420) {
       const k = clamp((dist - (ARENA - 420)) / 380, 0, 1);
-      const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.75);
-      g.addColorStop(0, "rgba(255,40,90,0)");
-      g.addColorStop(1, `rgba(255,40,90,${0.35 * k})`);
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
+      this.drawWallGlow(ctx, w, h, 0.35 * k);
       ctx.globalAlpha = 0.5 + 0.5 * k;
       ctx.font = `700 15px ${FONT_DISPLAY}`;
       ctx.textAlign = "center";
@@ -1153,14 +1337,17 @@ class SnakeGame implements GameInstance {
       ctx.globalAlpha = 1;
     }
     // Length
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.font = `600 11px ${FONT_BODY}`;
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.fillText("ความยาว", 14, 10);
-    ctx.font = `800 26px ${FONT_DISPLAY}`;
-    ctx.fillStyle = "#a7f3d0";
-    ctx.fillText(`${Math.round(pl.len)}`, 14, 24);
+    const lenNow = Math.round(pl.len);
+    this.hudSprite(ctx, "len", `${lenNow}`, 0, 0, 140, 64, (ctx) => {
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.font = `600 11px ${FONT_BODY}`;
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.fillText("ความยาว", 14, 10);
+      ctx.font = `800 26px ${FONT_DISPLAY}`;
+      ctx.fillStyle = "#a7f3d0";
+      ctx.fillText(`${lenNow}`, 14, 24);
+    });
     // Leaderboard
     const ranking = this.ranking;
     const top = ranking.slice(0, 5);
@@ -1168,30 +1355,35 @@ class SnakeGame implements GameInstance {
     const myRank = ranking.indexOf(pl) + 1;
     const extra = myRank > 5 ? 20 : 0;
     const ph = 26 + top.length * 19 + extra;
-    ctx.fillStyle = "rgba(8,12,30,0.62)";
-    roundRectPath(ctx, w - bw - 10, 10, bw, ph, 12);
-    ctx.fill();
-    glassPanel(ctx, w - bw - 10, 10, bw, ph, 12, 0.06);
-    ctx.font = `700 11px ${FONT_DISPLAY}`;
-    ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.fillText(`อันดับ · ${ranking.length} ตัว`, w - bw, 16);
-    top.forEach((s, i) => {
-      const y = 34 + i * 19;
-      ctx.font = `${s === pl || s.elite ? 800 : 500} 12px ${FONT_BODY}`;
-      ctx.fillStyle = s === pl ? "#a7f3d0" : s.elite ? "#ffd76a" : "rgba(255,255,255,0.85)";
+    let boardKey = `${w}|${ranking.length}|${myRank}|${lenNow}`;
+    for (const s of top) boardKey += `|${s.name}${s === pl ? "*" : ""}${s.elite ? "^" : ""}${Math.round(s.len)}`;
+    this.hudSprite(ctx, "board", boardKey, w - bw - 50, -30, bw + 80, ph + 110, (ctx) => {
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      let x = w - bw;
-      ctx.fillText(`${i + 1}.`, x, y);
-      x += 16;
-      if (s.elite) {
-        drawCrown(ctx, x + 7, y + 8, 13);
-        x += 17;
-        ctx.fillStyle = "#ffd76a";
-      }
-      ctx.fillText(s.name, x, y);
-      ctx.textAlign = "right";
-      ctx.fillText(`${Math.round(s.len)}`, w - 18, y);
+      ctx.fillStyle = "rgba(8,12,30,0.62)";
+      roundRectPath(ctx, w - bw - 10, 10, bw, ph, 12);
+      ctx.fill();
+      glassPanel(ctx, w - bw - 10, 10, bw, ph, 12, 0.06);
+      ctx.font = `700 11px ${FONT_DISPLAY}`;
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.fillText(`อันดับ · ${ranking.length} ตัว`, w - bw, 16);
+      top.forEach((s, i) => {
+        const y = 34 + i * 19;
+        ctx.font = `${s === pl || s.elite ? 800 : 500} 12px ${FONT_BODY}`;
+        ctx.fillStyle = s === pl ? "#a7f3d0" : s.elite ? "#ffd76a" : "rgba(255,255,255,0.85)";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        let x = w - bw;
+        ctx.fillText(`${i + 1}.`, x, y);
+        x += 16;
+        if (s.elite) {
+          drawCrown(ctx, x + 7, y + 8, 13);
+          x += 17;
+          ctx.fillStyle = "#ffd76a";
+        }
+        ctx.fillText(s.name, x, y);
+        ctx.textAlign = "right";
+        ctx.fillText(`${Math.round(s.len)}`, w - 18, y);
     });
     if (myRank > 5) {
       ctx.textAlign = "right";
@@ -1199,6 +1391,7 @@ class SnakeGame implements GameInstance {
       ctx.fillStyle = "#a7f3d0";
       ctx.fillText(`คุณอันดับ ${myRank} · ${Math.round(pl.len)}`, w - 18, 34 + top.length * 19 + 2);
     }
+    });
     // Arrow at the screen edge pointing to an off-screen king snake
     const el = this.elite;
     if (el && el.alive) {
@@ -1232,17 +1425,21 @@ class SnakeGame implements GameInstance {
     const mx = 14 + mr;
     const my = h - 14 - mr;
     const ms = mr / ARENA;
+    this.hudSprite(ctx, "map", "", mx - mr - 3, my - mr - 3, mr * 2 + 6, mr * 2 + 6, (ctx) => {
+      const mg = ctx.createRadialGradient(mx, my, 0, mx, my, mr);
+      mg.addColorStop(0, "rgba(10,20,45,0.75)");
+      mg.addColorStop(1, "rgba(30,6,24,0.75)");
+      ctx.fillStyle = mg;
+      ctx.beginPath();
+      ctx.arc(mx, my, mr, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,90,140,0.75)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
     ctx.save();
-    const mg = ctx.createRadialGradient(mx, my, 0, mx, my, mr);
-    mg.addColorStop(0, "rgba(10,20,45,0.75)");
-    mg.addColorStop(1, "rgba(30,6,24,0.75)");
-    ctx.fillStyle = mg;
     ctx.beginPath();
     ctx.arc(mx, my, mr, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,90,140,0.75)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
     ctx.clip();
     ctx.strokeStyle = "rgba(167,243,208,0.45)";
     ctx.lineWidth = 1;
@@ -1279,28 +1476,32 @@ class SnakeGame implements GameInstance {
     // Boost button
     const b = this.boostBtn;
     const on = pl.boosting && pl.len > 12;
-    ctx.fillStyle = on ? "rgba(94,234,212,0.45)" : "rgba(255,255,255,0.12)";
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, b.r, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.4)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.moveTo(b.x - 10, b.y + 8);
-    ctx.lineTo(b.x + 2, b.y - 2);
-    ctx.lineTo(b.x - 4, b.y - 2);
-    ctx.lineTo(b.x + 10, b.y - 14);
-    ctx.lineTo(b.x - 2, b.y + 2);
-    ctx.lineTo(b.x + 4, b.y + 2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.font = `600 11px ${FONT_BODY}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillText("พุ่ง", b.x, b.y + b.r + 4);
+    this.hudSprite(ctx, "boost", `${on}`, b.x - b.r - 4, b.y - b.r - 4, b.r * 2 + 8, b.r * 2 + 30, (ctx) => {
+      ctx.fillStyle = on ? "rgba(94,234,212,0.45)" : "rgba(255,255,255,0.12)";
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.4)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.moveTo(b.x - 10, b.y + 8);
+      ctx.lineTo(b.x + 2, b.y - 2);
+      ctx.lineTo(b.x - 4, b.y - 2);
+      ctx.lineTo(b.x + 10, b.y - 14);
+      ctx.lineTo(b.x - 2, b.y + 2);
+      ctx.lineTo(b.x + 4, b.y + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.font = `600 11px ${FONT_BODY}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText("พุ่ง", b.x, b.y + b.r + 4);
+    });
     if (this.stateT < 4) {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
       ctx.globalAlpha = clamp(4 - this.stateT, 0, 1);
       ctx.font = `600 14px ${FONT_BODY}`;
       ctx.fillStyle = "#ffffff";

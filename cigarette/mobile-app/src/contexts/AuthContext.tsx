@@ -73,8 +73,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        setUser(response.data);
-        AsyncStorage.setItem(OFFLINE_USER_KEY, JSON.stringify(response.data)).catch(console.error);
+        // Keep the same object when nothing changed, so a background refresh does not re-render the
+        // whole app (that caused visible hitches while a game was running).
+        const fresh = response.data;
+        setUser((prev) => (prev && JSON.stringify(prev) === JSON.stringify(fresh) ? prev : fresh));
+        AsyncStorage.setItem(OFFLINE_USER_KEY, JSON.stringify(fresh)).catch(console.error);
         setIsOfflineMode(false); // Reset offline mode
         if (response.data.displayId && response.data.role !== "ADMIN") {
           claimDeviceKeyOnce(response.data.displayId, (deviceKey) => api.claimDeviceKey(deviceKey));

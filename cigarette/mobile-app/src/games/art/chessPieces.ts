@@ -2,6 +2,7 @@
 // Each piece is drawn into a 100×100 box; callers cache them as sprites per size.
 
 import { makeSprite } from "../engine/fx";
+import { renderScale } from "../engine/quality";
 
 type Path = (c: CanvasRenderingContext2D) => void;
 
@@ -217,8 +218,8 @@ const cache = new Map<string, HTMLCanvasElement>();
 
 /** Cached sprite of a piece at `size` CSS pixels. */
 export function pieceSprite(kind: number, white: boolean, size: number): HTMLCanvasElement {
-  const dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2.5);
-  const k = `${kind}${white ? "w" : "b"}${Math.round(size)}`;
+  const dpr = renderScale();
+  const k = `${kind}${white ? "w" : "b"}${Math.round(size)}@${dpr}`;
   let s = cache.get(k);
   if (!s) {
     s = makeSprite(size, size, dpr, (c) => {

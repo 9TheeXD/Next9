@@ -12,6 +12,7 @@ import { drawShip, shipFlame } from "./art/skins";
 import { ENEMIES, bossName, coinPlan, mapSpec, mapTheme, type MapSpec, type Theme } from "./shooter/maps";
 import { World, shipStats, type WEvent } from "./shooter/world";
 import { drawAmbient, drawBoss, drawBullets, drawEnemy, drawLasers, drawMapPlanet, drawMarks, drawPickup, makeBackdrop, PICKUP_COLOR } from "./shooter/draw";
+import { renderScale } from "./engine/quality";
 
 export const shooterGame: GameDefinition = {
   id: "shooter",
@@ -50,6 +51,8 @@ class ShooterGame implements GameInstance {
   private floaters = new Floaters();
   private shake = 0;
   private hurtFlash = 0;
+  private hurtSprite: HTMLCanvasElement | null = null;
+  private hurtKey = "";
   private novaFlash = 0;
   private hints: string[] = [];
   private hintT = 0;
@@ -168,7 +171,7 @@ class ShooterGame implements GameInstance {
   // ── Setup ────────────────────────────────────────────────────────────────
 
   private buildShip() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     const size = 56;
     this.shipSprite = makeSprite(size * 1.6, size * 1.6, dpr, (c) => {
       c.translate(size * 0.8, size * 0.8);
@@ -177,10 +180,10 @@ class ShooterGame implements GameInstance {
   }
 
   private ensureBg() {
-    const key = `${this.spec.m}:${this.w}x${this.h}`;
+    const key = `${this.spec.m}:${this.w}x${this.h}@${renderScale()}`;
     if (key === this.bgFor || !this.w) return;
     this.bgFor = key;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     this.bg = makeBackdrop(this.theme, this.w, this.h, dpr, this.spec.seed);
   }
 
@@ -520,12 +523,15 @@ class ShooterGame implements GameInstance {
     this.stars.forEach((layer, k) => {
       const speed = [0.02, 0.05, 0.1][k] * (moving ? 1 : 0.3);
       c.fillStyle = rgba(this.theme.star, 0.25 + k * 0.2);
+      // One path per layer: a single fill instead of one per star.
+      c.beginPath();
       for (const s of layer) {
         const y = ((s.y + this.time * speed) % 1) * h;
-        c.beginPath();
-        c.arc(s.x * w, y, s.r * (0.5 + k * 0.35), 0, TAU);
-        c.fill();
+        const rr = s.r * (0.5 + k * 0.35);
+        c.moveTo(s.x * w + rr, y);
+        c.arc(s.x * w, y, rr, 0, TAU);
       }
+      c.fill();
     });
     drawAmbient(c, this.theme, w, h, this.time, this.env.reducedMotion);
   }
@@ -533,7 +539,11 @@ class ShooterGame implements GameInstance {
   render() {
     const c = this.env.ctx;
     c.save();
-    if (this.shake && !this.env.reducedMotion) c.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
+    if (this.shake && !this.env.reducedMotion) {
+      // Whole device pixels, so the cached sky stays a straight copy instead of being resampled.
+      const k = renderScale();
+      c.translate(Math.round((Math.random() - 0.5) * this.shake * k) / k, Math.round((Math.random() - 0.5) * this.shake * k) / k);
+    }
     this.drawSky();
     if (this.world && this.state !== "select" && this.state !== "hangar") this.renderWorld();
     this.particles.render(c);
@@ -600,11 +610,21 @@ class ShooterGame implements GameInstance {
     const h = this.h;
     const wd = this.world!;
     if (this.hurtFlash > 0) {
-      const g = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.75);
-      g.addColorStop(0, "rgba(255,40,80,0)");
-      g.addColorStop(1, `rgba(255,40,80,${0.35 * this.hurtFlash})`);
-      c.fillStyle = g;
-      c.fillRect(0, 0, w, h);
+      // Red edge flash: the gradient is cached at full strength and faded with globalAlpha.
+      const key = `${w}x${h}@${renderScale()}`;
+      if (!this.hurtSprite || this.hurtKey !== key) {
+        this.hurtKey = key;
+        this.hurtSprite = makeSprite(w, h, renderScale(), (cc) => {
+          const g = cc.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.75);
+          g.addColorStop(0, "rgba(255,40,80,0)");
+          g.addColorStop(1, "rgba(255,40,80,0.35)");
+          cc.fillStyle = g;
+          cc.fillRect(0, 0, w, h);
+        });
+      }
+      c.globalAlpha = Math.min(1, this.hurtFlash);
+      c.drawImage(this.hurtSprite, 0, 0, w, h);
+      c.globalAlpha = 1;
     }
     if (this.novaFlash > 0) {
       c.fillStyle = `rgba(255,240,200,${0.45 * this.novaFlash})`;

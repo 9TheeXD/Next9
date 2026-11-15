@@ -2,7 +2,8 @@
 // Draw one line per turn; close a box to claim it and go again.
 
 import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engine/types";
-import { Particles, TAU, FONT_DISPLAY, glow, rgba, clamp } from "./engine/fx";
+import { Particles, TAU, FONT_DISPLAY, glow, rgba, clamp, makeSprite } from "./engine/fx";
+import { renderScale } from "./engine/quality";
 import { SetupMenu } from "./engine/menu";
 import { playerBar, DuelOver, IconButton, ICONS } from "./engine/duel";
 import { pentatonic } from "./engine/audio";
@@ -416,24 +417,37 @@ class Dots implements GameInstance {
     });
   }
 
+  private bgSpr: HTMLCanvasElement | null = null;
+  private bgKey = "";
+
   render() {
     const c = this.env.ctx;
     const { w, h } = this;
-    const g = c.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, "#0b1530");
-    g.addColorStop(1, "#122347");
-    c.fillStyle = g;
-    c.fillRect(0, 0, w, h);
-    if (this.state !== "menu" || this.history.length) {
-      // Paper grid feel
-      c.strokeStyle = "rgba(148,180,255,0.06)";
-      c.lineWidth = 1;
-      for (let x = (this.gx % 20) - 20; x < w; x += 20) {
-        c.beginPath();
-        c.moveTo(x, 0);
-        c.lineTo(x, h);
-        c.stroke();
-      }
+    const showBoard = this.state !== "menu" || this.history.length > 0;
+    // Background gradient and the paper grid lines: one cached layer.
+    const bkey = `${w}x${h}@${renderScale()}|${showBoard ? this.gx : "-"}`;
+    if (!this.bgSpr || this.bgKey !== bkey) {
+      this.bgKey = bkey;
+      this.bgSpr = makeSprite(w, h, renderScale(), (cc) => {
+        const g = cc.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, "#0b1530");
+        g.addColorStop(1, "#122347");
+        cc.fillStyle = g;
+        cc.fillRect(0, 0, w, h);
+        if (!showBoard) return;
+        // Paper grid feel
+        cc.strokeStyle = "rgba(148,180,255,0.06)";
+        cc.lineWidth = 1;
+        for (let x = (this.gx % 20) - 20; x < w; x += 20) {
+          cc.beginPath();
+          cc.moveTo(x, 0);
+          cc.lineTo(x, h);
+          cc.stroke();
+        }
+      });
+    }
+    c.drawImage(this.bgSpr, 0, 0, w, h);
+    if (showBoard) {
       // Boxes
       for (let i = 0; i < this.boxes.length; i++) {
         const o = this.boxes[i];

@@ -19,6 +19,7 @@ import {
 } from "./defense/data";
 import { World, BREAK, routeAt, type Barrier, type WorldEvent } from "./defense/world";
 import { drawGround, drawTree, drawTower, drawEnemy, drawFence, drawShot, drawLock, drawStar, iconEnemy, Weather, LOOK, type Geo } from "./defense/art";
+import { renderScale } from "./engine/quality";
 
 export const defenseGame: GameDefinition = {
   id: "defense",
@@ -53,6 +54,13 @@ class DefenseGame implements GameInstance {
   private geo: Geo = { ox: 0, oy: 0, cell: 40 };
   private bg: HTMLCanvasElement | null = null;
   private bgKey = "";
+  private mapBg: HTMLCanvasElement | null = null;
+  private mapBgKey = "";
+  private nodeDiscs = new Map<string, HTMLCanvasElement>();
+  private loadBg: HTMLCanvasElement | null = null;
+  private loadBgKey = "";
+  private startSpr: HTMLCanvasElement | null = null;
+  private startKey = "";
   private barTop = 0;
 
   private state: State = "maps";
@@ -153,10 +161,10 @@ class DefenseGame implements GameInstance {
 
   private ensureBackground() {
     if (!this.world) return;
-    const key = `${this.mapN}|${this.layout.name}|${this.season}|${this.w}x${this.h}`;
+    const key = `${this.mapN}|${this.layout.name}|${this.season}|${this.w}x${this.h}@${renderScale()}`;
     if (key === this.bgKey && this.bg) return;
     this.bgKey = key;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     const world = this.world;
     this.bg = makeSprite(this.w, this.h, dpr, (c) =>
       drawGround(c, this.w, this.h, this.geo, this.layout.routes, world.pads, this.season, 4242 + this.mapN * 17)
@@ -650,16 +658,31 @@ class DefenseGame implements GameInstance {
     }
     const sy = (b: number) => h - b + this.scroll;
     // Background: each year a band in its own light
-    const g = c.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, "#0f1f2e");
-    g.addColorStop(1, "#13301f");
-    c.fillStyle = g;
-    c.fillRect(0, 0, w, h);
-    for (const nd of nodes) {
-      if (!nd.n) continue;
-      const m = MAPS[nd.n - 1];
-      glow(c, nd.x, sy(nd.b), 120, SEASON_COLOR[m.season], 0.1);
+    // Background gradient plus the faint season glows: they only move with the scroll, so they are
+    // kept in one screen-sized layer that is redrawn only when the scroll or the size changes.
+    const mk = `${w}x${h}@${renderScale()}|${this.scroll}`;
+    if (!this.mapBg || this.mapBgKey !== mk) {
+      const sc = renderScale();
+      if (!this.mapBg || this.mapBg.width !== Math.ceil(w * sc) || this.mapBg.height !== Math.ceil(h * sc)) {
+        this.mapBg = makeSprite(w, h, sc, () => {});
+      }
+      this.mapBgKey = mk;
+      const cc = this.mapBg.getContext("2d")!;
+      cc.setTransform(sc, 0, 0, sc, 0, 0);
+      const g = cc.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, "#0f1f2e");
+      g.addColorStop(1, "#13301f");
+      cc.fillStyle = g;
+      cc.fillRect(0, 0, w, h);
+      for (const nd of nodes) {
+        if (!nd.n) continue;
+        const gy = sy(nd.b);
+        if (gy < -120 || gy > h + 120) continue; // off screen
+        const m = MAPS[nd.n - 1];
+        glow(cc, nd.x, gy, 120, SEASON_COLOR[m.season], 0.1);
+      }
     }
+    c.drawImage(this.mapBg, 0, 0, w, h);
     // Firefly dots that drift with the scroll
     for (let i = 0; i < 40; i++) {
       const x = ((i * 97.3) % w) + Math.sin(this.time * 0.5 + i) * 6;
@@ -731,23 +754,35 @@ class DefenseGame implements GameInstance {
       const col = nd.n === ENDLESS ? "#a78bfa" : SEASON_COLOR[MAPS[nd.n - 1].season];
       const r = 29;
       if (current) glow(c, nd.x, y, r * 2.4, col, 0.55 + 0.2 * Math.sin(this.time * 3));
-      c.save();
-      c.shadowColor = "rgba(0,0,0,0.45)";
-      c.shadowBlur = 12;
-      c.shadowOffsetY = 5;
-      const ng = c.createRadialGradient(nd.x - r * 0.35, y - r * 0.4, 2, nd.x, y, r);
-      ng.addColorStop(0, open ? shade(col, 0.45) : "#64748b");
-      ng.addColorStop(1, open ? shade(col, -0.35) : "#1e293b");
-      c.fillStyle = ng;
-      c.beginPath();
-      c.arc(nd.x, y, r, 0, TAU);
-      c.fill();
-      c.restore();
-      c.strokeStyle = open ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.2)";
-      c.lineWidth = 2.5;
-      c.beginPath();
-      c.arc(nd.x, y, r, 0, TAU);
-      c.stroke();
+      // Disc with its drop shadow, gradient and rim: cached per colour (a blurred shadow is slow).
+      const dk = `${col}|${open}|${renderScale()}`;
+      let disc = this.nodeDiscs.get(dk);
+      if (!disc) {
+        const R = r + 4 + 24 / renderScale();
+        disc = makeSprite(R * 2, R * 2, renderScale(), (cc) => {
+          cc.save();
+          cc.shadowColor = "rgba(0,0,0,0.45)";
+          cc.shadowBlur = 12;
+          cc.shadowOffsetY = 5;
+          const ng = cc.createRadialGradient(R - r * 0.35, R - r * 0.4, 2, R, R, r);
+          ng.addColorStop(0, open ? shade(col, 0.45) : "#64748b");
+          ng.addColorStop(1, open ? shade(col, -0.35) : "#1e293b");
+          cc.fillStyle = ng;
+          cc.beginPath();
+          cc.arc(R, R, r, 0, TAU);
+          cc.fill();
+          cc.restore();
+          cc.strokeStyle = open ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.2)";
+          cc.lineWidth = 2.5;
+          cc.beginPath();
+          cc.arc(R, R, r, 0, TAU);
+          cc.stroke();
+        });
+        if (this.nodeDiscs.size > 32) this.nodeDiscs.clear();
+        this.nodeDiscs.set(dk, disc);
+      }
+      const R = r + 4 + 24 / renderScale();
+      c.drawImage(disc, nd.x - R, y - R, R * 2, R * 2);
       if (!open) drawLock(c, nd.x, y - 4, 22);
       else {
         c.font = `800 ${nd.n === ENDLESS ? 26 : 21}px ${FONT_DISPLAY}`;
@@ -865,13 +900,21 @@ class DefenseGame implements GameInstance {
     const m = this.spec();
     const season = m ? m.season : "spring";
     const L = LOOK[season];
-    const bg = c.createLinearGradient(0, 0, 0, h);
-    const dark = season === "winter" ? -0.72 : -0.35;
-    bg.addColorStop(0, shade(L.bg[0], dark));
-    bg.addColorStop(1, shade(L.bg[2], dark - 0.1));
-    c.fillStyle = bg;
-    c.fillRect(0, 0, w, h);
-    glow(c, w / 2, 120, w * 0.7, SEASON_COLOR[season], 0.12);
+    // Background gradient and its big season glow: one cached layer per season and size.
+    const lk = `${w}x${h}@${renderScale()}|${season}`;
+    if (!this.loadBg || this.loadBgKey !== lk) {
+      this.loadBgKey = lk;
+      this.loadBg = makeSprite(w, h, renderScale(), (cc) => {
+        const bg = cc.createLinearGradient(0, 0, 0, h);
+        const dark = season === "winter" ? -0.72 : -0.35;
+        bg.addColorStop(0, shade(L.bg[0], dark));
+        bg.addColorStop(1, shade(L.bg[2], dark - 0.1));
+        cc.fillStyle = bg;
+        cc.fillRect(0, 0, w, h);
+        glow(cc, w / 2, 120, w * 0.7, SEASON_COLOR[season], 0.12);
+      });
+    }
+    c.drawImage(this.loadBg, 0, 0, w, h);
     const cw = Math.min(w - 20, 440);
     const x0 = (w - cw) / 2;
 
@@ -1138,17 +1181,27 @@ class DefenseGame implements GameInstance {
 
     // Start
     const sh = Math.max(46, Math.min(54, h - y - 10));
-    const sg = c.createLinearGradient(0, y, 0, y + sh);
-    sg.addColorStop(0, "#22c55e");
-    sg.addColorStop(1, "#15803d");
-    c.save();
-    c.shadowColor = "rgba(34,197,94,0.5)";
-    c.shadowBlur = 16;
-    c.shadowOffsetY = 5;
-    c.fillStyle = sg;
-    roundRectPath(c, x0, y, cw, sh, sh / 2);
-    c.fill();
-    c.restore();
+    // Start button body with its soft shadow: cached (a blurred shadow per frame is slow).
+    {
+      const k = renderScale();
+      const P = 30 / k + 2;
+      const sk = `${cw}x${sh}@${k}`;
+      if (!this.startSpr || this.startKey !== sk) {
+        this.startKey = sk;
+        this.startSpr = makeSprite(cw + P * 2, sh + P * 2, k, (cc) => {
+          const sg = cc.createLinearGradient(0, P, 0, P + sh);
+          sg.addColorStop(0, "#22c55e");
+          sg.addColorStop(1, "#15803d");
+          cc.shadowColor = "rgba(34,197,94,0.5)";
+          cc.shadowBlur = 16;
+          cc.shadowOffsetY = 5;
+          cc.fillStyle = sg;
+          roundRectPath(cc, P, P, cw, sh, sh / 2);
+          cc.fill();
+        });
+      }
+      c.drawImage(this.startSpr, Math.round((x0 - P) * k) / k, Math.round((y - P) * k) / k, this.startSpr.width / k, this.startSpr.height / k);
+    }
     c.font = `700 18px ${FONT_DISPLAY}`;
     c.fillStyle = "#ffffff";
     c.textAlign = "center";

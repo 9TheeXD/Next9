@@ -4,9 +4,76 @@
 // lantern into the sky. Holding the screen is optional: breathing along without touching counts too.
 
 import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engine/types";
-import { makeStars, drawStars, makeSprite, clamp, lerp, ease, TAU, FONT_DISPLAY, FONT_BODY, glow, rng, type Star } from "./engine/fx";
+import { makeStars, makeSprite, clamp, lerp, ease, TAU, FONT_DISPLAY, FONT_BODY, glow, rng, type Star } from "./engine/fx";
 import { Button, drawCard, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
+import { renderScale } from "./engine/quality";
+
+// ── Cached drawing (pixel work is what makes old phones drop frames) ─────────────────────────────
+
+const glowCache = new Map<string, HTMLCanvasElement>();
+/**
+ * Same look as fx glow(), but blitted from a cached sprite instead of a per-frame radial gradient.
+ * The sprite is made at the exact on-screen pixel size and copied 1:1 at whole device pixels: an
+ * unscaled copy costs a fraction of a scaled one (or of a gradient fill) on phones without spare GPU.
+ */
+function glowSprite(c: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, alpha = 1) {
+  if (alpha <= 0 || r <= 0) return;
+  const m = c.getTransform();
+  const k = Math.hypot(m.a, m.b);
+  let R = Math.max(1, Math.round(r * k));
+  if (R > 48) R = Math.round(R / 3) * 3; // ±1 device px on big soft glows keeps the cache small
+  const key = color + R;
+  let img = glowCache.get(key);
+  if (!img) {
+    if (glowCache.size > 80) glowCache.clear();
+    img = makeSprite(R * 2, R * 2, 1, (g) => glow(g, R, R, R, color, 1));
+    glowCache.set(key, img);
+  }
+  const dx = m.a * x + m.c * y + m.e;
+  const dy = m.b * x + m.d * y + m.f;
+  const prev = c.globalAlpha;
+  c.globalAlpha = prev * Math.min(1, alpha);
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.drawImage(img, Math.round(dx) - R, Math.round(dy) - R);
+  c.setTransform(m);
+  c.globalAlpha = prev;
+}
+
+/** An offscreen canvas exactly the size of the main canvas, drawn in CSS pixels. */
+function screenSprite(main: HTMLCanvasElement, w: number, h: number, draw: (c: CanvasRenderingContext2D, ratio: number) => void) {
+  const cv = document.createElement("canvas");
+  cv.width = main.width;
+  cv.height = main.height;
+  const c = cv.getContext("2d")!;
+  c.scale(main.width / w, main.height / h);
+  draw(c, main.width / w);
+  return cv;
+}
+
+/**
+ * The canvas is never cleared: the background is drawn over the last frame each time, and where it
+ * is translucent (the lake) it settles on a steady colour. Bake that steady colour into an opaque
+ * copy (repeat the same blend), which is also the cheapest thing to copy to the screen.
+ */
+function settleOpaque(src: HTMLCanvasElement) {
+  const cv = document.createElement("canvas");
+  cv.width = src.width;
+  cv.height = src.height;
+  const c = cv.getContext("2d", { alpha: false })!;
+  for (let i = 0; i < 14; i++) c.drawImage(src, 0, 0);
+  return cv;
+}
+
+/** Full-screen sprite: a 1:1 pixel copy when it matches the canvas (no resampling), scaled otherwise. */
+function blitScreen(c: CanvasRenderingContext2D, img: HTMLCanvasElement, w: number, h: number) {
+  if (img.width === c.canvas.width && img.height === c.canvas.height) {
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.drawImage(img, 0, 0);
+    c.restore();
+  } else c.drawImage(img, 0, 0, w, h);
+}
 
 const IN = 4;
 const OUT = 6;
@@ -52,7 +119,13 @@ class LanternGame implements GameInstance {
   private h = 0;
   private horizon = 0;
   private bg: HTMLCanvasElement | null = null;
+  private bgKey = "";
+  private starCol: string[] = [];
+  private textImg: HTMLCanvasElement | null = null;
+  private textKey = "";
+  private mainGlow: HTMLCanvasElement | null = null;
   private stars: Star[] = makeStars(170, 7);
+  private bigStars = this.stars.filter((s) => s.r > 1.2);
   private state: State = "intro";
   private stateT = 0;
   private time = 0;
@@ -163,9 +236,14 @@ class LanternGame implements GameInstance {
     this.w = w;
     this.h = h;
     this.horizon = Math.round(h * 0.64);
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     const hz = this.horizon;
-    this.bg = makeSprite(w, h, dpr, (c) => {
+    this.bgKey = `${w}x${h}@${renderScale()}`;
+    this.bg = this.paintBg(w, h, hz);
+    this.mainGlow = null;
+  }
+
+  private paintBg(w: number, h: number, hz: number) {
+    const bg = screenSprite(this.env.ctx.canvas, w, h, (c, dpr) => {
       // Sky
       const sky = c.createLinearGradient(0, 0, 0, hz);
       sky.addColorStop(0, "#070b26");
@@ -233,6 +311,31 @@ class LanternGame implements GameInstance {
       c.fillStyle = lake;
       c.fillRect(0, hz, w, h - hz);
     });
+    return settleOpaque(bg);
+  }
+
+  /**
+   * The floating lantern's big glow and its reflection's glow in one exact-size sprite (alpha 1;
+   * drawn with globalAlpha). They always sit 30 px apart, and one copy is far cheaper than two.
+   */
+  private drawMainGlows(ctx: CanvasRenderingContext2D, cx: number, y: number, bright: number) {
+    const ratio = ctx.canvas.width / this.w;
+    const r = 44 * 1.5 * 2.6;
+    const R = Math.round(r * ratio);
+    const off = Math.round(30 * ratio);
+    if (!this.mainGlow || this.mainGlow.width !== R * 2) {
+      this.mainGlow = makeSprite(R * 2, R * 2 + off, 1, (c) => {
+        glow(c, R, R + off, R, "#ffb45c", 0.35); // reflection (drawn first, under)
+        glow(c, R, R, R, "#ffb45c", 1);
+      });
+    }
+    const a = Math.min(1, 0.28 * bright);
+    if (a <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(this.mainGlow, Math.round(cx * ratio) - R, Math.round(y * ratio) - R);
+    ctx.restore();
   }
 
   pointer(p: PointerInfo) {
@@ -328,10 +431,10 @@ class LanternGame implements GameInstance {
     this.lanternGlow = lerp(this.lanternGlow, 0.35 + shown * 0.5 * (0.4 + sync * 0.6), 0.1);
   }
 
-  private drawLantern(c: CanvasRenderingContext2D, x: number, y: number, s: number, bright: number, hue = 32, flicker = 0) {
+  private drawLantern(c: CanvasRenderingContext2D, x: number, y: number, s: number, bright: number, hue = 32, flicker = 0, bigGlow = true) {
     const lw = 34 * s;
     const lh = 44 * s;
-    glow(c, x, y, lh * 2.6, `#ffb45c`, 0.28 * bright);
+    if (bigGlow) glowSprite(c, x, y, lh * 2.6, `#ffb45c`, 0.28 * bright);
     // Body
     const g = c.createRadialGradient(x, y + lh * 0.1, lh * 0.05, x, y, lh * 0.75);
     const core = `hsl(${hue},100%,${70 + bright * 22 + flicker * 4}%)`;
@@ -360,7 +463,66 @@ class LanternGame implements GameInstance {
     c.fillRect(x - lw * 0.44, y - lh * 0.55, lw * 0.88, lh * 0.08);
     c.fillRect(x - lw * 0.38, y + lh * 0.47, lw * 0.76, lh * 0.07);
     // Flame at the bottom opening
-    glow(c, x, y + lh * 0.42, lh * 0.35, "#fff1b8", 0.8 * bright);
+    glowSprite(c, x, y + lh * 0.42, lh * 0.35, "#fff1b8", 0.8 * bright);
+  }
+
+  /** Twinkling stars, as fx drawStars() but with cached colours and globalAlpha (no per-star strings). */
+  private drawStars(ctx: CanvasRenderingContext2D, maxY: number) {
+    const { w, h } = this;
+    const time = this.time * 0.6;
+    const stars = this.stars;
+    if (this.starCol.length !== stars.length) this.starCol = stars.map((s) => (s.hue ? `hsl(${s.hue},80%,85%)` : "#ffffff"));
+    for (let i = 0; i < stars.length; i++) {
+      const s = stars[i];
+      if (s.y > maxY) continue;
+      const tw = 0.55 + 0.45 * Math.sin(time * s.speed + s.phase);
+      ctx.globalAlpha = tw * (s.r > 1 ? 0.95 : 0.7);
+      ctx.fillStyle = this.starCol[i];
+      ctx.beginPath();
+      ctx.arc(s.x * w, s.y * h, s.r, 0, TAU);
+      ctx.fill();
+    }
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 0.6;
+    for (const s of this.bigStars) {
+      if (s.y > maxY) continue;
+      const tw = 0.55 + 0.45 * Math.sin(time * s.speed + s.phase);
+      ctx.globalAlpha = tw * 0.95 * 0.35;
+      const L = s.r * 4 * tw;
+      ctx.beginPath();
+      ctx.moveTo(s.x * w - L, s.y * h);
+      ctx.lineTo(s.x * w + L, s.y * h);
+      ctx.moveTo(s.x * w, s.y * h - L);
+      ctx.lineTo(s.x * w, s.y * h + L);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** "หายใจเข้า / ออก" and the seconds left, with their soft shadow, cached until they change. */
+  private drawPhaseText(ctx: CanvasRenderingContext2D, label: string, remain: number, cx: number, y: number) {
+    const ratio = ctx.canvas.width / this.w;
+    const key = `${label}|${remain}|${this.w}|${ratio}`;
+    const top = 40;
+    if (this.textKey !== key || !this.textImg) {
+      this.textKey = key;
+      this.textImg = makeSprite(this.w, 90, ratio, (c) => {
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        c.font = `700 30px ${FONT_DISPLAY}`;
+        c.fillStyle = "#ffffff";
+        c.shadowColor = "rgba(0,0,0,0.5)";
+        c.shadowBlur = 12; // shadow blur is in device pixels, like on the main canvas
+        c.fillText(label, cx, top);
+        c.font = `600 18px ${FONT_DISPLAY}`;
+        c.fillStyle = "rgba(255,230,190,0.9)";
+        c.fillText(`${remain}`, cx, top + 34);
+      });
+    }
+    // Snap to device pixels at 1:1 scale so the text stays as sharp as drawing it directly.
+    const img = this.textImg;
+    const yy = Math.round((y - top) * ratio) / ratio;
+    ctx.drawImage(img, 0, yy, img.width / ratio, img.height / ratio);
   }
 
   render() {
@@ -368,8 +530,9 @@ class LanternGame implements GameInstance {
     const w = this.w;
     const h = this.h;
     const hz = this.horizon;
-    if (this.bg) ctx.drawImage(this.bg, 0, 0, w, h);
-    drawStars(ctx, this.stars, w, h, this.time * 0.6, (hz - 40) / h);
+    if (!this.bg || this.bgKey !== `${w}x${h}@${renderScale()}` || (this.bg.width !== ctx.canvas.width && w > 0)) this.resize(w, h);
+    if (this.bg) blitScreen(ctx, this.bg, w, h);
+    this.drawStars(ctx, (hz - 40) / h);
 
     // Released lanterns in the sky, plus their reflections
     for (const l of this.released) {
@@ -377,10 +540,7 @@ class LanternGame implements GameInstance {
       this.drawLantern(ctx, l.x, l.y, l.scale, l.bright * (0.85 + 0.15 * Math.sin(l.age * 2 + l.sway)), l.hue, fl);
       const ry = hz + (hz - l.y) * 0.9;
       if (ry < h) {
-        ctx.save();
-        ctx.globalAlpha = 0.25;
-        glow(ctx, l.x, ry, 18 * l.scale + 6, "#ffb45c", 0.5 * l.bright);
-        ctx.restore();
+        glowSprite(ctx, l.x, ry, 18 * l.scale + 6, "#ffb45c", 0.25 * 0.5 * l.bright);
       }
     }
 
@@ -406,11 +566,13 @@ class LanternGame implements GameInstance {
     ctx.globalCompositeOperation = "lighter";
     for (const f of this.flies) {
       const a = 0.4 + 0.6 * Math.max(0, Math.sin(f.phase * 1.7));
-      glow(ctx, f.x * w, f.y * h, 9, "#d6ff8a", 0.55 * a);
-      ctx.fillStyle = `rgba(240,255,200,${a})`;
+      glowSprite(ctx, f.x * w, f.y * h, 9, "#d6ff8a", 0.55 * a);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = "rgb(240,255,200)";
       ctx.beginPath();
       ctx.arc(f.x * w, f.y * h, 1.4, 0, TAU);
       ctx.fill();
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
 
@@ -429,26 +591,35 @@ class LanternGame implements GameInstance {
     ctx.globalAlpha = 0.35;
     ctx.translate(0, (ly + 20) * 2);
     ctx.scale(1, -1);
-    this.drawLantern(ctx, cx, ly + 20, 1.5, this.lanternGlow);
+    this.drawLantern(ctx, cx, ly + 20, 1.5, this.lanternGlow, 32, 0, false);
     ctx.restore();
 
     // Player ring (filled) and guide ring (outline)
     const ringY = ly - 10;
-    const rg = ctx.createRadialGradient(cx, ringY, youR * 0.6, cx, ringY, youR);
-    rg.addColorStop(0, "rgba(255,190,110,0)");
-    rg.addColorStop(0.85, `rgba(255,190,110,${0.08 + this.lanternGlow * 0.12})`);
-    rg.addColorStop(1, "rgba(255,210,150,0)");
-    ctx.fillStyle = rg;
-    ctx.beginPath();
-    ctx.arc(cx, ringY, youR, 0, TAU);
-    ctx.fill();
+    if (youR > 0) {
+      // Only the band between 60% and 100% of the radius is visible: fill just that annulus.
+      const rg = ctx.createRadialGradient(cx, ringY, youR * 0.6, cx, ringY, youR);
+      rg.addColorStop(0, "rgba(255,190,110,0)");
+      rg.addColorStop(0.85, `rgba(255,190,110,${0.08 + this.lanternGlow * 0.12})`);
+      rg.addColorStop(1, "rgba(255,210,150,0)");
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      ctx.arc(cx, ringY, youR, 0, TAU);
+      ctx.moveTo(cx + youR * 0.6, ringY);
+      ctx.arc(cx, ringY, youR * 0.6, 0, TAU, true);
+      ctx.fill();
+    }
+    // Dashed guide ring (3 on, 7 off), built as short arcs: a dash pattern stroke is slow on phones.
     ctx.strokeStyle = `rgba(255,236,200,${playing ? 0.8 : 0.5})`;
     ctx.lineWidth = 2;
-    ctx.setLineDash([3, 7]);
     ctx.beginPath();
-    ctx.arc(cx, ringY, guideR, 0, TAU);
+    const circ = TAU * guideR;
+    for (let d = 0; d < circ; d += 10) {
+      const a0 = d / guideR;
+      ctx.moveTo(cx + Math.cos(a0) * guideR, ringY + Math.sin(a0) * guideR);
+      ctx.arc(cx, ringY, guideR, a0, Math.min(d + 3, circ) / guideR);
+    }
     ctx.stroke();
-    ctx.setLineDash([]);
     if (playing && this.touchedThisBreath) {
       ctx.strokeStyle = "rgba(255,190,110,0.9)";
       ctx.lineWidth = 3;
@@ -457,7 +628,8 @@ class LanternGame implements GameInstance {
       ctx.stroke();
     }
 
-    this.drawLantern(ctx, cx, ly - 10, 1.5, this.lanternGlow);
+    this.drawMainGlows(ctx, cx, ly - 10, this.lanternGlow);
+    this.drawLantern(ctx, cx, ly - 10, 1.5, this.lanternGlow, 32, 0, false);
 
     // Text
     ctx.textAlign = "center";
@@ -467,15 +639,7 @@ class LanternGame implements GameInstance {
       const remain = Math.ceil(inPhase ? IN - this.phaseT : CYCLE - this.phaseT);
       const label = inPhase ? "หายใจเข้า" : "หายใจออก";
       const y = h * 0.13;
-      ctx.font = `700 30px ${FONT_DISPLAY}`;
-      ctx.fillStyle = "#ffffff";
-      ctx.shadowColor = "rgba(0,0,0,0.5)";
-      ctx.shadowBlur = 12;
-      ctx.fillText(label, cx, y);
-      ctx.font = `600 18px ${FONT_DISPLAY}`;
-      ctx.fillStyle = "rgba(255,230,190,0.9)";
-      ctx.fillText(`${remain}`, cx, y + 34);
-      ctx.shadowBlur = 0;
+      this.drawPhaseText(ctx, label, remain, cx, y);
       ctx.font = `500 13px ${FONT_BODY}`;
       ctx.fillStyle = "rgba(255,255,255,0.7)";
       ctx.fillText(

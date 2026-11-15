@@ -4,13 +4,14 @@
 
 import type { GameDefinition, GameEnv, GameInstance, PointerInfo } from "./engine/types";
 import {
-  Particles, Floaters, makeStars, drawStars, vignette, roundRectPath, shade, rgba, makeSprite,
+  Particles, Floaters, makeStars, vignette, roundRectPath, shade, rgba, makeSprite,
   clamp, ease, TAU, FONT_DISPLAY, FONT_BODY, glow, type Star,
 } from "./engine/fx";
 import { Button, drawCard, glassPanel, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { coinsFor, wallet } from "./engine/economy";
 import { drawBlockSkin } from "./art/skins";
+import { renderScale } from "./engine/quality";
 
 const COLS = 10;
 const ROWS = 20;
@@ -39,6 +40,9 @@ const COLORS: Record<Kind, string> = {
   L: "#ff9a3c",
 };
 
+const AURORA = ["#3cf0c8", "#7a6cff", "#ff6fd8"];
+
+
 const KICKS: [number, number][] = [[0, 0], [-1, 0], [1, 0], [0, -1], [-2, 0], [2, 0], [-1, -1], [1, -1]];
 const LINE_POINTS = [0, 100, 300, 500, 800];
 
@@ -60,6 +64,95 @@ function shadeA(hex: string, amt: number, a: number) {
   const f = (c: number) => Math.round(amt >= 0 ? c + (255 - c) * amt : c * (1 + amt));
   return `rgba(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)},${a})`;
 }
+
+/** A cached piece of the screen: the region it covers, aligned to device pixels so drawing it is a 1:1 copy. */
+interface Layer {
+  c: HTMLCanvasElement;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Whether the runtime draws shadowBlur right now (it switches it off on struggling devices). */
+function shadowsOn(ctx: CanvasRenderingContext2D) {
+  const prev = ctx.shadowBlur;
+  ctx.shadowBlur = 4;
+  const on = ctx.shadowBlur > 0;
+  ctx.shadowBlur = prev;
+  return on;
+}
+
+/** Cached drawings follow the runtime's choice, so they look exactly like drawing straight to the screen. */
+function matchShadows(c: CanvasRenderingContext2D, on: boolean) {
+  if (!on) Object.defineProperty(c, "shadowBlur", { configurable: true, get: () => 0, set: () => {} });
+}
+
+function makeLayer(x: number, y: number, w: number, h: number, dpr: number, draw: (c: CanvasRenderingContext2D) => void, blur = true): Layer {
+  const x0 = Math.floor(x * dpr) / dpr;
+  const y0 = Math.floor(y * dpr) / dpr;
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.ceil((x + w - x0) * dpr));
+  c.height = Math.max(1, Math.ceil((y + h - y0) * dpr));
+  const ctx = c.getContext("2d")!;
+  ctx.setTransform(dpr, 0, 0, dpr, -x0 * dpr, -y0 * dpr);
+  matchShadows(ctx, blur);
+  draw(ctx);
+  return { c, x: x0, y: y0, w: c.width / dpr, h: c.height / dpr };
+}
+
+function drawLayer(ctx: CanvasRenderingContext2D, l: Layer | null) {
+  if (l) ctx.drawImage(l.c, l.x, l.y, l.w, l.h);
+}
+
+const starColors = new Map<number, string>();
+
+// Cached layers hold text; when the Thai web fonts arrive after the game started they are drawn again.
+let fontGen = 0;
+if (typeof document !== "undefined" && (document as any).fonts?.addEventListener) {
+  (document as any).fonts.addEventListener("loadingdone", () => fontGen++);
+}
+
+/** drawStars() from fx with the same pixels, without building two colour strings per star every frame. */
+function drawStarField(ctx: CanvasRenderingContext2D, stars: Star[], w: number, h: number, time: number) {
+  const ga = ctx.globalAlpha;
+  for (const s of stars) {
+    const tw = 0.55 + 0.45 * Math.sin(time * s.speed + s.phase);
+    const a = tw * (s.r > 1 ? 0.95 : 0.7);
+    let col = "#ffffff";
+    if (s.hue) {
+      col = starColors.get(s.hue) ?? `hsl(${s.hue},80%,85%)`;
+      starColors.set(s.hue, col);
+    }
+    ctx.globalAlpha = ga * a;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(s.x * w, s.y * h, s.r, 0, TAU);
+    ctx.fill();
+    if (s.r > 1.2) {
+      ctx.globalAlpha = ga * a * 0.35;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 0.6;
+      const L = s.r * 4 * tw;
+      ctx.beginPath();
+      ctx.moveTo(s.x * w - L, s.y * h);
+      ctx.lineTo(s.x * w + L, s.y * h);
+      ctx.moveTo(s.x * w, s.y * h - L);
+      ctx.lineTo(s.x * w, s.y * h + L);
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = ga;
+}
+
+/** Cells of each shape measured once, for the small previews in the side panel. */
+const BOUNDS = Object.fromEntries(
+  KINDS.map((k) => {
+    const xs = SHAPES[k].cells.map((c) => c[0]);
+    const ys = SHAPES[k].cells.map((c) => c[1]);
+    return [k, { minX: Math.min(...xs), minY: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs) + 1, h: Math.max(...ys) - Math.min(...ys) + 1 }];
+  })
+) as Record<Kind, { minX: number; minY: number; w: number; h: number }>;
 
 export function drawBlock(ctx: CanvasRenderingContext2D, s: number, color: string) {
   const r = s * 0.2;
@@ -167,6 +260,20 @@ class BlocksGame implements GameInstance {
   private sprites: Partial<Record<Kind, HTMLCanvasElement>> = {};
   private miniSprites: Partial<Record<Kind, HTMLCanvasElement>> = {};
   private bg: HTMLCanvasElement | null = null;
+  // Static parts of the frame drawn once per size (glass panels with their soft shadows, grid, vignette);
+  // shadowBlur and big gradients every frame are what made old phones drop frames.
+  private frameLayer: Layer | null = null;
+  private hudLayer: Layer | null = null;
+  private hudKey = -1;
+  private vignetteLayer: HTMLCanvasElement | null = null;
+  private glowSprites: Partial<Record<Kind, HTMLCanvasElement>> = {};
+  private padCache = new Map<string, Layer>();
+  private blur = true;
+  private layerFonts = 0;
+  private auroraFill: (CanvasPattern | null | undefined)[] = [];
+  private ghostSprites: Partial<Record<Kind, Layer>> = {};
+  private hintLayers: Layer[] = [];
+  private layerScale = 1;
   private stars: Star[] = makeStars(140, 11);
   private particles = new Particles();
   private floaters = new Floaters();
@@ -478,7 +585,7 @@ class BlocksGame implements GameInstance {
         x += pw + gap;
       });
     }
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     // Block look bought in the shop (classic is the original jelly block)
     const skin = wallet.equipped("blockSkin");
     const paint = (c: CanvasRenderingContext2D, size: number, col: string) => (skin && skin !== "block_classic" ? drawBlockSkin(c, size, col, skin) : drawBlock(c, size, col));
@@ -509,6 +616,73 @@ class BlocksGame implements GameInstance {
         c.fillRect(0, 0, w, h);
       }
     });
+    this.buildLayers(dpr);
+  }
+
+  private buildLayers(dpr: number) {
+    const { w, h } = this;
+    const blur = (this.blur = shadowsOn(this.env.ctx));
+    this.layerFonts = fontGen;
+    this.layerScale = dpr;
+    const c = this.cell;
+    const bw = c * COLS;
+    const bh = c * ROWS;
+    const sw = c * 3.4;
+    // glassPanel's shadow: blur 30 (reaches ~45 px) moved down 12 px
+    const clipRegion = (x: number, y: number, x1: number, y1: number): [number, number, number, number] => {
+      const ax = Math.max(0, x), ay = Math.max(0, y);
+      return [ax, ay, Math.max(1, Math.min(w, x1) - ax), Math.max(1, Math.min(h, y1) - ay)];
+    };
+    const sh = 48;
+    const x = this.sideX;
+    const ny = this.by + c * 3.6;
+    // Board glass, its dark fill, the grid and the side panels in one layer. Drawn in this order the side panels'
+    // soft shadow falls on the board edge before the blocks instead of after them, a difference of under 1%.
+    this.frameLayer = makeLayer(...clipRegion(this.bx - 6 - sh, this.by - 6 - sh, x + sw + sh, Math.max(this.by + bh + 6, ny + c * 8.2) + sh + 12), dpr, (ctx) => {
+      glassPanel(ctx, this.bx - 6, this.by - 6, bw + 12, bh + 12, 14, 0.08);
+      ctx.fillStyle = "rgba(4,6,24,0.55)";
+      roundRectPath(ctx, this.bx, this.by, bw, bh, 8);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.045)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = 1; x < COLS; x++) {
+        ctx.moveTo(this.bx + x * c + 0.5, this.by);
+        ctx.lineTo(this.bx + x * c + 0.5, this.by + bh);
+      }
+      for (let y = 1; y < ROWS; y++) {
+        ctx.moveTo(this.bx, this.by + y * c + 0.5);
+        ctx.lineTo(this.bx + bw, this.by + y * c + 0.5);
+      }
+      ctx.stroke();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      glassPanel(ctx, x, this.by, sw, c * 3.2, 12, 0.08);
+      ctx.font = `600 11px ${FONT_DISPLAY}`;
+      ctx.fillStyle = "rgba(255,255,255,0.65)";
+      ctx.fillText("เก็บไว้", x + sw / 2, this.by + 6);
+      glassPanel(ctx, x, ny, sw, c * 8.2, 12, 0.08);
+      ctx.fillStyle = "rgba(255,255,255,0.65)";
+      ctx.fillText("ถัดไป", x + sw / 2, ny + 6);
+    }, blur);
+    this.vignetteLayer = makeSprite(w, h, dpr, (ctx) => vignette(ctx, w, h, 0.35));
+    const gr = c * 1.1;
+    for (const k of KINDS) this.glowSprites[k] = makeSprite(gr * 2, gr * 2, dpr, (ctx) => glow(ctx, gr, gr, gr, COLORS[k], 0.18));
+    this.padCache.clear();
+    this.auroraFill = [];
+    this.hintLayers = [];
+    this.hudKey = -1;
+    // Ghost cells: outlined, faintly filled rounded squares, drawn at the origin cell and moved into place
+    for (const k of KINDS) {
+      this.ghostSprites[k] = makeLayer(-1, -1, c + 2, c + 2, dpr, (ctx) => {
+        ctx.strokeStyle = rgba(COLORS[k], 0.7);
+        ctx.fillStyle = rgba(COLORS[k], 0.12);
+        ctx.lineWidth = 1.5;
+        roundRectPath(ctx, 2, 2, c - 4, c - 4, c * 0.18);
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
   }
 
   // ── Input ────────────────────────────────────────────────────────────────
@@ -538,6 +712,7 @@ class BlocksGame implements GameInstance {
           this.gestures = !this.gestures;
           this.env.store.set("gestures", this.gestures ? "on" : "off");
           this.syncGestLabel();
+          this.hintLayers = [];
           this.env.sfx.tone({ freq: 660, dur: 0.05, vol: 0.05 });
         } else if (b && this.stateT > 0.25) this.start();
       }
@@ -705,32 +880,16 @@ class BlocksGame implements GameInstance {
     // Pause / resume: pointer-up and key-up events are not delivered while paused, so drop held inputs
     // when the resume countdown shows instead of letting a piece slide on its own afterwards.
     if (this.env.counting() && (this.padTouch.size || this.keys.size || this.touch)) this.releaseAll();
+    if (this.layerFonts !== fontGen && this.frameLayer) this.buildLayers(renderScale());
     if (this.bg) ctx.drawImage(this.bg, 0, 0, w, h);
-    // Aurora ribbons
+    // Aurora ribbons (their gradient comes from a cached pattern, see drawRibbon)
     if (!this.env.reducedMotion) {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
-      for (let i = 0; i < 3; i++) {
-        const yBase = h * (0.18 + i * 0.12);
-        ctx.beginPath();
-        ctx.moveTo(0, yBase);
-        for (let x = 0; x <= w; x += 12) {
-          ctx.lineTo(x, yBase + Math.sin(x * 0.012 + this.time * (0.25 + i * 0.1) + i) * 26 + Math.sin(x * 0.03 + this.time * 0.4) * 8);
-        }
-        ctx.lineTo(w, yBase + 90);
-        ctx.lineTo(0, yBase + 90);
-        ctx.closePath();
-        const g = ctx.createLinearGradient(0, yBase - 30, 0, yBase + 90);
-        const col = ["#3cf0c8", "#7a6cff", "#ff6fd8"][i];
-        g.addColorStop(0, rgba(col, 0));
-        g.addColorStop(0.3, rgba(col, 0.07));
-        g.addColorStop(1, rgba(col, 0));
-        ctx.fillStyle = g;
-        ctx.fill();
-      }
+      for (let i = 0; i < 3; i++) this.drawRibbon(ctx, i);
       ctx.restore();
     }
-    drawStars(ctx, this.stars, w, h, this.time);
+    drawStarField(ctx, this.stars, w, h, this.time);
 
     ctx.save();
     if (this.shake > 0 && !this.env.reducedMotion) {
@@ -742,7 +901,7 @@ class BlocksGame implements GameInstance {
     this.floaters.render(ctx);
     ctx.restore();
     this.renderHud();
-    vignette(ctx, w, h, 0.35);
+    if (this.vignetteLayer) ctx.drawImage(this.vignetteLayer, 0, 0, w, h);
     this.renderPads();
 
     if (this.state === "intro") {
@@ -770,6 +929,38 @@ class BlocksGame implements GameInstance {
     }
   }
 
+  private drawRibbon(ctx: CanvasRenderingContext2D, i: number) {
+    const w = this.w;
+    const yBase = this.h * (0.18 + i * 0.12);
+    ctx.beginPath();
+    ctx.moveTo(0, yBase);
+    for (let x = 0; x <= w; x += 12) {
+      ctx.lineTo(x, yBase + Math.sin(x * 0.012 + this.time * (0.25 + i * 0.1) + i) * 26 + Math.sin(x * 0.03 + this.time * 0.4) * 8);
+    }
+    ctx.lineTo(w, yBase + 90);
+    ctx.lineTo(0, yBase + 90);
+    ctx.closePath();
+    let pat = this.auroraFill[i];
+    if (pat === undefined) {
+      // The ribbon's vertical gradient, rendered once into a thin strip at canvas resolution and used as a
+      // pattern placed so its pixels line up 1:1 with the canvas: same colours, much cheaper to fill.
+      const dpr = renderScale();
+      const strip = makeLayer(0, yBase - 30, 4, 120, dpr, (c) => {
+        const g = c.createLinearGradient(0, yBase - 30, 0, yBase + 90);
+        g.addColorStop(0, rgba(AURORA[i], 0));
+        g.addColorStop(0.3, rgba(AURORA[i], 0.07));
+        g.addColorStop(1, rgba(AURORA[i], 0));
+        c.fillStyle = g;
+        c.fillRect(0, yBase - 30, 4, 120);
+      });
+      pat = ctx.createPattern(strip.c, "repeat-x");
+      pat?.setTransform(new DOMMatrix([1 / dpr, 0, 0, 1 / dpr, 0, strip.y]));
+      this.auroraFill[i] = pat;
+    }
+    if (pat) ctx.fillStyle = pat;
+    ctx.fill();
+  }
+
   private drawIcon(c: CanvasRenderingContext2D) {
     const s = 22;
     const cells: [number, number, Kind][] = [[-1, 0, "T"], [0, 0, "T"], [1, 0, "T"], [0, -1, "T"], [-1, 1, "I"], [0, 1, "I"], [1, 1, "S"]];
@@ -791,10 +982,8 @@ class BlocksGame implements GameInstance {
     const c = this.cell;
     const bw = c * COLS;
     const bh = c * ROWS;
-    glassPanel(ctx, this.bx - 6, this.by - 6, bw + 12, bh + 12, 14, 0.08);
-    ctx.fillStyle = "rgba(4,6,24,0.55)";
-    roundRectPath(ctx, this.bx, this.by, bw, bh, 8);
-    ctx.fill();
+    // Glass panels, board fill, grid and the side panels: one cached layer
+    drawLayer(ctx, this.frameLayer);
     // Danger glow when the stack is high
     let height = 0;
     for (let y = HIDDEN; y < ROWS + HIDDEN; y++) {
@@ -811,32 +1000,22 @@ class BlocksGame implements GameInstance {
       ctx.fillStyle = g;
       ctx.fillRect(this.bx, this.by, bw, c * 5);
     }
-    // Grid
-    ctx.strokeStyle = "rgba(255,255,255,0.045)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = 1; x < COLS; x++) {
-      ctx.moveTo(this.bx + x * c + 0.5, this.by);
-      ctx.lineTo(this.bx + x * c + 0.5, this.by + bh);
-    }
-    for (let y = 1; y < ROWS; y++) {
-      ctx.moveTo(this.bx, this.by + y * c + 0.5);
-      ctx.lineTo(this.bx + bw, this.by + y * c + 0.5);
-    }
-    ctx.stroke();
 
     ctx.save();
-    roundRectPath(ctx, this.bx, this.by, bw, bh, 8);
+    // A plain rectangle clips the same pixels here as the board's rounded rectangle (block corners stay inside
+    // its 8 px corner arcs) and is far cheaper than an anti-aliased path clip.
+    ctx.beginPath();
+    ctx.rect(this.bx, this.by, bw, bh);
     ctx.clip();
     const clearK = this.clearing.length ? clamp(this.clearT / 0.34, 0, 1) : 0;
-    const clearingSet = new Set(this.clearing);
+    const clearingSet = this.clearing;
     for (let y = HIDDEN; y < ROWS + HIDDEN; y++) {
       for (let x = 0; x < COLS; x++) {
         const k = this.board[y][x];
         if (!k) continue;
         const { px, py } = this.cellRect(x, y);
         const spr = this.sprites[k]!;
-        if (clearingSet.has(y)) {
+        if (clearingSet.includes(y)) {
           const s = 1 - ease.outCubic(clearK);
           ctx.globalAlpha = s;
           ctx.drawImage(spr, px + (c * (1 - s)) / 2, py + (c * (1 - s)) / 2, c * s, c * s);
@@ -845,7 +1024,7 @@ class BlocksGame implements GameInstance {
           ctx.drawImage(spr, px, py, c, c);
         }
       }
-      if (clearingSet.has(y)) {
+      if (clearingSet.includes(y)) {
         const { py } = this.cellRect(0, y);
         ctx.fillStyle = `rgba(255,255,255,${0.75 * (1 - clearK)})`;
         ctx.fillRect(this.bx, py + c * 0.1 * clearK, bw, c * (1 - 0.2 * clearK));
@@ -856,22 +1035,19 @@ class BlocksGame implements GameInstance {
       // Ghost
       let gy = p.y;
       while (!this.collides(p, p.x, gy + 1, p.cells)) gy++;
-      ctx.strokeStyle = rgba(COLORS[p.kind], 0.7);
-      ctx.fillStyle = rgba(COLORS[p.kind], 0.12);
-      ctx.lineWidth = 1.5;
+      const gl = this.ghostSprites[p.kind]!;
       for (const [cx, cy] of p.cells) {
         if (gy + cy < HIDDEN) continue;
         const { px, py } = this.cellRect(p.x + cx, gy + cy);
-        roundRectPath(ctx, px + 2, py + 2, c - 4, c - 4, c * 0.18);
-        ctx.fill();
-        ctx.stroke();
+        ctx.drawImage(gl.c, px + gl.x, py + gl.y, gl.w, gl.h);
       }
       // Active piece with a soft glow; it flickers slightly while about to lock
       const lockFlash = this.onGround(p) ? 0.75 + 0.25 * Math.cos(this.lockT * 20) : 1;
       for (const [cx, cy] of p.cells) {
         if (p.y + cy < HIDDEN) continue;
         const { px, py } = this.cellRect(p.x + cx, p.y + cy);
-        glow(ctx, px + c / 2, py + c / 2, c * 1.1, COLORS[p.kind], 0.18);
+        const gs = this.glowSprites[p.kind];
+        if (gs) ctx.drawImage(gs, px + c / 2 - c * 1.1, py + c / 2 - c * 1.1, c * 2.2, c * 2.2);
         ctx.globalAlpha = lockFlash;
         ctx.drawImage(this.sprites[p.kind]!, px, py, c, c);
         ctx.globalAlpha = 1;
@@ -884,54 +1060,54 @@ class BlocksGame implements GameInstance {
       const a = clamp(this.tutorial, 0, 1);
       const cx = this.bx + bw / 2;
       const y0 = this.by + c * 3;
+      // Panel and text are cached as two layers and faded with the same alpha, as when drawn directly
+      if (!this.hintLayers.length) {
+        const dpr = renderScale();
+        const px = cx - Math.min(bw / 2 - 8, 120);
+        const pw = Math.min(bw - 16, 240);
+        this.hintLayers = [
+          makeLayer(px, y0 - 8, pw, 58, dpr, (k) => {
+            k.fillStyle = "rgba(6,8,30,0.6)";
+            roundRectPath(k, px, y0 - 8, pw, 58, 14);
+            k.fill();
+          }),
+          makeLayer(this.bx, y0 - 8, bw, 58, dpr, (k) => {
+            k.font = `500 13px ${FONT_BODY}`;
+            k.textAlign = "center";
+            k.textBaseline = "top";
+            k.fillStyle = "#ffffff";
+            k.fillText("กดปุ่มด้านล่างเพื่อบังคับบล็อก", cx, y0);
+            k.fillStyle = "rgba(255,255,255,0.75)";
+            k.fillText(this.gestures ? "หรือ ลากเลื่อน · แตะหมุน · ปัดลงทิ้ง" : "แตะช่อง “เก็บไว้” เพื่อพักบล็อก", cx, y0 + 22);
+          }),
+        ];
+      }
       ctx.save();
       ctx.globalAlpha = a;
-      ctx.fillStyle = "rgba(6,8,30,0.6)";
-      roundRectPath(ctx, cx - Math.min(bw / 2 - 8, 120), y0 - 8, Math.min(bw - 16, 240), 58, 14);
-      ctx.fill();
-      ctx.font = `500 13px ${FONT_BODY}`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText("กดปุ่มด้านล่างเพื่อบังคับบล็อก", cx, y0);
-      ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.fillText(this.gestures ? "หรือ ลากเลื่อน · แตะหมุน · ปัดลงทิ้ง" : "แตะช่อง “เก็บไว้” เพื่อพักบล็อก", cx, y0 + 22);
+      for (const l of this.hintLayers) drawLayer(ctx, l);
       ctx.restore();
     }
   }
 
   private renderMini(kind: Kind, cx: number, cy: number, size: number, alpha = 1) {
     const { ctx } = this.env;
-    const sh = SHAPES[kind];
-    const xs = sh.cells.map((c) => c[0]);
-    const ys = sh.cells.map((c) => c[1]);
-    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-    const ox = cx - ((maxX - minX + 1) * size) / 2;
-    const oy = cy - ((maxY - minY + 1) * size) / 2;
+    const b = BOUNDS[kind];
+    const ox = cx - (b.w * size) / 2;
+    const oy = cy - (b.h * size) / 2;
     ctx.globalAlpha = alpha;
-    for (const [x, y] of sh.cells) ctx.drawImage(this.miniSprites[kind]!, ox + (x - minX) * size, oy + (y - minY) * size, size, size);
+    for (const [x, y] of SHAPES[kind].cells) ctx.drawImage(this.miniSprites[kind]!, ox + (x - b.minX) * size, oy + (y - b.minY) * size, size, size);
     ctx.globalAlpha = 1;
   }
 
   private renderSide() {
-    const { ctx } = this.env;
     const c = this.cell;
     const sw = c * 3.4;
     const x = this.sideX;
     const mini = Math.round(c * 0.62);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    // Hold
-    glassPanel(ctx, x, this.by, sw, c * 3.2, 12, 0.08);
-    ctx.font = `600 11px ${FONT_DISPLAY}`;
-    ctx.fillStyle = "rgba(255,255,255,0.65)";
-    ctx.fillText("เก็บไว้", x + sw / 2, this.by + 6);
+    // The hold and next panels with their labels are part of the cached frame layer
     if (this.hold) this.renderMini(this.hold, x + sw / 2, this.by + c * 1.85, mini, this.holdUsed ? 0.35 : 1);
     // Next
     const ny = this.by + c * 3.6;
-    glassPanel(ctx, x, ny, sw, c * 8.2, 12, 0.08);
-    ctx.fillStyle = "rgba(255,255,255,0.65)";
-    ctx.fillText("ถัดไป", x + sw / 2, ny + 6);
     for (let i = 0; i < 3 && i < this.queue.length; i++) {
       this.renderMini(this.queue[i], x + sw / 2, ny + c * 1.9 + i * c * 2.15, i === 0 ? mini : mini * 0.82, i === 0 ? 1 : 0.75);
     }
@@ -941,8 +1117,24 @@ class BlocksGame implements GameInstance {
   private renderPads() {
     const { ctx } = this.env;
     const active = this.state === "play";
-    for (const p of this.pads) {
-      const k = ease.outCubic(p.down);
+    const dpr = this.layerScale;
+    this.pads.forEach((p, i) => {
+      // Each pad is drawn once per look (resting, or a step of the press animation) and then copied;
+      // its soft coloured shadow is a blur that would otherwise be redone every frame.
+      const kq = Math.round(p.down * 24);
+      const key = `${i}|${active ? 1 : 0}|${kq}`;
+      let l = this.padCache.get(key);
+      if (!l) {
+        l = makeLayer(p.x - 40, p.y - 40, p.w + 80, p.h + 90, dpr, (c) => this.drawPad(c, p, kq / 24, active), this.blur);
+        this.padCache.set(key, l);
+      }
+      drawLayer(ctx, l);
+    });
+  }
+
+  private drawPad(ctx: CanvasRenderingContext2D, p: Pad, down: number, active: boolean) {
+    {
+      const k = ease.outCubic(down);
       const r = Math.min(18, p.h * 0.3);
       const y = p.y + k * 2;
       ctx.save();
@@ -1036,6 +1228,16 @@ class BlocksGame implements GameInstance {
 
   private renderHud() {
     const { ctx } = this.env;
+    // The score text only changes when the score does: keep it as a layer
+    const key = this.score * 4096 + this.level * 1024 + this.lines;
+    if (key !== this.hudKey || !this.hudLayer) {
+      this.hudKey = key;
+      this.hudLayer = makeLayer(0, 0, this.w, 64, renderScale(), (c) => this.drawHud(c));
+    }
+    drawLayer(ctx, this.hudLayer);
+  }
+
+  private drawHud(ctx: CanvasRenderingContext2D) {
     const x = this.bx;
     ctx.save();
     ctx.textBaseline = "top";

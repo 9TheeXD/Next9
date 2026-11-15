@@ -7,6 +7,7 @@ import { Button, drawCard, glassPanel } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { drawFruit } from "./art/fruits";
 import { BoosterButton } from "./engine/booster";
+import { renderScale } from "./engine/quality";
 
 const TRAY = 7;
 
@@ -65,6 +66,11 @@ class TilesGame implements GameInstance {
   private shuffles = 2;
   private cleared = 0;
   private faces: HTMLCanvasElement[] = [];
+  private facesSh: HTMLCanvasElement[] = [];
+  private facesDim: HTMLCanvasElement[] = [];
+  private shPad = 10;
+  private boardKey = "";
+  private boardSpr: HTMLCanvasElement | null = null;
   private bg: HTMLCanvasElement | null = null;
   private particles = new Particles();
   private floaters = new Floaters();
@@ -275,7 +281,7 @@ class TilesGame implements GameInstance {
     this.ox = Math.round((w - bw * this.tile) / 2) + 6;
     this.oy = Math.round(top + (h - top - trayH - bh * this.tile * 1.1) / 2) + 6;
     this.trayY = h - trayH + 8;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     const s = this.tile * 0.86;
     this.faces = Array.from({ length: 11 }, (_, k) =>
       makeSprite(s, s * 1.12, dpr, (c) => {
@@ -298,6 +304,26 @@ class TilesGame implements GameInstance {
         c.restore();
       })
     );
+    // Tiles with their drop shadow baked in (a blurred shadow per tile per frame is very slow),
+    // plus a dimmed copy for tiles that are covered by a higher layer.
+    const P = 18 / dpr + 2;
+    this.shPad = P;
+    const shadowed = (k: number, dim: boolean) =>
+      makeSprite(s + P * 2, s * 1.12 + P * 2, dpr, (c) => {
+        c.shadowColor = "rgba(0,0,0,0.35)";
+        c.shadowBlur = 8;
+        c.shadowOffsetY = 4;
+        c.drawImage(this.faces[k], P, P, s, s * 1.12);
+        c.shadowColor = "transparent";
+        if (dim) {
+          c.fillStyle = "rgba(10,30,30,0.5)";
+          roundRectPath(c, P, P, s, s * 1.12, s * 0.16);
+          c.fill();
+        }
+      });
+    this.facesSh = this.faces.map((_, k) => shadowed(k, false));
+    this.facesDim = this.faces.map((_, k) => shadowed(k, true));
+    this.boardKey = "";
     this.bg = makeSprite(w, h, dpr, (c) => {
       const g = c.createLinearGradient(0, 0, 0, h);
       g.addColorStop(0, "#0c3b37");
@@ -438,22 +464,25 @@ class TilesGame implements GameInstance {
       this.bSlot.render(ctx, this.time);
     }
 
-    // Board tiles, lower layers first
-    const board = this.tiles.filter((t) => t.state === "board").sort((a, b) => a.layer - b.layer || a.gy - b.gy || a.gx - b.gx);
-    for (const t of board) {
-      const { x, y } = this.tilePos(t);
-      ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.35)";
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetY = 4;
-      ctx.drawImage(this.faces[t.kind], x, y, s, s * 1.12);
-      ctx.restore();
-      if (this.blocked(t)) {
-        ctx.fillStyle = "rgba(10,30,30,0.5)";
-        roundRectPath(ctx, x, y, s, s * 1.12, s * 0.16);
-        ctx.fill();
-      }
+    // Board tiles, lower layers first. The board only changes when a tile is taken, shuffled or
+    // put back, so it is drawn into a cached layer and redrawn only then.
+    let key = "";
+    for (const t of this.tiles) key += t.state === "board" ? `${t.kind},${t.gx},${t.gy},${t.layer};` : ".";
+    const by0 = 30;
+    const bh = Math.max(1, this.trayY - by0);
+    if (key !== this.boardKey || !this.boardSpr) {
+      this.boardKey = key;
+      const P = this.shPad;
+      const board = this.tiles.filter((t) => t.state === "board").sort((a, b) => a.layer - b.layer || a.gy - b.gy || a.gx - b.gx);
+      this.boardSpr = makeSprite(w, bh, renderScale(), (c) => {
+        c.translate(0, -by0);
+        for (const t of board) {
+          const { x, y } = this.tilePos(t);
+          c.drawImage(this.blocked(t) ? this.facesDim[t.kind] : this.facesSh[t.kind], x - P, y - P, s + P * 2, s * 1.12 + P * 2);
+        }
+      });
     }
+    ctx.drawImage(this.boardSpr, 0, by0, w, bh);
 
     // Tray
     const sw = this.slotW();

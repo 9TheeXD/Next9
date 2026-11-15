@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, Animated, Platform } from 'react-nat
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AdaptiveMission } from '@/utils/AdaptiveMissionEngine';
+import { useIsFocused } from '@react-navigation/native';
 
 interface MissionBubbleProps {
   mission: AdaptiveMission | null;
@@ -13,7 +14,12 @@ export default function MissionBubble({ mission, onPress }: MissionBubbleProps) 
   const floatAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  // Tabs stay mounted in the background; on the web these loops run on the main thread every frame,
+  // so they only run while the home tab is on screen (otherwise they steal frames from the games).
+  const focused = useIsFocused();
+
   useEffect(() => {
+    if (!focused) return;
     // Smooth floating animation
     const floatLoop = Animated.loop(
       Animated.sequence([
@@ -55,7 +61,7 @@ export default function MissionBubble({ mission, onPress }: MissionBubbleProps) 
     }
 
     return () => floatLoop.stop();
-  }, [mission?.status]);
+  }, [mission?.status, focused]);
 
   if (!mission) return null;
 

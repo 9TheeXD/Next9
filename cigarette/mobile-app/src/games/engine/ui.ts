@@ -1,6 +1,52 @@
 // Canvas UI: buttons, glass panels, wrapped Thai text, and the start / game-over cards every game uses.
 
-import { FONT_BODY, FONT_DISPLAY, roundRectPath, rgba, shade, ease, clamp } from "./fx";
+import { FONT_BODY, FONT_DISPLAY, roundRectPath, rgba, shade, ease, clamp, makeSprite } from "./fx";
+import { renderScale } from "./quality";
+
+// ── Sprite cache for the soft-shadowed shapes ─────────────────────────────────────────────────
+// A blurred shadow (shadowBlur) is re-blurred on every frame and is by far the most expensive
+// thing these helpers draw. Panels, cards and buttons rarely change size, so the finished shape
+// (shadow included) is drawn once into a sprite at the canvas resolution and blitted afterwards.
+// A size is cached only when it shows up on a second frame, so animated sizes stay uncached.
+const spriteCache = new Map<string, HTMLCanvasElement>();
+const spriteSeen = new Map<string, number>();
+function cachedSprite(key: string, w: number, h: number, draw: (c: CanvasRenderingContext2D) => void): HTMLCanvasElement | null {
+  const hit = spriteCache.get(key);
+  if (hit) return hit;
+  if (typeof document === "undefined") return null;
+  const n = (spriteSeen.get(key) || 0) + 1;
+  if (n < 2) {
+    if (spriteSeen.size > 200) spriteSeen.clear();
+    spriteSeen.set(key, n);
+    return null;
+  }
+  spriteSeen.delete(key);
+  // Bounded memory: at most 48 sprites and about 8 million pixels (32 MB) in all.
+  if (spriteCache.size >= 48) spriteCache.delete(spriteCache.keys().next().value as string);
+  let px = 0;
+  spriteCache.forEach((c) => (px += c.width * c.height));
+  if (px > 8e6) spriteCache.clear();
+  const s = makeSprite(w, h, renderScale(), draw);
+  spriteCache.set(key, s);
+  return s;
+}
+
+/**
+ * Draws a sprite made at renderScale() at (x, y) in the current coordinates. When the transform is
+ * a plain scale that matches the sprite, the copy is snapped to whole device pixels: an aligned copy
+ * is about ten times cheaper than a resampled one, and the shift is under half a device pixel.
+ */
+function blit(ctx: CanvasRenderingContext2D, img: HTMLCanvasElement, x: number, y: number, w: number, h: number) {
+  const t = ctx.getTransform();
+  const s = renderScale();
+  if (t.b === 0 && t.c === 0 && Math.abs(t.a - s) < 1e-3 && Math.abs(t.d - s) < 1e-3) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(img, Math.round(t.e + x * s), Math.round(t.f + y * s));
+    ctx.setTransform(t);
+  } else {
+    ctx.drawImage(img, x, y, w, h);
+  }
+}
 
 // Thai has no spaces between words; Intl.Segmenter splits it into words for line wrapping.
 const segmenter: { segment(s: string): Iterable<{ segment: string }> } | null = (() => {
@@ -74,16 +120,8 @@ export class Button {
     this.pressT = clamp(this.pressT + (this.pressed ? dt : -dt) * 8, 0, 1);
   }
 
-  render(ctx: CanvasRenderingContext2D) {
-    const s = 1 - this.pressT * 0.05;
-    const cx = this.x + this.w / 2;
-    const cy = this.y + this.h / 2;
+  private body(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
     ctx.save();
-    ctx.translate(cx, cy);
-    ctx.scale(s, s);
-    const x = -this.w / 2;
-    const y = -this.h / 2;
-    const r = this.h / 2;
     if (this.variant === "solid") {
       ctx.shadowColor = rgba(this.color, 0.55);
       ctx.shadowBlur = 18;
@@ -102,7 +140,6 @@ export class Button {
       ctx.fillStyle = sheen;
       roundRectPath(ctx, x + 2, y + 2, this.w - 4, this.h * 0.55, r - 2);
       ctx.fill();
-      ctx.fillStyle = "#ffffff";
     } else {
       ctx.fillStyle = "rgba(255,255,255,0.10)";
       roundRectPath(ctx, x, y, this.w, this.h, r);
@@ -110,8 +147,30 @@ export class Button {
       ctx.strokeStyle = "rgba(255,255,255,0.35)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
-      ctx.fillStyle = "rgba(255,255,255,0.92)";
     }
+    ctx.restore();
+  }
+
+  render(ctx: CanvasRenderingContext2D) {
+    const s = 1 - this.pressT * 0.05;
+    const cx = this.x + this.w / 2;
+    const cy = this.y + this.h / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(s, s);
+    const x = -this.w / 2;
+    const y = -this.h / 2;
+    const r = this.h / 2;
+    // Body (shadow, gradient, sheen) comes from a cached sprite; the label is drawn live.
+    const pad = this.variant === "solid" ? 36 / renderScale() + 2 : 2;
+    const key = `btn|${this.variant}|${this.color}|${this.w.toFixed(1)}|${this.h.toFixed(1)}|${renderScale()}`;
+    const spr = cachedSprite(key, this.w + pad * 2, this.h + pad * 2, (c) => {
+      c.translate(pad, pad);
+      this.body(c, 0, 0, r);
+    });
+    if (spr) blit(ctx, spr, x - pad, y - pad, this.w + pad * 2, this.h + pad * 2);
+    else this.body(ctx, x, y, r);
+    ctx.fillStyle = this.variant === "solid" ? "#ffffff" : "rgba(255,255,255,0.92)";
     ctx.font = `600 ${Math.round(this.h * 0.36)}px ${FONT_DISPLAY}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -121,6 +180,14 @@ export class Button {
 }
 
 export function glassPanel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r = 22, alpha = 0.14) {
+  const pad = 60 / renderScale() + 2;
+  const key = `glass|${w.toFixed(1)}|${h.toFixed(1)}|${r}|${alpha}|${renderScale()}`;
+  const spr = cachedSprite(key, w + pad * 2, h + pad * 2, (c) => glassPanelDraw(c, pad, pad, w, h, r, alpha));
+  if (spr) blit(ctx, spr, x - pad, y - pad, w + pad * 2, h + pad * 2);
+  else glassPanelDraw(ctx, x, y, w, h, r, alpha);
+}
+
+function glassPanelDraw(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r = 22, alpha = 0.14) {
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,0.35)";
   ctx.shadowBlur = 30;
@@ -187,6 +254,40 @@ export function drawCoin(ctx: CanvasRenderingContext2D, x: number, y: number, r:
   ctx.restore();
 }
 
+function cardBody(ctx: CanvasRenderingContext2D, x: number, y: number, cw: number, ch: number, accent: string) {
+  // Solid dark base so the game behind the card does not make the text hard to read.
+  ctx.fillStyle = "rgba(20,22,58,0.92)";
+  roundRectPath(ctx, x, y, cw, ch, 26);
+  ctx.fill();
+  glassPanelDraw(ctx, x, y, cw, ch, 26, 0.1);
+
+  // Accent glow at the top of the card
+  const cx = x + cw / 2;
+  const tg = ctx.createRadialGradient(cx, y, 0, cx, y, cw * 0.6);
+  tg.addColorStop(0, rgba(accent, 0.35));
+  tg.addColorStop(1, rgba(accent, 0));
+  ctx.fillStyle = tg;
+  roundRectPath(ctx, x, y, cw, ch, 26);
+  ctx.fill();
+}
+
+// Word wrapping measures every word; the card text is the same on every frame, so keep the lines.
+// Web fonts that finish loading change the widths, so a font load clears the cache.
+const wrapCache = new Map<string, string[]>();
+if (typeof document !== "undefined" && (document as any).fonts?.addEventListener) {
+  (document as any).fonts.addEventListener("loadingdone", () => wrapCache.clear());
+}
+function wrapCached(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const key = ctx.font + "|" + maxWidth + "|" + text;
+  let lines = wrapCache.get(key);
+  if (!lines) {
+    if (wrapCache.size > 64) wrapCache.clear();
+    lines = wrapText(ctx, text, maxWidth);
+    wrapCache.set(key, lines);
+  }
+  return lines;
+}
+
 /** Centred card with title, text and buttons. Lays the buttons out and returns the card rect. */
 export function drawCard(ctx: CanvasRenderingContext2D, w: number, h: number, o: CardOptions) {
   const a = ease.outCubic(clamp(o.appear, 0, 1));
@@ -197,7 +298,7 @@ export function drawCard(ctx: CanvasRenderingContext2D, w: number, h: number, o:
   const cw = Math.min(360, w - 40);
   const pad = 26;
   ctx.font = `500 15px ${FONT_BODY}`;
-  const bodyLines = o.body ? wrapText(ctx, o.body, cw - pad * 2) : [];
+  const bodyLines = o.body ? wrapCached(ctx, o.body, cw - pad * 2) : [];
   const iconH = o.icon ? 78 : 0;
   const bigH = o.bigValue ? 86 : 0;
   const chipsH = o.chips && o.chips.length ? 40 : 0;
@@ -210,19 +311,12 @@ export function drawCard(ctx: CanvasRenderingContext2D, w: number, h: number, o:
   const y = cy - ch / 2;
 
   ctx.globalAlpha = a;
-  // Solid dark base so the game behind the card does not make the text hard to read.
-  ctx.fillStyle = "rgba(20,22,58,0.92)";
-  roundRectPath(ctx, x, y, cw, ch, 26);
-  ctx.fill();
-  glassPanel(ctx, x, y, cw, ch, 26, 0.1);
-
-  // Accent glow at the top of the card
-  const tg = ctx.createRadialGradient(cx, y, 0, cx, y, cw * 0.6);
-  tg.addColorStop(0, rgba(o.accent, 0.35));
-  tg.addColorStop(1, rgba(o.accent, 0));
-  ctx.fillStyle = tg;
-  roundRectPath(ctx, x, y, cw, ch, 26);
-  ctx.fill();
+  // Card body (dark base, glass, accent glow) is one cached sprite.
+  const pad0 = 60 / renderScale() + 2;
+  const key = `card|${cw}|${ch}|${o.accent}|${renderScale()}`;
+  const spr = cachedSprite(key, cw + pad0 * 2, ch + pad0 * 2, (c) => cardBody(c, pad0, pad0, cw, ch, o.accent));
+  if (spr) blit(ctx, spr, x - pad0, y - pad0, cw + pad0 * 2, ch + pad0 * 2);
+  else cardBody(ctx, x, y, cw, ch, o.accent);
 
   let yy = y + pad;
   if (o.icon) {

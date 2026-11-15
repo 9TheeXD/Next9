@@ -2,7 +2,8 @@
 
 import type { GameDefinition, GameEnv } from "./engine/types";
 import { TurnDuel, type Side } from "./engine/turnduel";
-import { clamp, roundRectPath, TAU, FONT_DISPLAY } from "./engine/fx";
+import { clamp, roundRectPath, TAU, FONT_DISPLAY, makeSprite } from "./engine/fx";
+import { renderScale } from "./engine/quality";
 import { pentatonic } from "./engine/audio";
 
 export const othelloGame: GameDefinition = {
@@ -225,7 +226,44 @@ class Othello extends TurnDuel<number[]> {
     this.disc(c, x, y, r, side, 1);
   }
 
-  private disc(c: CanvasRenderingContext2D, x: number, y: number, r: number, side: number, sx: number) {
+  // Cached layers: the page background, the static board (frame, felt, grid, dots) and one sprite
+  // per disc colour. They are rebuilt when the size or the resolution changes.
+  private bgSpr: HTMLCanvasElement | null = null;
+  private bgKey = "";
+  private boardSpr: HTMLCanvasElement | null = null;
+  private boardKey = "";
+  private discSpr = new Map<string, HTMLCanvasElement>();
+
+  background(c: CanvasRenderingContext2D) {
+    const key = `${this.w}x${this.h}@${renderScale()}`;
+    if (!this.bgSpr || this.bgKey !== key) {
+      this.bgKey = key;
+      this.bgSpr = makeSprite(this.w, this.h, renderScale(), (cc) => super.background(cc));
+    }
+    c.drawImage(this.bgSpr, 0, 0, this.w, this.h);
+  }
+
+  private discSprite(r: number, side: number) {
+    const key = `${r}|${side}@${renderScale()}`;
+    let spr = this.discSpr.get(key);
+    if (!spr) {
+      if (this.discSpr.size > 8) this.discSpr.clear();
+      const R = Math.ceil(r * 1.12 + 2);
+      spr = makeSprite(R * 2, R * 2, renderScale(), (cc) => this.disc(cc, R, R, r, side, 1, true));
+      this.discSpr.set(key, spr);
+    }
+    return spr;
+  }
+
+  private disc(c: CanvasRenderingContext2D, x: number, y: number, r: number, side: number, sx: number, raw = false) {
+    if (!raw && sx === 1 && (side === 1 || side === 2)) {
+      // Whole device pixels: a straight copy of the cached disc.
+      const spr = this.discSprite(r, side);
+      const k = renderScale();
+      const R = spr.width / k / 2;
+      c.drawImage(spr, Math.round((x - R) * k) / k, Math.round((y - R) * k) / k, spr.width / k, spr.height / k);
+      return;
+    }
     c.save();
     c.translate(x, y);
     c.scale(Math.max(0.05, Math.abs(sx)), 1);
@@ -248,7 +286,7 @@ class Othello extends TurnDuel<number[]> {
     c.restore();
   }
 
-  renderBoard(c: CanvasRenderingContext2D) {
+  private boardBase(c: CanvasRenderingContext2D) {
     const b = this.board;
     const cs = this.cs;
     c.fillStyle = "#3f2a1a";
@@ -280,6 +318,24 @@ class Othello extends TurnDuel<number[]> {
       c.arc(b.x + px * cs, b.y + py * cs, 3.5, 0, TAU);
       c.fill();
     }
+  }
+
+  renderBoard(c: CanvasRenderingContext2D) {
+    const b = this.board;
+    const cs = this.cs;
+    const bkey = `${b.x},${b.y},${b.w},${b.h},${cs}@${renderScale()}`;
+    const k = renderScale();
+    // Origin on a whole device pixel, so the copy is exact and cheap.
+    const ox = Math.floor((b.x - 12) * k) / k;
+    const oy = Math.floor((b.y - 12) * k) / k;
+    if (!this.boardSpr || this.boardKey !== bkey) {
+      this.boardKey = bkey;
+      this.boardSpr = makeSprite(b.w + 26, b.h + 26, k, (cc) => {
+        cc.translate(-ox, -oy);
+        this.boardBase(cc);
+      });
+    }
+    c.drawImage(this.boardSpr, ox, oy, this.boardSpr.width / k, this.boardSpr.height / k);
     for (let i = 0; i < 64; i++) {
       const v = this.cells[i];
       const x = b.x + ((i % N) + 0.5) * cs;

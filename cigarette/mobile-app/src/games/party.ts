@@ -10,6 +10,54 @@ import { SetupMenu } from "./engine/menu";
 import { DuelOver } from "./engine/duel";
 import { pentatonic } from "./engine/audio";
 import { Button, wrapText, drawCoin } from "./engine/ui";
+import { renderScale } from "./engine/quality";
+
+// ── Cached drawing ──────────────────────────────────────────────────────────
+// On older phones a frame costs pixels: the full-screen gradient, the four seat panels, the picker cards
+// and their text were redrawn every frame. Parts that rarely change are drawn once into canvases at the
+// canvas resolution and copied 1:1 (device-pixel aligned).
+
+interface Layer {
+  c: HTMLCanvasElement;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+function makeLayer(x: number, y: number, w: number, h: number, dpr: number, draw: (c: CanvasRenderingContext2D) => void): Layer {
+  const x0 = Math.floor(x * dpr) / dpr;
+  const y0 = Math.floor(y * dpr) / dpr;
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.ceil((x + w - x0) * dpr));
+  c.height = Math.max(1, Math.ceil((y + h - y0) * dpr));
+  const ctx = c.getContext("2d")!;
+  ctx.setTransform(dpr, 0, 0, dpr, -x0 * dpr, -y0 * dpr);
+  draw(ctx);
+  return { c, x: x0, y: y0, w: c.width / dpr, h: c.height / dpr };
+}
+
+/** Draws a layer with its origin at (ox, oy), rounded to whole device pixels so the copy is not resampled. */
+function drawLayer(ctx: CanvasRenderingContext2D, l: Layer, ox = 0, oy = 0) {
+  const d = renderScale();
+  ctx.drawImage(l.c, Math.round(ox * d) / d + l.x, Math.round(oy * d) / d + l.y, l.w, l.h);
+}
+
+/** Copies the part of a full-screen layer under rect r (plus a margin) back onto the screen. */
+function drawLayerPart(ctx: CanvasRenderingContext2D, l: Layer, r: Rect, m: number) {
+  const d = renderScale();
+  const x0 = Math.max(0, Math.floor((r.x - m - l.x) * d));
+  const y0 = Math.max(0, Math.floor((r.y - m - l.y) * d));
+  const x1 = Math.min(l.c.width, Math.ceil((r.x + r.w + m - l.x) * d));
+  const y1 = Math.min(l.c.height, Math.ceil((r.y + r.h + m - l.y) * d));
+  if (x1 > x0 && y1 > y0) ctx.drawImage(l.c, x0, y0, x1 - x0, y1 - y0, l.x + x0 / d, l.y + y0 / d, (x1 - x0) / d, (y1 - y0) / d);
+}
+
+// Cached text is drawn again when the Thai web fonts arrive after the game started.
+let fontGen = 0;
+if (typeof document !== "undefined" && (document as any).fonts?.addEventListener) {
+  (document as any).fonts.addEventListener("loadingdone", () => fontGen++);
+}
 
 export const partyGame: GameDefinition = {
   id: "party",
@@ -311,16 +359,20 @@ class QuickDraw extends Mini {
     const r = Math.min(a.w, a.h) * 0.28;
     const go = this.sub === "go" || (this.sub === "show" && this.winner >= 0);
     const col = go ? "#22c55e" : "#ef4444";
-    glow(c, cx, cy, r * 2.2, col, 0.45);
-    const g = c.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r);
-    g.addColorStop(0, go ? "#bbf7d0" : "#fecaca");
-    g.addColorStop(1, col);
-    c.fillStyle = g;
-    c.beginPath();
-    c.arc(cx, cy, r, 0, TAU);
-    c.fill();
+    // The lamp (a big soft glow and the shaded disc) is one of two cached pictures
+    const gr = r * 2.2;
+    drawLayer(c, this.P.layer(`lamp|${go}`, cx - gr, cy - gr, gr * 2, gr * 2, (k) => {
+      glow(k, cx, cy, gr, col, 0.45);
+      const g = k.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r);
+      g.addColorStop(0, go ? "#bbf7d0" : "#fecaca");
+      g.addColorStop(1, col);
+      k.fillStyle = g;
+      k.beginPath();
+      k.arc(cx, cy, r, 0, TAU);
+      k.fill();
+    }));
     const msg = this.sub === "wait" ? "รอ…" : this.sub === "go" ? "แตะ!" : this.P.mode === "coop" ? "" : this.winner >= 0 ? `${SEAT_NAMES[this.winner]} ไวสุด` : "ไม่มีใครทัน";
-    if (msg) this.P.arenaText(c, msg, 22, "#ffffff", r + 26);
+    if (msg) drawLayer(c, this.P.layer(`atext|${msg}`, a.x, a.y, a.w, a.h, (k) => this.P.arenaText(k, msg, 22, "#ffffff", r + 26)));
     c.font = `600 13px ${FONT_BODY}`;
     c.textAlign = "center";
     c.textBaseline = "middle";
@@ -1143,6 +1195,23 @@ class PartyGame implements GameInstance {
   resize(w: number, h: number) {
     this.w = w;
     this.h = h;
+    this.layers.clear();
+  }
+
+  // Cached layers by key; cleared when the size, the resolution or the fonts change
+  private layers = new Map<string, Layer>();
+  private layerScale = 0;
+  private layerFonts = 0;
+
+  /** A cached layer, built by draw() (in screen coordinates) the first time the key is seen. */
+  layer(key: string, x: number, y: number, w: number, h: number, draw: (c: CanvasRenderingContext2D) => void): Layer {
+    let l = this.layers.get(key);
+    if (!l) {
+      if (this.layers.size > 120) this.layers.clear();
+      l = makeLayer(x, y, w, h, renderScale(), draw);
+      this.layers.set(key, l);
+    }
+    return l;
   }
 
   seatRect(i: number): Rect {
@@ -1581,12 +1650,13 @@ class PartyGame implements GameInstance {
     c.restore();
   }
 
-  private renderSeat(c: CanvasRenderingContext2D, i: number) {
+  /** The seat's panel: tinted card, outline, name and points (flash brightens it after a tap). */
+  private renderSeatPanel(c: CanvasRenderingContext2D, i: number, flash: number) {
     this.withSeat(c, i, (w, h) => {
       const col = COLORS[i];
       const g = c.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, rgba(col, 0.28 + this.seatFlash[i] * 0.3));
-      g.addColorStop(1, rgba(col, 0.55 + this.seatFlash[i] * 0.3));
+      g.addColorStop(0, rgba(col, 0.28 + flash * 0.3));
+      g.addColorStop(1, rgba(col, 0.55 + flash * 0.3));
       c.fillStyle = g;
       roundRectPath(c, 0, 0, w, h, 18);
       c.fill();
@@ -1602,6 +1672,15 @@ class PartyGame implements GameInstance {
       c.textAlign = "right";
       c.fillStyle = "#fde68a";
       if (this.mode !== "coop") c.fillText(`${this.points[i]} แต้ม`, w - 12, 9);
+    });
+  }
+
+  private renderSeat(c: CanvasRenderingContext2D, i: number) {
+    this.withSeat(c, i, (w, h) => {
+      c.textAlign = "right";
+      c.textBaseline = "top";
+      c.font = `700 13px ${FONT_DISPLAY}`;
+      c.fillStyle = "#fde68a";
       if (this.phase === "play" && this.mini) this.mini.renderSeat(c, i, w, h);
       else {
         c.textAlign = "center";
@@ -1661,21 +1740,52 @@ class PartyGame implements GameInstance {
     c.fillText(`เริ่มเองใน ${Math.max(0, Math.ceil(this.introLimit() - this.phaseT))} วิ`, w / 2, h * 0.9);
   }
 
+  private drawBg(c: CanvasRenderingContext2D) {
+    const { w, h } = this;
+    const g = c.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, Math.max(w, h) * 0.7);
+    g.addColorStop(0, "#2e1065");
+    g.addColorStop(1, "#0b0720");
+    c.fillStyle = g;
+    c.fillRect(0, 0, w, h);
+  }
+
+  /** Background with the arena (and, unless `bare`, the four seat panels at rest) baked in. */
+  private tableLayer(bare: boolean): Layer {
+    const { w, h } = this;
+    const key = bare
+      ? "table"
+      : `seats|${this.mode}|${this.humans.join()}|${this.mode !== "coop" ? this.points.join() : ""}`;
+    return this.layer(key, 0, 0, w, h, (c) => {
+      this.drawBg(c);
+      const a = this.arena();
+      c.fillStyle = "rgba(255,255,255,0.04)";
+      roundRectPath(c, a.x, a.y, a.w, a.h, 22);
+      c.fill();
+      if (!bare) for (let i = 0; i < 4; i++) this.renderSeatPanel(c, i, 0);
+    });
+  }
+
   render() {
     const { ctx } = this.env;
     const { w, h } = this;
-    const g = ctx.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, Math.max(w, h) * 0.7);
-    g.addColorStop(0, "#2e1065");
-    g.addColorStop(1, "#0b0720");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
+    if (this.layerScale !== renderScale() || this.layerFonts !== fontGen) {
+      this.layerScale = renderScale();
+      this.layerFonts = fontGen;
+      this.layers.clear();
+    }
 
-    if (this.phase === "pick" || this.phase === "final") this.renderPicker(ctx);
-    else if (this.phase !== "menu" && this.mini) {
+    if (this.phase === "pick" || this.phase === "final" || this.phase === "menu" || !this.mini) {
+      drawLayer(ctx, this.layer("bg", 0, 0, w, h, (c) => this.drawBg(c)));
+      if (this.phase === "pick" || this.phase === "final") this.renderPicker(ctx);
+    } else {
       const a = this.arena();
-      ctx.fillStyle = "rgba(255,255,255,0.04)";
-      roundRectPath(ctx, a.x, a.y, a.w, a.h, 22);
-      ctx.fill();
+      drawLayer(ctx, this.tableLayer(false));
+      for (let i = 0; i < 4; i++) {
+        if (this.seatFlash[i] <= 0) continue;
+        // A seat that flashes after a tap: put back the table under it and draw its brighter panel live
+        drawLayerPart(ctx, this.tableLayer(true), this.seatRect(i), 2);
+        this.renderSeatPanel(ctx, i, this.seatFlash[i]);
+      }
       for (let i = 0; i < 4; i++) this.renderSeat(ctx, i);
       const m = this.mini;
       if (this.phase === "play") m.renderArena(ctx, a);
@@ -1754,6 +1864,15 @@ class PartyGame implements GameInstance {
     c.stroke();
     m.icon(c, 56);
     c.restore();
+    // The rules text (written twice, outlined) does not change while the screen is up: one cached layer
+    const note = this.single ? (this.repTotal > 1 ? `รอบ ${this.repNo}/${this.repTotal}` : "") : `เกม ${this.plTotal - this.playlist.length}/${this.plTotal}`;
+    drawLayer(c, this.layer(`rules|${m.name}|${this.mode}|${note}`, a.x, a.y, a.w, a.h, (k) => this.drawRulesText(k, a, note)));
+  }
+
+  private drawRulesText(c: CanvasRenderingContext2D, a: Rect, note: string) {
+    const m = this.mini!;
+    const cx = a.x + a.w / 2;
+    const cy = a.y + a.h / 2;
     const goal = this.mode === "coop" ? m.coopGoal : MODE_GOAL[this.mode];
     const half = Math.min(a.h / 2 - 8, 230);
     for (const flip of [false, true]) {
@@ -1797,7 +1916,6 @@ class PartyGame implements GameInstance {
     c.fillStyle = "rgba(255,255,255,0.55)";
     c.textAlign = "left";
     c.textBaseline = "middle";
-    const note = this.single ? (this.repTotal > 1 ? `รอบ ${this.repNo}/${this.repTotal}` : "") : `เกม ${this.plTotal - this.playlist.length}/${this.plTotal}`;
     if (note) c.fillText(note, a.x + 12, cy);
   }
 
@@ -1849,6 +1967,30 @@ class PartyGame implements GameInstance {
     for (const card of this.cards) this.renderCard(c, card, rollIdx);
     c.restore();
 
+    const n = this.humans.filter(Boolean).length;
+    const hkey = `head|${this.mode}|${n}|${this.points.join()}|${this.stars}|${this.banner ? this.banner.text + this.banner.coins : ""}`;
+    drawLayer(c, this.layer(hkey, 0, 0, w, top - 6, (k) => this.drawPickHeader(k, cw)));
+    // Footer
+    drawLayer(c, this.layer("pickfoot", 0, h - footer - 10, w, footer + 10, (k) => {
+      const fg = k.createLinearGradient(0, h - footer - 10, 0, h);
+      fg.addColorStop(0, "rgba(11,7,32,0)");
+      fg.addColorStop(0.3, "rgba(11,7,32,0.9)");
+      k.fillStyle = fg;
+      k.fillRect(0, h - footer - 10, w, footer + 10);
+    }));
+    this.setupBtn.place(w / 2, h - 56, Math.min(260, cw), 46);
+    this.setupBtn.render(c);
+    if (this.pickMax > 0) {
+      // Scroll hint
+      const k = this.pickScroll / this.pickMax;
+      c.fillStyle = "rgba(255,255,255,0.25)";
+      roundRectPath(c, x0 + cw + 4, top + k * (h - footer - top - 40), 3, 40, 2);
+      c.fill();
+    }
+  }
+
+  private drawPickHeader(c: CanvasRenderingContext2D, cw: number) {
+    const { w } = this;
     // Header
     c.textAlign = "center";
     c.textBaseline = "middle";
@@ -1909,21 +2051,6 @@ class PartyGame implements GameInstance {
       c.fillStyle = "#ffd76a";
       c.fillText(`+${this.banner.coins} เหรียญ`, w / 2 + tw / 2 - 62, by + 1);
     }
-    // Footer
-    const fg = c.createLinearGradient(0, h - footer - 10, 0, h);
-    fg.addColorStop(0, "rgba(11,7,32,0)");
-    fg.addColorStop(0.3, "rgba(11,7,32,0.9)");
-    c.fillStyle = fg;
-    c.fillRect(0, h - footer - 10, w, footer + 10);
-    this.setupBtn.place(w / 2, h - 56, Math.min(260, cw), 46);
-    this.setupBtn.render(c);
-    if (this.pickMax > 0) {
-      // Scroll hint
-      const k = this.pickScroll / this.pickMax;
-      c.fillStyle = "rgba(255,255,255,0.25)";
-      roundRectPath(c, x0 + cw + 4, top + k * (h - footer - top - 40), 3, 40, 2);
-      c.fill();
-    }
   }
 
   private renderCard(c: CanvasRenderingContext2D, card: PickCard, rollIdx: number) {
@@ -1931,16 +2058,38 @@ class PartyGame implements GameInstance {
     if (y > this.h || y + h < 0) return;
     const pressed = this.pressedCard === card;
     const lit = card.kind === "game" && card.idx === rollIdx;
-    const ok = card.kind !== "game" || this.eligible(card.idx);
-    const m = card.kind === "game" ? this.protos[card.idx] : null;
-    const color = m ? m.color : card.kind === "random" ? "#a855f7" : "#f59e0b";
     const appear = ease.outCubic(clamp(this.phaseT * 3 - (card.kind === "game" ? 0.15 + card.idx * 0.05 : 0), 0, 1));
+    if (!pressed && !lit && appear >= 1 && !(this.roll && card.kind === "game")) {
+      // A card at rest is a cached picture; only the spinning dice of the random card is drawn live
+      const ok = card.kind !== "game" || this.eligible(card.idx);
+      const played = card.kind === "game" ? this.played[card.idx] : 0;
+      const all = card.kind === "all" ? MINIS.filter((_, i) => this.eligible(i)).length : 0;
+      const key = `card|${card.kind}|${card.idx}|${w}|${h}|${ok}|${played}|${this.mode}|${all}`;
+      drawLayer(c, this.layer(key, -6, -6, w + 12, h + 12, (k) => this.drawCard(k, card, false, ok, true)), x, y);
+      if (card.kind === "random") {
+        c.save();
+        c.translate(x + 30, y + h / 2);
+        this.drawDice(c);
+        c.restore();
+      }
+      return;
+    }
+    const ok = card.kind !== "game" || this.eligible(card.idx);
     c.save();
     c.globalAlpha = appear * (this.roll && !lit && card.kind === "game" ? 0.55 : 1);
     c.translate(x + w / 2, y + h / 2 + (1 - appear) * 16);
     const s = pressed ? 0.97 : lit ? 1.04 : 1;
     c.scale(s, s);
     c.translate(-w / 2, -h / 2);
+    this.drawCard(c, card, lit, ok, false);
+    c.restore();
+  }
+
+  /** One picker card drawn at (0, 0); `noDice` leaves out the random card's dice (drawn live over a cache). */
+  private drawCard(c: CanvasRenderingContext2D, card: PickCard, lit: boolean, ok: boolean, noDice: boolean) {
+    const { w, h } = card;
+    const m = card.kind === "game" ? this.protos[card.idx] : null;
+    const color = m ? m.color : card.kind === "random" ? "#a855f7" : "#f59e0b";
     if (lit) glow(c, w / 2, h / 2, Math.max(w, h) * 0.8, color, 0.5);
     const bg = c.createLinearGradient(0, 0, w, h);
     bg.addColorStop(0, rgba(color, 0.32));
@@ -1965,8 +2114,9 @@ class PartyGame implements GameInstance {
       c.save();
       c.translate(30, iy);
       glow(c, 0, 0, 34, color, 0.45);
-      if (card.kind === "random") this.drawDice(c);
-      else this.drawPlaylist(c);
+      if (card.kind === "random") {
+        if (!noDice) this.drawDice(c);
+      } else this.drawPlaylist(c);
       c.restore();
       const title = card.kind === "random" ? "สุ่มเกม" : "เล่นต่อเนื่องทุกเกม";
       const sub = card.kind === "random" ? "ให้เครื่องเลือกให้" : `${MINIS.filter((_, i) => this.eligible(i)).length} เกมติดกัน สรุปผลตอนจบ`;
@@ -1978,7 +2128,6 @@ class PartyGame implements GameInstance {
       c.font = `500 11px ${FONT_BODY}`;
       c.fillStyle = "rgba(255,255,255,0.7)";
       c.fillText(sub, 58, iy + 12, w - 66);
-      c.restore();
       return;
     }
     const mm = m!;
@@ -2050,7 +2199,6 @@ class PartyGame implements GameInstance {
       c.fillStyle = "rgba(255,255,255,0.85)";
       c.fillText(`ไม่มีในโหมด${MODE_SHORT[this.mode]}`, w / 2, h / 2 - 6);
     }
-    c.restore();
   }
 
   private fitFont(c: CanvasRenderingContext2D, text: string, maxW: number, size: number, min: number) {

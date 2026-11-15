@@ -6,6 +6,7 @@ import { TAU, rng, glow, makeSprite, roundRectPath, clamp } from "../engine/fx";
 import { drawCoin } from "../engine/ui";
 import { CEIL, chomper, crawlerX, droneY, railY, type Obj } from "./sim";
 import { THEME_COUNT } from "./levels";
+import { renderScale } from "../engine/quality";
 
 export type Style = 0 | 1 | 2 | 3 | 4 | 5; // sunset, cave, garden, factory, abyss, storm
 
@@ -44,6 +45,49 @@ export function themeFor(world: number): Theme {
 
 const hsl = (h: number, s: number, l: number, a = 1) => `hsla(${((h % 360) + 360) % 360},${s}%,${l}%,${a})`;
 
+// ── Cheap drawing helpers ───────────────────────────────────────────────────
+// Old phones spend their frame on pixels. Copying a sprite 1:1 onto whole device pixels is several
+// times cheaper than a scaled copy, a gradient fill or a shadowBlur, so the big pieces below are
+// cached at the canvas' own resolution and copied that way.
+
+/** Device pixels per CSS pixel when `c` carries the plain runtime transform (a scale), else 0. */
+function plainScale(c: CanvasRenderingContext2D): number {
+  const m = c.getTransform();
+  return m.b === 0 && m.c === 0 && m.a === m.d && m.a > 0 ? m.a : 0;
+}
+
+/** Copy `img` (made at `k` device px per CSS px) 1:1 with its top-left at CSS (x, y), snapped to device pixels. */
+function blit1(c: CanvasRenderingContext2D, k: number, img: HTMLCanvasElement, x: number, y: number) {
+  const m = c.getTransform();
+  c.save();
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.drawImage(img, Math.round(x * k + m.e), Math.round(y * k + m.f));
+  c.restore();
+}
+
+const glowCache = new Map<string, HTMLCanvasElement>();
+/** fx glow() from a cached sprite of the exact on-screen size (alpha via globalAlpha). */
+function glowFast(c: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, alpha = 1) {
+  const k = plainScale(c);
+  if (!k || alpha <= 0 || r <= 0) {
+    if (!k) glow(c, x, y, r, color, alpha);
+    return;
+  }
+  let R = Math.max(1, Math.round(r * k));
+  if (R > 48) R = Math.round(R / 3) * 3;
+  const key = color + "|" + R;
+  let img = glowCache.get(key);
+  if (!img) {
+    if (glowCache.size > 60) glowCache.clear();
+    img = makeSprite(R * 2, R * 2, 1, (g) => glow(g, R, R, R, color, 1));
+    glowCache.set(key, img);
+  }
+  const prev = c.globalAlpha;
+  c.globalAlpha = prev * Math.min(1, alpha);
+  blit1(c, k, img, x - R / k, y - R / k);
+  c.globalAlpha = prev;
+}
+
 // ── Backdrop ────────────────────────────────────────────────────────────────
 
 /** Scenery behind the level. Caches its sprite layers per size and theme. */
@@ -58,12 +102,23 @@ export class Backdrop {
   private dots: { x: number; y: number; r: number; d: number; s: number }[] = [];
   private flash = 0;
   private bolt: { x: number; pts: number[] } | null = null;
+  // Cached pieces (see "Cheap drawing helpers")
+  private sun: { key: string; img: HTMLCanvasElement; cx: number; cy: number } | null = null;
+  private ray: { key: string; img: HTMLCanvasElement } | null = null;
+  private ground: { key: string; img: HTMLCanvasElement } | null = null;
+  private edges = new Map<string, HTMLCanvasElement>();
+  private lastGyd = -1;
+  private skyBase = "";
+  private skyImgs = new Map<number, HTMLCanvasElement>();
+  private dotQ = new Int8Array(0);
+  private dotX = new Float32Array(0);
+  private dotY = new Float32Array(0);
 
   private prepare(th: Theme, w: number, h: number) {
-    const key = `${th.style}:${th.hue}:${w}:${h}`;
+    const key = `${th.style}:${th.hue}:${w}:${h}@${renderScale()}`;
     if (key === this.key) return;
     this.key = key;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = renderScale();
     const r = rng(th.style * 31 + th.hue);
     this.dots = [];
     for (let i = 0; i < 60; i++) this.dots.push({ x: r(), y: r(), r: 0.5 + r() * 1.6, d: 0.03 + r() * 0.15, s: r() * 10 });
@@ -308,7 +363,6 @@ export class Backdrop {
     const H = th.hue;
     const A = th.acc;
     // Sky
-    const g = c.createLinearGradient(0, 0, 0, gy);
     const skies: number[][] = [
       [H + 220, 70, 7, H, 65, 18],
       [H + 20, 60, 5, H, 50, 13],
@@ -318,10 +372,52 @@ export class Backdrop {
       [H, 45, 7, H + 20, 35, 18],
     ];
     const sky = skies[th.style];
-    g.addColorStop(0, hsl(sky[0], sky[1], sky[2] + pulse * 2));
-    g.addColorStop(1, hsl(sky[3], sky[4], sky[5] + pulse * 3));
-    c.fillStyle = g;
-    c.fillRect(0, 0, w, h);
+    const k = plainScale(c);
+    const R = Math.min(w, h) * 0.24;
+    // The cave and garden glows are fixed in the sky: they are part of the cached sky.
+    const skyGlow = (c: CanvasRenderingContext2D, fast: boolean) => {
+      const f = fast ? glowFast : glow;
+      if (th.style === 2) f(c, w * 0.75, gy * 0.35, R * 1.8, "#fff4c2", 0.55);
+      else if (th.style === 1) f(c, w * 0.3, gy * 0.5, R * 1.6, hsl(A, 90, 50), 0.18);
+    };
+    // floor() always paints an opaque floor from gy down right after this, so the sky stops at gy
+    const gyd = Math.round(clamp(gy, 0, h) * k);
+    const steady = k > 0 && gyd > 0 && gyd === this.lastGyd;
+    this.lastGyd = gyd;
+    let glowDone = false;
+    if (steady) {
+      // Opaque sky sprite while the camera is still, one per quarter step of the beat pulse
+      // (the beat lifts the sky by at most 2-3% lightness).
+      const q = Math.round(pulse * 3) / 3;
+      const base = `${th.style}|${H}|${A}|${w}|${gyd}|${k}`;
+      if (base !== this.skyBase) {
+        this.skyBase = base;
+        this.skyImgs.clear();
+      }
+      let img = this.skyImgs.get(q);
+      if (!img) {
+        img = document.createElement("canvas");
+        img.width = Math.ceil(w * k);
+        img.height = gyd;
+        const sc = img.getContext("2d", { alpha: false })!;
+        sc.scale(k, k);
+        const sg = sc.createLinearGradient(0, 0, 0, gy);
+        sg.addColorStop(0, hsl(sky[0], sky[1], sky[2] + q * 2));
+        sg.addColorStop(1, hsl(sky[3], sky[4], sky[5] + q * 3));
+        sc.fillStyle = sg;
+        sc.fillRect(0, 0, w, gyd / k + 1);
+        skyGlow(sc, false);
+        this.skyImgs.set(q, img);
+      }
+      blit1(c, k, img, 0, 0);
+      glowDone = true;
+    } else {
+      const g = c.createLinearGradient(0, 0, 0, gy);
+      g.addColorStop(0, hsl(sky[0], sky[1], sky[2] + pulse * 2));
+      g.addColorStop(1, hsl(sky[3], sky[4], sky[5] + pulse * 3));
+      c.fillStyle = g;
+      c.fillRect(0, 0, w, clamp(gy, 0, h));
+    }
 
     if (th.style === 5 && beatHit && Math.random() < 0.12) {
       this.flash = 1;
@@ -335,46 +431,82 @@ export class Backdrop {
     }
     this.flash = Math.max(0, this.flash - 0.06);
 
-    // Stars / spores / dust
+    // Stars / spores / dust: twinkle alpha in steps of 1/40, one path per step
     if (th.style !== 2) {
-      for (const s of this.dots) {
-        const x = (((s.x * w - cam * U * s.d) % w) + w) % w;
+      const n = this.dots.length;
+      if (this.dotQ.length !== n) {
+        this.dotQ = new Int8Array(n);
+        this.dotX = new Float32Array(n);
+        this.dotY = new Float32Array(n);
+      }
+      let qMin = 99;
+      let qMax = -1;
+      for (let i = 0; i < n; i++) {
+        const s = this.dots[i];
+        this.dotX[i] = (((s.x * w - cam * U * s.d) % w) + w) % w;
         let y = s.y * gy * 0.9;
         if (th.style === 4 || th.style === 1) y = (((s.y * gy - time * (8 + s.d * 60)) % gy) + gy) % gy; // rising bubbles / spores
-        const a = 0.3 + 0.3 * Math.sin(time * 2 + s.s);
-        c.fillStyle = th.style === 0 || th.style === 5 ? `rgba(255,255,255,${a})` : hsl(A, 90, 75, a);
-        c.beginPath();
+        this.dotY[i] = y;
+        const q = Math.round((0.3 + 0.3 * Math.sin(time * 2 + s.s)) * 40);
+        this.dotQ[i] = q;
+        if (q < qMin) qMin = q;
+        if (q > qMax) qMax = q;
+      }
+      if (th.style === 4) c.lineWidth = 1;
+      for (let q = qMin; q <= qMax; q++) {
+        const a = q / 40;
+        let any = false;
+        for (let i = 0; i < n; i++) {
+          if (this.dotQ[i] !== q) continue;
+          if (!any) {
+            c.beginPath();
+            any = true;
+          }
+          const r = th.style === 4 ? this.dots[i].r * 1.6 : this.dots[i].r;
+          c.moveTo(this.dotX[i] + r, this.dotY[i]);
+          c.arc(this.dotX[i], this.dotY[i], r, 0, TAU);
+        }
+        if (!any) continue;
         if (th.style === 4) {
           c.strokeStyle = hsl(A, 80, 80, a * 0.8);
-          c.lineWidth = 1;
-          c.arc(x, y, s.r * 1.6, 0, TAU);
           c.stroke();
         } else {
-          c.arc(x, y, s.r, 0, TAU);
+          c.fillStyle = th.style === 0 || th.style === 5 ? `rgba(255,255,255,${a})` : hsl(A, 90, 75, a);
           c.fill();
         }
       }
     }
 
     // Big sky feature
-    const R = Math.min(w, h) * 0.24;
     if (th.style === 0) {
       const sy = gy - h * 0.2;
-      const sg = c.createLinearGradient(0, sy - R, 0, sy + R);
-      sg.addColorStop(0, hsl(H + 60, 100, 70));
-      sg.addColorStop(1, hsl(H, 100, 55));
-      c.save();
-      c.globalAlpha = 0.6;
-      c.fillStyle = sg;
-      c.beginPath();
-      c.arc(w * 0.68, sy, R * (1 + pulse * 0.02), 0, TAU);
-      c.fill();
-      c.globalAlpha = 1;
-      c.fillStyle = hsl(H + 220, 60, 12);
-      for (let i = 0; i < 6; i++) c.fillRect(w * 0.68 - R, sy + i * R * 0.17, R * 2, 2 + i * 1.3);
-      c.restore();
+      const drawSun = (c: CanvasRenderingContext2D, cx: number, sy: number, rr: number) => {
+        const sg = c.createLinearGradient(0, sy - R, 0, sy + R);
+        sg.addColorStop(0, hsl(H + 60, 100, 70));
+        sg.addColorStop(1, hsl(H, 100, 55));
+        c.save();
+        c.globalAlpha = 0.6;
+        c.fillStyle = sg;
+        c.beginPath();
+        c.arc(cx, sy, rr, 0, TAU);
+        c.fill();
+        c.globalAlpha = 1;
+        c.fillStyle = hsl(H + 220, 60, 12);
+        for (let i = 0; i < 6; i++) c.fillRect(cx - R, sy + i * R * 0.17, R * 2, 2 + i * 1.3);
+        c.restore();
+      };
+      if (k) {
+        // The beat swells the sun by up to 2%: one sprite per whole device pixel of radius.
+        const rr = Math.round(R * (1 + pulse * 0.02) * k) / k;
+        const key = `${H}|${R}|${rr}|${k}`;
+        if (!this.sun || this.sun.key !== key) {
+          const half = R * 1.03 + 3;
+          this.sun = { key, img: makeSprite(half * 2, half * 2, k, (g) => drawSun(g, half, half, rr)), cx: half, cy: half };
+        }
+        blit1(c, k, this.sun.img, w * 0.68 - this.sun.cx, sy - this.sun.cy);
+      } else drawSun(c, w * 0.68, sy, R * (1 + pulse * 0.02));
     } else if (th.style === 2) {
-      glow(c, w * 0.75, gy * 0.35, R * 1.8, "#fff4c2", 0.55);
+      if (!glowDone) skyGlow(c, true);
     } else if (th.style === 3) {
       c.fillStyle = hsl(A, 30, 80, 0.85);
       c.beginPath();
@@ -391,10 +523,10 @@ export class Backdrop {
     } else if (th.style === 4) {
       c.save();
       c.globalCompositeOperation = "lighter";
-      for (let i = 0; i < 4; i++) {
-        const x = w * (0.15 + i * 0.25) + Math.sin(time * 0.3 + i) * 20;
+      // Light shafts: one cached shaft (full strength) copied four times with their own alpha
+      const shaft = (c: CanvasRenderingContext2D, x: number, a: number) => {
         const rg = c.createLinearGradient(0, 0, 0, gy);
-        rg.addColorStop(0, hsl(A, 80, 70, 0.12 + 0.05 * Math.sin(time + i * 2)));
+        rg.addColorStop(0, hsl(A, 80, 70, a));
         rg.addColorStop(1, hsl(A, 80, 70, 0));
         c.fillStyle = rg;
         c.beginPath();
@@ -403,6 +535,17 @@ export class Backdrop {
         c.lineTo(x + 90, gy);
         c.lineTo(x - 10, gy);
         c.fill();
+      };
+      const rkey = `${A}|${Math.round(gy * k)}|${k}`;
+      if (k && gy > 0 && (!this.ray || this.ray.key !== rkey)) this.ray = { key: rkey, img: makeSprite(112, gy, k, (g) => shaft(g, 21, 1)) };
+      for (let i = 0; i < 4; i++) {
+        const x = w * (0.15 + i * 0.25) + Math.sin(time * 0.3 + i) * 20;
+        const a = 0.12 + 0.05 * Math.sin(time + i * 2);
+        if (k && this.ray) {
+          c.globalAlpha = a;
+          blit1(c, k, this.ray.img, x - 21, 0);
+          c.globalAlpha = 1;
+        } else shaft(c, x, a);
       }
       c.restore();
       // jellyfish
@@ -425,13 +568,25 @@ export class Backdrop {
         }
       }
     } else if (th.style === 1) {
-      glow(c, w * 0.3, gy * 0.5, R * 1.6, hsl(A, 90, 50), 0.18);
+      if (!glowDone) skyGlow(c, true);
     }
 
     // Parallax layers
     const blit = (img: HTMLCanvasElement | null, iw: number, ih: number, speed: number, y: number) => {
       if (!img) return;
       const off = (((cam * U * speed) % iw) + iw) % iw;
+      if (k === renderScale()) {
+        // 1:1 copies; the second tile goes exactly one sprite width further on, so no seam
+        const m = c.getTransform();
+        const dx = Math.round(-off * k + m.e);
+        const dy = Math.round(y * k + m.f);
+        c.save();
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        c.drawImage(img, dx, dy);
+        if (dx + img.width < w * k) c.drawImage(img, dx + img.width, dy);
+        c.restore();
+        return;
+      }
       c.drawImage(img, -off, y, iw, ih);
       if (iw - off < w) c.drawImage(img, -off + iw, y, iw, ih);
     };
@@ -477,7 +632,7 @@ export class Backdrop {
   private jelly(c: CanvasRenderingContext2D, x: number, y: number, r: number, t: number, A: number) {
     c.save();
     c.globalCompositeOperation = "lighter";
-    glow(c, x, y, r * 2.2, hsl(A, 90, 60), 0.25);
+    glowFast(c, x, y, r * 2.2, hsl(A, 90, 60), 0.25);
     c.fillStyle = hsl(A, 90, 75, 0.35);
     c.beginPath();
     c.arc(x, y, r, Math.PI, 0);
@@ -510,27 +665,51 @@ export class Backdrop {
     ];
     g.addColorStop(0, cols[th.style][0]);
     g.addColorStop(1, cols[th.style][1]);
-    c.fillStyle = g;
-    c.fillRect(0, gy, w, h - gy);
+    const k = plainScale(c);
+    const fh = h - gy;
+    if (k && fh > 0) {
+      // Opaque floor gradient, cached until the floor line moves (camera climbs) or the theme changes
+      const gyd = Math.round(gy * k);
+      const key = `${th.style}|${H}|${A}|${w}|${h}|${gyd}|${k}`;
+      if (!this.ground || this.ground.key !== key) {
+        const img = this.ground?.img || document.createElement("canvas");
+        const top = gyd / k;
+        img.width = Math.ceil(w * k);
+        img.height = Math.max(1, Math.ceil((h - top) * k));
+        const gc = img.getContext("2d", { alpha: false })!;
+        gc.setTransform(k, 0, 0, k, 0, -top * k);
+        const gg = gc.createLinearGradient(0, gy, 0, h);
+        gg.addColorStop(0, cols[th.style][0]);
+        gg.addColorStop(1, cols[th.style][1]);
+        gc.fillStyle = gg;
+        gc.fillRect(0, top - 1, w, h - top + 2);
+        this.ground = { key, img };
+      }
+      blit1(c, k, this.ground.img, 0, gyd / k);
+    } else if (fh > 0) {
+      c.fillStyle = g;
+      c.fillRect(0, gy, w, h - gy);
+    }
     const off = -((cam * U) % U);
     c.save();
     switch (th.style) {
       case 0:
         c.strokeStyle = hsl(H, 100, 70, 0.25);
         c.lineWidth = 1;
+        // The fan lines never touch each other, nor do the cross lines: one path each
+        c.beginPath();
         for (let gx = off; gx < w; gx += U) {
-          c.beginPath();
           c.moveTo(gx, gy);
           c.lineTo(w / 2 + (gx - w / 2) * 2.4, h);
-          c.stroke();
         }
+        c.stroke();
+        c.beginPath();
         for (let k = 1; k < 5; k++) {
           const y = gy + (h - gy) * Math.pow(k / 5, 1.6);
-          c.beginPath();
           c.moveTo(0, y);
           c.lineTo(w, y);
-          c.stroke();
         }
+        c.stroke();
         break;
       case 1: {
         c.strokeStyle = hsl(A, 100, 70, 0.3);
@@ -613,26 +792,41 @@ export class Backdrop {
           c.moveTo(0, y);
           c.lineTo(w, y);
           c.stroke();
+          c.beginPath();
           for (let gx = off + (row % 2) * U * 0.5; gx < w + U; gx += U) {
-            c.beginPath();
             c.moveTo(gx, y);
             c.lineTo(gx, y + U * 0.6);
-            c.stroke();
           }
+          c.stroke();
         }
         break;
     }
     c.restore();
     // glowing edge
-    c.strokeStyle = th.style === 2 ? hsl(H, 70, 60) : hsl(th.style === 3 || th.style === 5 ? A : H, 100, 72);
-    c.lineWidth = 3;
-    c.shadowColor = hsl(th.style === 3 || th.style === 5 ? A : H, 100, 60);
-    c.shadowBlur = 12 + pulse * 8;
-    c.beginPath();
-    c.moveTo(0, gy);
-    c.lineTo(w, gy);
-    c.stroke();
-    c.shadowBlur = 0;
+    const edge = (c: CanvasRenderingContext2D, y: number, blur: number) => {
+      c.strokeStyle = th.style === 2 ? hsl(H, 70, 60) : hsl(th.style === 3 || th.style === 5 ? A : H, 100, 72);
+      c.lineWidth = 3;
+      c.shadowColor = hsl(th.style === 3 || th.style === 5 ? A : H, 100, 60);
+      c.shadowBlur = blur;
+      c.beginPath();
+      c.moveTo(0, y);
+      c.lineTo(w, y);
+      c.stroke();
+      c.shadowBlur = 0;
+    };
+    if (k) {
+      // Pre-blurred strip, one per whole step of blur (the beat widens it from 12 to 20)
+      const blur = Math.round(12 + pulse * 8);
+      const M = Math.ceil((blur * 1.6 + 4) / k);
+      const key = `${th.style}|${H}|${A}|${w}|${k}|${blur}`;
+      let img = this.edges.get(key);
+      if (!img) {
+        if (this.edges.size > 24) this.edges.clear();
+        img = makeSprite(w, M * 2, k, (g) => edge(g, M, blur));
+        this.edges.set(key, img);
+      }
+      blit1(c, k, img, 0, gy - M);
+    } else edge(c, gy, 12 + pulse * 8);
   }
 }
 

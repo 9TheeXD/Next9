@@ -7,6 +7,55 @@ import { Particles, Floaters, rgba, shade, makeSprite, roundRectPath, clamp, eas
 import { Button, drawCard, glassPanel, bestScore } from "./engine/ui";
 import { pentatonic } from "./engine/audio";
 import { coinsFor } from "./engine/economy";
+import { renderScale } from "./engine/quality";
+
+// ── Cached drawing ──────────────────────────────────────────────────────────
+// On older phones a frame costs pixels: the glass board (with its blurred shadow), its 56 cells and the
+// bokeh glows were redrawn every frame. They are drawn once at the canvas resolution and copied 1:1.
+
+interface Layer {
+  c: HTMLCanvasElement;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+function makeLayer(x: number, y: number, w: number, h: number, dpr: number, draw: (c: CanvasRenderingContext2D) => void): Layer {
+  const x0 = Math.floor(x * dpr) / dpr;
+  const y0 = Math.floor(y * dpr) / dpr;
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.ceil((x + w - x0) * dpr));
+  c.height = Math.max(1, Math.ceil((y + h - y0) * dpr));
+  const ctx = c.getContext("2d")!;
+  ctx.setTransform(dpr, 0, 0, dpr, -x0 * dpr, -y0 * dpr);
+  draw(ctx);
+  return { c, x: x0, y: y0, w: c.width / dpr, h: c.height / dpr };
+}
+
+/** Draws a layer with its origin at (ox, oy), rounded to whole device pixels so the copy is not resampled. */
+function drawLayer(ctx: CanvasRenderingContext2D, l: Layer | null, ox = 0, oy = 0) {
+  if (!l) return;
+  const d = renderScale();
+  ctx.drawImage(l.c, Math.round(ox * d) / d + l.x, Math.round(oy * d) / d + l.y, l.w, l.h);
+}
+
+/** Whether the runtime draws shadowBlur right now (it switches it off on struggling devices). */
+function shadowsOn(ctx: CanvasRenderingContext2D) {
+  const prev = ctx.shadowBlur;
+  ctx.shadowBlur = 4;
+  const on = ctx.shadowBlur > 0;
+  ctx.shadowBlur = prev;
+  return on;
+}
+
+// Cached text is drawn again when the Thai web fonts arrive after the game started.
+let fontGen = 0;
+if (typeof document !== "undefined" && (document as any).fonts?.addEventListener) {
+  (document as any).fonts.addEventListener("loadingdone", () => fontGen++);
+}
+
+const BOKEH: Record<number, string> = { 330: "#ff6fa8", 280: "#a77bff", 200: "#5ec8ff", 45: "#ffd36e" };
 
 const COLS = 7;
 const ROWS = 8;
@@ -218,6 +267,11 @@ class GemsGame implements GameInstance {
   private nextId = 1;
   private sprites: HTMLCanvasElement[] = [];
   private bg: HTMLCanvasElement | null = null;
+  private boardLayer: Layer | null = null;
+  private bokehLayers: Layer[] = [];
+  private scoreLayer: Layer | null = null;
+  private scoreShown = -1;
+  private layerFonts = 0;
   private state: State = "intro";
   private stateT = 0;
   private phase: Phase = "idle";
@@ -547,7 +601,7 @@ class GemsGame implements GameInstance {
     this.cell = Math.floor(clamp(Math.min((w - 28) / COLS, (h - top - 24) / ROWS), 30, 70));
     this.bx = Math.round((w - this.cell * COLS) / 2);
     this.by = Math.round(top + (h - top - 16 - this.cell * ROWS) / 2);
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = renderScale();
     this.sprites = TYPES.map((_, i) => makeSprite(this.cell, this.cell, dpr, (c) => drawGem(c, this.cell, i)));
     this.bg = makeSprite(w, h, dpr, (c) => {
       const g = c.createLinearGradient(0, 0, 0, h);
@@ -575,6 +629,46 @@ class GemsGame implements GameInstance {
         leaf(left ? -10 : w + 10, h - rand() * h * 0.35, 60 + rand() * 90, (left ? -0.9 : Math.PI + 0.9) + (rand() - 0.5) * 1.2, `rgba(${20 + rand() * 20},${10 + rand() * 30},${50 + rand() * 40},0.75)`);
       }
     });
+    this.buildLayers();
+  }
+
+  private buildLayers() {
+    const dpr = renderScale();
+    const c = this.cell;
+    const bw = c * COLS;
+    const bh = c * ROWS;
+    const blur = shadowsOn(this.env.ctx);
+    this.layerFonts = fontGen;
+    // Background with the glass board (and its shadow) and the checker cells baked in. The bokeh used to
+    // drift under the glass; they are now drawn on top, dimmed inside the board by what the glass and the
+    // cells let through (see renderBokeh), which gives the same light.
+    const bg = this.bg;
+    this.boardLayer = makeLayer(0, 0, this.w, this.h, dpr, (ctx) => {
+      if (!blur) Object.defineProperty(ctx, "shadowBlur", { configurable: true, get: () => 0, set: () => {} });
+      if (bg) ctx.drawImage(bg, 0, 0, this.w, this.h);
+      glassPanel(ctx, this.bx - 8, this.by - 8, bw + 16, bh + 16, 18, 0.1);
+      for (let r = 0; r < ROWS; r++)
+        for (let col = 0; col < COLS; col++) {
+          ctx.fillStyle = (r + col) % 2 ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.10)";
+          roundRectPath(ctx, this.bx + col * c + 2, this.by + r * c + 2, c - 4, c - 4, c * 0.18);
+          ctx.fill();
+        }
+    });
+    // Bokeh: each a fixed-size soft glow (the same gradient fx's glow() draws), copied as it drifts
+    this.bokehLayers = this.bokeh.map((b) =>
+      makeLayer(-b.r, -b.r, b.r * 2, b.r * 2, dpr, (ctx) => {
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, b.r);
+        g.addColorStop(0, rgba(BOKEH[b.hue], 0.12));
+        g.addColorStop(0.35, rgba(BOKEH[b.hue], 0.12 * 0.35));
+        g.addColorStop(1, rgba(BOKEH[b.hue], 0));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(0, 0, b.r, 0, TAU);
+        ctx.fill();
+      })
+    );
+    this.scoreShown = -1;
+    this.bg = null; // part of the board layer now
   }
 
   // ── Input ────────────────────────────────────────────────────────────────
@@ -697,25 +791,23 @@ class GemsGame implements GameInstance {
     const { ctx } = this.env;
     const w = this.w;
     const h = this.h;
-    if (this.bg) ctx.drawImage(this.bg, 0, 0, w, h);
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    for (const b of this.bokeh) glow(ctx, b.x * w, b.y * h, b.r, `#${b.hue === 330 ? "ff6fa8" : b.hue === 280 ? "a77bff" : b.hue === 200 ? "5ec8ff" : "ffd36e"}`, 0.12);
-    ctx.restore();
+    if (this.layerFonts !== fontGen) {
+      // fonts arrived: only the score text is cached text
+      this.layerFonts = fontGen;
+      this.scoreShown = -1;
+    }
+    drawLayer(ctx, this.boardLayer);
+    this.renderBokeh();
 
     const c = this.cell;
     const bw = c * COLS;
     const bh = c * ROWS;
-    glassPanel(ctx, this.bx - 8, this.by - 8, bw + 16, bh + 16, 18, 0.1);
-    for (let r = 0; r < ROWS; r++)
-      for (let col = 0; col < COLS; col++) {
-        ctx.fillStyle = (r + col) % 2 ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.10)";
-        roundRectPath(ctx, this.bx + col * c + 2, this.by + r * c + 2, c - 4, c - 4, c * 0.18);
-        ctx.fill();
-      }
 
     ctx.save();
-    roundRectPath(ctx, this.bx - 2, this.by - 2, bw + 4, bh + 4, 14);
+    // A plain rectangle clips the same pixels as the rounded one did (gems sit well inside their cells,
+    // away from the 14 px corners) and is much cheaper than an anti-aliased path clip.
+    ctx.beginPath();
+    ctx.rect(this.bx - 2, this.by - 2, bw + 4, bh + 4);
     ctx.clip();
     const swapP = this.phase === "swap" ? ease.inOutSine(clamp(this.phaseT / 0.18, 0, 1)) : this.phase === "swapBack" ? 1 - ease.inOutSine(clamp(this.phaseT / 0.18, 0, 1)) : 0;
     const clearK = this.phase === "clear" ? clamp(this.phaseT / 0.24, 0, 1) : 0;
@@ -808,18 +900,63 @@ class GemsGame implements GameInstance {
     }
   }
 
+  /**
+   * Bokeh glows, added with "lighter". Outside the board they are drawn as they are; over the board they are
+   * scaled by how much light the glass (its gradient) and the cells let through, as if still under them.
+   */
+  private renderBokeh() {
+    const { ctx } = this.env;
+    const { w, h } = this;
+    const c = this.cell;
+    const gx = this.bx - 8;
+    const gy = this.by - 8;
+    const gw = c * COLS + 16;
+    const gh = c * ROWS + 16;
+    const cellPass = 1 - 0.075 * ((c - 4) / c) ** 2; // average of the 0.05 / 0.10 cells and the gaps
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.beginPath();
+    ctx.rect(0, 0, w, h);
+    ctx.rect(gx, gy, gw, gh);
+    ctx.clip("evenodd");
+    this.bokeh.forEach((b, i) => drawLayer(ctx, this.bokehLayers[i], b.x * w, b.y * h));
+    ctx.restore();
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.beginPath();
+    ctx.rect(gx, gy, gw, gh);
+    ctx.clip();
+    this.bokeh.forEach((b, i) => {
+      const x = b.x * w;
+      const y = b.y * h;
+      if (x + b.r < gx || x - b.r > gx + gw || y + b.r < gy || y - b.r > gy + gh) return;
+      const t = clamp((y - gy) / gh, 0, 1);
+      const glass = 0.16 + (0.05 - 0.16) * t;
+      ctx.globalAlpha = (1 - glass) * cellPass;
+      drawLayer(ctx, this.bokehLayers[i], x, y);
+    });
+    ctx.restore();
+  }
+
   private renderHud() {
     const { ctx } = this.env;
     const w = this.w;
+    // The score text is kept as a layer until the score changes
+    if (this.scoreShown !== this.score || !this.scoreLayer) {
+      this.scoreShown = this.score;
+      this.scoreLayer = makeLayer(0, 0, this.bx + this.cell * COLS - 52, 72, renderScale(), (c) => {
+        c.textBaseline = "top";
+        c.textAlign = "left";
+        c.font = `500 11px ${FONT_BODY}`;
+        c.fillStyle = "rgba(255,255,255,0.65)";
+        c.fillText("คะแนน", this.bx, 16);
+        c.font = `800 30px ${FONT_DISPLAY}`;
+        c.fillStyle = "#ffffff";
+        c.fillText(this.score.toLocaleString(), this.bx, 30);
+      });
+    }
+    drawLayer(ctx, this.scoreLayer);
     ctx.save();
-    ctx.textBaseline = "top";
-    ctx.textAlign = "left";
-    ctx.font = `500 11px ${FONT_BODY}`;
-    ctx.fillStyle = "rgba(255,255,255,0.65)";
-    ctx.fillText("คะแนน", this.bx, 16);
-    ctx.font = `800 30px ${FONT_DISPLAY}`;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(this.score.toLocaleString(), this.bx, 30);
     // Timer ring
     const rx = this.bx + this.cell * COLS - 26;
     const ry = 44;
