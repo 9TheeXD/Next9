@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "ignoreCommand": "git diff --quiet \"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\" HEAD -- :/next :/ShiftManager",
+  "ignoreCommand": "sh ../../scripts/vercel-ignore.sh next ShiftManager scripts/vercel-ignore.sh",
   "regions": [
     "sin1"
   ],
